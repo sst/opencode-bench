@@ -68,11 +68,11 @@ But the score weights should resemble our own priorities and what the benchmark 
 We can as well add a disagreement penalty to avoid the high variance across models to stabilize the final rate.
 
 
-$R_{pen}= R - \lambda\sum_{j} v_{j} \operatorname{Var}_{j}$
+$R_{pen}= R - \lambda\sum_{j} v_{j} \mathrm{Var}_{j}$
 
 $\underset{\text{seriousness of the penalty}} {\lambda \geq 0}$
 
-\[\operatorname{Var}_{j} = \sum_{i} w_{i} (s_{ij} - \bar{s}_{j} )^2\]
+\[\mathrm{Var}_{j} = \sum_{i} w_{i} (s_{ij} - \bar{s}_{j} )^2\]
 
 $\bar{s}_{j}=\sum_{i} w_{i} s_{ij}$
 
