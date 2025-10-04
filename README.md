@@ -1,10 +1,10 @@
 > open real evals
 ```bash
-orvl opencode # running opencode on all models x providers x evals x metrics
-orvl opencode qwen3-coder # running opencode with qwen3-coder on all providers x evals x metrics
-orvl opencode qwen3-coder zen # running opencode with qwen3-coder on zen with all evals x metrics
-orvl opencode qwen3-coder zen hello-world # running opencode with qwen3-coder on zen the hello-world eval with all metrics
-orvl opencode qwen3-coder zen hello-world semantic-similarity # running opencode with qwen3-coder on zen the hello-world eval with all metrics
+orvl opencode # running opencode on all models x providers x evals x scores
+orvl opencode qwen3-coder # running opencode with qwen3-coder on all providers x evals x scores
+orvl opencode qwen3-coder zen # running opencode with qwen3-coder on zen with all evals x scores
+orvl opencode qwen3-coder zen hello-world # running opencode with qwen3-coder on zen the hello-world eval with all scores
+orvl opencode qwen3-coder zen hello-world semantic-similarity # running opencode with qwen3-coder on zen the hello-world eval with all scores
 ```
 
 or we can go the `--model= --provider= --eval=` way.
@@ -59,21 +59,22 @@ This is non-deterministic and the way to reduce from that behavior is to produce
 
 #### The Rating Equation
 
-$\underset{\text{scores table}} {S \in [0,1]^{m \times k}}, \underset{\text{model weights}} {w \in \Delta^{m-1}},\underset{\text{the metrics weights array}} {v \in \Delta^{k-1}} \to \underset{\text{rate}} R=v^\top S^\top w$
+$\underset{\text{scores table}} {S \in [0,1]^{m \times k}}, \underset{\text{model weights}} {w \in \Delta^{m-1}},\underset{\text{the score weights array}} {v \in \Delta^{k-1}} \to \underset{\text{rate}} R=v^\top S^\top w$
 
 The model weights are likely to be equal since we assume those selected judge models are intelligent _enough_ equally.  
 
-But the metrics weights should resemble our own priorities and what the benchmark cares about the most, whether we value UI beauty more, code correctness or any other metric.   
+But the score weights should resemble our own priorities and what the benchmark cares about the most, whether we value UI beauty more, code correctness or any other score.   
 
 We can as well add a disagreement penalty to avoid the high variance across models to stabilize the final rate.
 
-$R_{pen}= R - \lambda\sum_{j} v_{j} {Var}_{j}$
+
+$R_{pen}= R - \lambda\sum_{j} v_{j} \operatorname{Var}_{j}$
 
 $\underset{\text{seriousness of the penalty}} {\lambda \geq 0}$
 
-${Var}_{j} = \sum_{i} w_{i} {(s_{ij} - \bar{s_{j}} )}^2$
+\[\operatorname{Var}_{j} = \sum_{i} w_{i} (s_{ij} - \bar{s}_{j} )^2\]
 
-$\bar{s_{j}}=\sum_{i} w_{i} s_{ij}$
+$\bar{s}_{j}=\sum_{i} w_{i} s_{ij}$
 
 After observing the spectrum of each judge's rating in the future, we can add calibration to account for how harsh or generous a model is.  
 
@@ -86,11 +87,11 @@ here's an ai generated sample code for the rating mechanism.
 const assessors = ["Claude", "GPT", "Kimi"];
 const w = [0.5, 0.3, 0.2]; // must sum to 1
 
-// Metrics and their weights
-const metrics = ["readability", "cases", "bugs"];
+// Score types and their weights
+const scoreTypes = ["readability", "cases", "bugs"];
 const v = [0.4, 0.3, 0.3]; // must sum to 1
 
-// Scores matrix S[i][j] = score from assessor i on metric j
+// Scores matrix S[i][j] = score from assessor i on score type j
 const S = [
   [0.80, 0.60, 0.70], // Claude
   [0.90, 0.70, 0.60], // GPT
@@ -99,38 +100,38 @@ const S = [
 
 // --- functions ---------------------------------------------
 
-// weighted mean for a single metric j
-function meanForMetric(j) {
+// weighted mean for a single score type j
+function meanForScoreType(j) {
   return S.reduce((acc, row, i) => acc + w[i] * row[j], 0);
 }
 
-// weighted variance for a single metric j
-function varianceForMetric(j) {
-  const mean = meanForMetric(j);
+// weighted variance for a single score type j
+function varianceForScoreType(j) {
+  const mean = meanForScoreType(j);
   return S.reduce((acc, row, i) => acc + w[i] * (row[j] - mean) ** 2, 0);
 }
 
 // --- compute ------------------------------------------------
 
-const means = metrics.map((_, j) => meanForMetric(j));
-const R = metrics.reduce((acc, _, j) => acc + v[j] * means[j], 0);
+const means = scoreTypes.map((_, j) => meanForScoreType(j));
+const R = scoreTypes.reduce((acc, _, j) => acc + v[j] * means[j], 0);
 
 // disagreement penalty
-const variances = metrics.map((_, j) => varianceForMetric(j));
+const variances = scoreTypes.map((_, j) => varianceForScoreType(j));
 const lambda = 0.5;
 const R_pen = R - lambda * variances.reduce((acc, varj, j) => acc + v[j] * varj, 0);
 
 // --- output -------------------------------------------------
-console.log("Per-metric means:", means);
+console.log("Per-score-type means:", means);
 console.log("Overall R:", R.toFixed(3));
-console.log("Per-metric variances:", variances);
+console.log("Per-score-type variances:", variances);
 console.log("Penalized R_pen:", R_pen.toFixed(3));
 ```
 
 ```
-Per-metric means: [ 0.81, 0.61, 0.69 ]
+Per-score-type means: [ 0.81, 0.61, 0.69 ]
 Overall R: 0.714
-Per-metric variances: [ 0.005, 0.005, 0.005 ]
+Per-score-type variances: [ 0.005, 0.005, 0.005 ]
 Penalized R_pen: 0.712
 ```
 
@@ -148,7 +149,7 @@ Potential scores across three judges.
 - token consumption, speed, tool calls number  
 	- do we incentivize everyone to do less tool calls? or more? maybe we should remove it, just a thought. 
 	- the less tokens and the faster the agent is, the better. 
-	- this score/metric does not need an LLM judge. 
+	- this score does not need an LLM judge. 
 
 ## Agents
 
