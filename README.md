@@ -72,9 +72,13 @@ $R_{pen}= R - \lambda\sum_{j} v_{j} \mathrm{Var}_{j}$
 
 $\underset{\text{seriousness of the penalty}} {\lambda \geq 0}$
 
-\[\mathrm{Var}_{j} = \sum_{i} w_{i} (s_{ij} - \bar{s}_{j} )^2\]
+$$
+\mathrm{Var}_j = \sum_i w_i \left(s_{ij} - \bar{s}_j \right)^2
+$$
 
-$\bar{s}_{j}=\sum_{i} w_{i} s_{ij}$
+$$
+\bar{s}_j = \sum_i w_i s_{ij}
+$$
 
 After observing the spectrum of each judge's rating in the future, we can add calibration to account for how harsh or generous a model is.  
 
