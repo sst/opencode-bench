@@ -59,7 +59,9 @@ This is non-deterministic and the way to reduce from that behavior is to produce
 
 #### The Rating Equation
 
-$\underset{\text{scores table}} {S \in [0,1]^{m \times k}}, \underset{\text{model weights}} {w \in \Delta^{m-1}},\underset{\text{the score weights array}} {v \in \Delta^{k-1}} \to \underset{\text{rate}} R=v^\top S^\top w$
+$$
+\underset{\text{scores table}} {S \in [0,1]^{m \times k}}, \underset{\text{model weights}} {w \in \Delta^{m-1}},\underset{\text{the score weights array}} {v \in \Delta^{k-1}} \to \underset{\text{rate}} R=v^\top S^\top w
+$$
 
 The model weights are likely to be equal since we assume those selected judge models are intelligent _enough_ equally.  
 
