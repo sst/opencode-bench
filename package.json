@@ -6,7 +6,7 @@
     "orvl": "dist/cli.js"
   },
   "scripts": {
-    "build": "tsc -p tsconfig.json",
+    "build": "bun build cli.ts --outfile dist/cli.js --target node --format esm --external node:*",
     "check": "tsc --noEmit",
     "dev": "bun run cli.ts"
   },
