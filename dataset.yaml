@@ -1,0 +1,193 @@
+# # stars: 375 forks: 46
+# - repo: noworneverev/graphrag-visualizer
+#   from: 0e7806c28f562eabb7713ab64dc8a8e57844269f
+#   to: 0a78b47ff2568f2c5b94867116ae2500d263ee22
+#   prompt: Update the app to support both GraphRAG v1 and v2 file formats, add a clear
+#     search results button to the graph viewer, and set CI to false in the deployment
+#     workflow.
+#   commit_message: 'feat: update parquet file handling and documentation for GraphRAG
+#     v2.x.x (#40)'
+#   issues: []
+#   scores:
+#     ui: 1
+#     code-quality: 1
+#     semantic-similarity: 1
+# # stars: 240 forks: 25
+# - repo: KwokKwok/Silo
+#   from: c00285a43733ed5597a06c36c220d2cf35530c46
+#   to: 2b59dad766bc0e37de5db5f15734d9e517e72662
+#   prompt: Update the app version to 1.8.9 and add support for new AI models including
+#     Baidu ERNIE, Tencent Hunyuan, MoonshotAI Kimi, MiniMax, and Tongyi-Zhiwen. Also
+#     update the Google Gemini model list and adjust pricing for some image generation
+#     models.
+#   commit_message: 'feat: update model'
+#   issues: []
+#   scores:
+#     ui: 1
+#     code-quality: 1
+#     semantic-similarity: 1
+# stars: 180 forks: 77
+- repo: prismicio-community/course-fizzi-next
+  from: 6842796954426d2de6d1da018c27b2473a166c09
+  to: 2760114f2647ebec8f63e0ecc2dc87a8cd4096ac
+  prompt:
+    Update the README to include a project description and clear deployment
+    instructions for users who want to skip the tutorial and launch the site directly.
+  commit_message: Update README.md to add starter instructions
+  issues: []
+  scores:
+    semantic-similarity: 1
+# # stars: 118 forks: 3
+# - repo: mylofi/local-vault
+#   from: 96406d145dd2500da8facd52ff7936e58faf514f
+#   to: df8ca6137048571b498b35709db288fc280d5b4e
+#   prompt: Add an option to disable auto-caching of manually specified lock-keys, allowing
+#     developers to manage when users are prompted for passkey authentication.
+#   commit_message: updating ldl dependency, fixing bug in tests
+#   issues: []
+#   scores:
+#     ui: 1
+#     code-quality: 1
+#     semantic-similarity: 1
+# # stars: 74 forks: 14
+# - repo: Rasalas/msg-reader
+#   from: df8924e11fb6aa1a1e27cd51bc68e6f725bc2a83
+#   to: a04d29e61cb6c4cc13b76b63e7e7a8b39f7446d8
+#   prompt: Add Docker containerization for the Node.js app with a Dockerfile and docker-compose
+#     setup, and include an MIT license file.
+#   commit_message: "Bump sha.js from 2.4.11 to 2.4.12\n\nBumps [sha.js](https://github.com/crypto-browserify/sha.js)\
+#     \ from 2.4.11 to 2.4.12.\n- [Changelog](https://github.com/browserify/sha.js/blob/master/CHANGELOG.md)\n\
+#     - [Commits](https://github.com/crypto-browserify/sha.js/compare/v2.4.11...v2.4.12)\n\
+#     \n---\nupdated-dependencies:\n- dependency-name: sha.js\n  dependency-version:\
+#     \ 2.4.12\n  dependency-type: indirect\n...\n\nSigned-off-by: dependabot[bot] <support@github.com>"
+#   issues: []
+#   scores:
+#     ui: 1
+#     code-quality: 1
+#     semantic-similarity: 1
+# # stars: 62 forks: 16
+# - repo: halitsever/nest-cloudflare-turnstile
+#   from: a02285a3265cac7e5d62919221b68b30d46c86c5
+#   to: b6a37b964e5dfc650e79e437768e005cd9e2888a
+#   prompt: Update the GitHub Pages workflow to use the latest versions of the actions
+#     and upgrade axios to the newest version. Also, add the optional dependency for
+#     rollup on Linux x64.
+#   commit_message: 'Merge pull request #16 from halitsever/dependabot/npm_and_yarn/axios-1.12.2
+
+#     build(deps): bump axios from 1.9.0 to 1.12.2'
+#   issues: []
+#   scores:
+#     ui: 1
+#     code-quality: 1
+#     semantic-similarity: 1
+# # stars: 60 forks: 1
+# - repo: psyko-gh/overcrawlrr
+#   from: 51417000ef49ad282e23542450eb149f74e7004d
+#   to: 500f67c8ff9c9378eb36054958227444c074892b
+#   prompt: Add a pull request template to standardize contributions, simplify the GitHub
+#     Actions workflow by removing redundant lint reporting, and introduce an optional
+#     maxRequests limit for both discovery and smart recommendation jobs to control
+#     the number of movie requests processed.
+#   commit_message: 'feat: Added max requests parameter to jobs (#38)
+
+#     Added a maxRequests setting to both the discover and smartRecommendations jobs
+#     to limit the number of requests made during those jobs.'
+#   issues: []
+#   scores:
+#     ui: 1
+#     code-quality: 1
+#     semantic-similarity: 1
+# # stars: 46 forks: 6
+# - repo: googleworkspace/drive-picker-element
+#   from: b79e1b795678818810961b7abff8deb46830623a
+#   to: a7c2da8630ea21fb57c6ea1b12aa32bb871f6dcd
+#   prompt: Update the changelog and README for version 0.6.2, which fixes a bug where
+#     the component doesn't initialize properly when connected.
+#   commit_message: 'chore(main): release 0.6.2 (#81)'
+#   issues: []
+#   scores:
+#     ui: 1
+#     code-quality: 1
+#     semantic-similarity: 1
+# # stars: 37 forks: 0
+# - repo: pbstar/fitview
+#   from: a9bf2eae9e71fc576e874aaf7a083ece1b3bd8ea
+#   to: d948d828a7d87b4868df9b20a60da63adb00dde3
+#   prompt: Update the fitview library to version 0.3.3 and improve the scroll mode
+#     by adding proper margin calculations to prevent content cutoff. Also enhance the
+#     test page with better styling, interactive controls, and a resizable container
+#     for testing different fit modes.
+#   commit_message: "\u793A\u4F8B\u4F18\u5316"
+#   issues: []
+#   scores:
+#     ui: 1
+#     code-quality: 1
+#     semantic-similarity: 1
+# # stars: 33 forks: 20
+# - repo: eckoln/nextdaily
+#   from: 0962b81e6901f7502f22e2dd59308fc589ecc363
+#   to: 24ec7c6963a369b37907ec42b76174ee3dd3bcde
+#   prompt: Add an MIT license file and update the sidebar to be a fixed overlay on
+#     mobile. Also move Prisma client from dev dependencies to regular dependencies
+#     and add a postinstall script.
+#   commit_message: 'Merge pull request #3 from eckoln/patch-01
+
+#     add missing postinstall script'
+#   issues: []
+#   scores:
+#     ui: 1
+#     code-quality: 1
+#     semantic-similarity: 1
+# # stars: 32 forks: 22
+# - repo: Cefalo/quick-meet
+#   from: dd91d6aa474dc00bab03ddb6372bc09369f0490b
+#   to: 25eac46a3abacd35498ceed367e242c485191ede
+#   prompt: Update the README with new screenshots and fix typos, then refactor the
+#     backend to remove domain-specific room filtering and improve the mock service
+#     with persistent caching.
+#   commit_message: updated screenshots and docs
+#   issues: []
+#   scores:
+#     ui: 1
+#     code-quality: 1
+#     semantic-similarity: 1
+# # stars: 22 forks: 7
+# - repo: AlaminPu1007/algorithm-visualizer
+#   from: ca409519ec96a83ec8d6c2ba30f2487f8d601719
+#   to: 21845e972dd8e2378cbcd16accc5ae8cdd37acb2
+#   prompt: Add the Floyd Warshall algorithm to the shortest path finding section, update
+#     the UI to improve layout responsiveness, and include loading states with error
+#     handling for algorithm execution.
+#   commit_message: pathfinding, some UI enhancement improved
+#   issues: []
+#   scores:
+#     ui: 1
+#     code-quality: 1
+#     semantic-similarity: 1
+# # stars: 12 forks: 7
+# - repo: mohitchandel/AI-APP-Template
+#   from: 7fbd621b42ffaaa498a2caffcb86582cdea33027
+#   to: 25ec8c91b75675bc64babf2686d83c7b540a1460
+#   prompt: Add GitHub issue templates for bug reports and feature requests, a code
+#     of conduct, and an MIT license file to the repository.
+#   commit_message: Update issue templates
+#   issues: []
+#   scores:
+#     ui: 1
+#     code-quality: 1
+#     semantic-similarity: 1
+# # stars: 11 forks: 16
+# - repo: BhuwanSKumar/refrain-addiction-main
+#   from: ee8d911c20239840c00e4e8f17eda242a2d4042c
+#   to: a4a53ac7ff9cc62f4b70850f3f353637242e0a36
+#   prompt: Please add a testimonials section to the landing page with a responsive
+#     grid layout, and also create a CONTRIBUTING.md file for the project. Also, set
+#     the Live Server port to 5501 in VS Code settings.
+#   commit_message: 'Merge pull request #80 from neeru24/patch-1
+
+#     Add consistent hover effects for buttons and links'
+#   issues: []
+#   scores:
+#     ui: 1
+#     code-quality: 1
+#     semantic-similarity: 1
