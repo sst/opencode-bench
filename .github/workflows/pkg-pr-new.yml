@@ -31,4 +31,5 @@ jobs:
         run: bun run build
 
       - name: Publish preview with pkg.pr.new
-        run: bunx pkg-pr-new publish
+        run: |
+          bunx pkg-pr-new publish
