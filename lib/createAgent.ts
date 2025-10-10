@@ -22,7 +22,8 @@ export interface AgentDefinition {
     provider: string,
     model: string,
     prompt: AgentPrompt,
-    cwd?: string
+    cwd?: string,
+    options?: AgentRunOptions
   ) => Promise<AgentRunResult>;
 }
 
@@ -30,15 +31,21 @@ export interface AgentRunResult {
   command: string;
 }
 
+export interface AgentRunOptions {
+  onStart?: (command: string) => void;
+}
+
 export function createAgent(executor: AgentExecutor): AgentDefinition {
   return {
-    async run(provider, model, prompt, cwd) {
+    async run(provider, model, prompt, cwd, options) {
       const spec = await executor(provider, model, prompt);
       const normalized = normalizeCommandSpec(spec);
 
+      options?.onStart?.(normalized.display);
+
       await runCommand(normalized, prompt, cwd);
 
-      return { command: normalized.command };
+      return { command: normalized.display };
     }
   };
 }
@@ -47,6 +54,7 @@ interface NormalizedCommand {
   command: string;
   args: string[];
   shell: boolean;
+  display: string;
 }
 
 function normalizeCommandSpec(spec: AgentCommandSpec): NormalizedCommand {
@@ -55,7 +63,8 @@ function normalizeCommandSpec(spec: AgentCommandSpec): NormalizedCommand {
     return {
       command: spec,
       args: [],
-      shell: true
+      shell: true,
+      display: spec
     };
   }
 
@@ -70,12 +79,26 @@ function normalizeCommandSpec(spec: AgentCommandSpec): NormalizedCommand {
   });
 
   const shell = spec.shell ?? false;
+  const display = formatForDisplay(spec.command, args);
 
   return {
     command: spec.command,
     args,
-    shell
+    shell,
+    display
   };
+}
+
+function formatForDisplay(command: string, args: string[]): string {
+  if (args.length === 0) {
+    return command;
+  }
+
+  const renderedArgs = args.map((arg) =>
+    /[\s"']/.test(arg) ? JSON.stringify(arg) : arg
+  );
+
+  return `${command} ${renderedArgs.join(" ")}`;
 }
 
 async function runCommand(
