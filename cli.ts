@@ -404,7 +404,6 @@ function cleanupRepository(tempDir: string, entry: DatasetEval): void {
 function cloneRepository(entry: DatasetEval): string {
   const remoteUrl = `https://github.com/${entry.repo}.git`;
   const tempDir = mkdtempSync(join(tmpdir(), "openreval-"));
-  console.log(tempDir);
 
   try {
     execSync(`git clone ${remoteUrl} .`, {
