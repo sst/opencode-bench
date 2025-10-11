@@ -71,4 +71,8 @@ jobs:
           COMMAND="bunx \"${PACKAGE_SPEC}\" opencode"
 
           echo "Executing: ${COMMAND}"
-          bunx "${PACKAGE_SPEC}" opencode
+          if ! bunx "${PACKAGE_SPEC}" opencode; then
+            echo "openreval benchmark failed, dumping OpenCode logs..." >&2
+            find /home/runner/.local/share/opencode/log -type f -print -exec cat {} + || true
+            exit 1
+          fi
