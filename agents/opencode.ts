@@ -4,13 +4,13 @@ export const models: Record<string, string[]> = {
   opencode: [
     "gpt-5",
     "gpt-5-codex",
-    "claude-sonnet-4-5",
-    "claude-sonnet-4",
-    "claude-3-5-haiku",
-    "claude-opus-4-1",
-    "qwen3-coder",
-    "grok-code",
-    "kimi-k2",
+    // "claude-sonnet-4-5",
+    // "claude-sonnet-4",
+    // "claude-3-5-haiku",
+    // "claude-opus-4-1",
+    // "qwen3-coder",
+    // "grok-code",
+    // "kimi-k2",
   ],
 };
 

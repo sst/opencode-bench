@@ -1,5 +1,6 @@
 import { strict as assert } from "node:assert";
 import { spawn } from "node:child_process";
+import { createInterface } from "node:readline";
 
 export type AgentPrompt = string;
 
@@ -33,6 +34,7 @@ export interface AgentRunResult {
 
 export interface AgentRunOptions {
   onStart?: (command: string) => void;
+  logPrefix?: string;
 }
 
 export function createAgent(executor: AgentExecutor): AgentDefinition {
@@ -43,7 +45,7 @@ export function createAgent(executor: AgentExecutor): AgentDefinition {
 
       options?.onStart?.(normalized.display);
 
-      await runCommand(normalized, prompt, cwd);
+      await runCommand(normalized, prompt, cwd, options?.logPrefix);
 
       return { command: normalized.display };
     }
@@ -104,18 +106,22 @@ function formatForDisplay(command: string, args: string[]): string {
 async function runCommand(
   command: NormalizedCommand,
   prompt: AgentPrompt,
-  cwd?: string
+  cwd: string | undefined,
+  logPrefix: string | undefined
 ): Promise<void> {
   await new Promise<void>((resolve, reject) => {
     const child = spawn(command.command, command.args, {
       cwd,
       shell: command.shell,
-      stdio: ["pipe", "inherit", "inherit"]
+      stdio: ["pipe", "pipe", "pipe"]
     });
 
     child.on("error", (error) => {
       reject(error);
     });
+
+    attachLogging(child.stdout, process.stdout, logPrefix);
+    attachLogging(child.stderr, process.stderr, logPrefix);
 
     child.on("close", (code, signal) => {
       if (code === 0) {
@@ -137,5 +143,31 @@ async function runCommand(
         child.stdin?.end();
       });
     }
+  });
+}
+
+function attachLogging(
+  stream: NodeJS.ReadableStream | null,
+  destination: NodeJS.WritableStream,
+  prefix: string | undefined
+): void {
+  if (!stream) {
+    return;
+  }
+
+  if (!prefix) {
+    stream.pipe(destination, { end: false });
+    return;
+  }
+
+  stream.setEncoding("utf8");
+
+  const rl = createInterface({ input: stream });
+  rl.on("line", (line) => {
+    destination.write(`[${prefix}] ${line}\n`);
+  });
+
+  stream.on("end", () => {
+    rl.close();
   });
 }

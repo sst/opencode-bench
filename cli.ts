@@ -15,6 +15,7 @@ import type { DatasetEval, ScoreAssignment } from "~/lib/dataset.js";
 import {
   generatePlannerTasks,
   type PlannerCommitDiff,
+  type PlannerTask,
 } from "~/lib/planner.js";
 import type { Judge } from "~/lib/judgeTypes.js";
 import { judges } from "~/judges.js";
@@ -241,15 +242,21 @@ async function main(): Promise<void> {
       continue;
     }
 
-    let repoDir: string | undefined;
     const abortToken = { __abortEval: true } as const;
 
-    try {
-      repoDir = cloneRepository(evalDefinition);
-      const rangeDiff = getDatasetDiff(evalDefinition, repoDir);
-      const commitDiffs = getCommitDiffs(evalDefinition, repoDir);
+    let plannerRepoDir: string | undefined;
+    let plannerTasks: PlannerTask[] = [];
 
-      const plannerTasks = await generatePlannerTasks(
+    const evalId = getEvalIdentifier(evalDefinition);
+
+    try {
+      console.log(
+        `[${evalId} planner] Cloning repository for planner context...`,
+      );
+      plannerRepoDir = cloneRepository(evalDefinition);
+      const commitDiffs = getCommitDiffs(evalDefinition, plannerRepoDir);
+
+      plannerTasks = await generatePlannerTasks(
         evalDefinition,
         commitDiffs,
       );
@@ -258,81 +265,61 @@ async function main(): Promise<void> {
         plannerTasks.length > 0,
         `Planner produced no tasks for ${evalDefinition.repo} (${evalDefinition.from}..${evalDefinition.to}).`,
       );
+    } catch (error) {
+      if (error instanceof Error) {
+        console.error(
+          `Failed to prepare evaluation ${evalId}: ${error.message}`,
+        );
+      } else {
+        console.error("Failed to prepare evaluation", evalId);
+      }
+      process.exitCode = 1;
+      return;
+    } finally {
+      if (plannerRepoDir) {
+        cleanupRepository(plannerRepoDir, evalDefinition);
+      }
+    }
 
-      for (const combination of modelCombinations) {
-        try {
-          resetRepositoryToBaseline(evalDefinition, repoDir);
-        } catch (error) {
-          if (error instanceof Error) {
-            console.error(
-              `Failed to reset repository for ${combination.model}: ${error.message}`,
-            );
-          } else {
-            console.error(
-              `Failed to reset repository for ${combination.model}:`,
-              error,
-            );
-          }
-          process.exitCode = 1;
-          throw abortToken;
-        }
+    const runCombination = async (
+      combination: ModelCombination,
+    ): Promise<number> => {
+      let repoDir: string | undefined;
+
+      try {
+        const combinationLabel = `${evalId} ${combination.provider}/${combination.model}`;
+        console.log(`[${combinationLabel}] Cloning repository...`);
+        repoDir = cloneRepository(evalDefinition);
 
         let tasksExecuted = 0;
 
         for (const task of plannerTasks) {
-        try {
-          const promptForAgent = task.prompt;
-          await agent.definition.run(
-            combination.provider,
-            combination.model,
-            promptForAgent,
-            repoDir,
-            {
-              onStart: (commandString) => {
-                console.log(`[${task.commit}] ${commandString.trim()}`);
-              },
-            },
-          );
+          const logPrefix = `${combinationLabel} ${task.commit}`;
 
-          tasksExecuted += 1;
-        } catch (error) {
+          try {
+            const promptForAgent = task.prompt;
+            await agent.definition.run(
+              combination.provider,
+              combination.model,
+              promptForAgent,
+              repoDir,
+              {
+                onStart: (commandString) => {
+                  console.log(`[${logPrefix}] ${commandString.trim()}`);
+                },
+                logPrefix,
+              },
+            );
+
+            tasksExecuted += 1;
+          } catch (error) {
             if (error instanceof Error) {
               console.error(
                 `Failed to render command for ${combination.model}: ${error.message}`,
               );
             } else {
-              console.error("Failed to render command for", combination.model);
-            }
-            process.exitCode = 1;
-            throw abortToken;
-          }
-          }
-
-        if (tasksExecuted > 0) {
-          try {
-            const finalDiff = finalizeAgentDiff(evalDefinition, repoDir);
-
-            if (finalDiff === null) {
-              console.log(
-                `No changes detected for ${combination.model} on ${getEvalIdentifier(evalDefinition)}. Skipping scoring.`,
-              );
-            } else {
-              await evaluateScoresForRun(
-                evalDefinition,
-                scores,
-                finalDiff,
-                combination.model,
-              );
-              runCount += 1;
-            }
-          } catch (error) {
-            if (error instanceof Error) {
               console.error(
-                `Failed to evaluate scores for ${combination.model}: ${error.message}`,
-              );
-            } else {
-              console.error(
-                "Failed to evaluate scores for",
+                "Failed to render command for",
                 combination.model,
               );
             }
@@ -340,7 +327,67 @@ async function main(): Promise<void> {
             throw abortToken;
           }
         }
+
+        if (tasksExecuted === 0) {
+          return 0;
+        }
+
+        try {
+          const finalDiff = finalizeAgentDiff(evalDefinition, repoDir);
+
+          if (finalDiff === null) {
+            console.log(
+              `No changes detected for ${combination.model} on ${evalId}. Skipping scoring.`,
+            );
+            return 0;
+          }
+
+          await evaluateScoresForRun(
+            evalDefinition,
+            scores,
+            finalDiff,
+            combination.model,
+            combinationLabel,
+          );
+          return 1;
+        } catch (error) {
+          if (error instanceof Error) {
+            console.error(
+              `Failed to evaluate scores for ${combination.model}: ${error.message}`,
+            );
+          } else {
+            console.error("Failed to evaluate scores for", combination.model);
+          }
+          process.exitCode = 1;
+          throw abortToken;
+        }
+      } catch (error) {
+        if (
+          typeof error === "object" &&
+          error !== null &&
+          "__abortEval" in error
+        ) {
+          throw error;
+        }
+
+        console.error(
+          `Failed to prepare combination ${combination.provider}/${combination.model} for ${evalId}: ${error instanceof Error ? error.message : error}`,
+        );
+        process.exitCode = 1;
+        throw abortToken;
+      } finally {
+        if (repoDir) {
+          cleanupRepository(repoDir, evalDefinition);
+        }
       }
+    };
+
+    try {
+      const results = await Promise.all(
+        modelCombinations.map((combination) => runCombination(combination)),
+      );
+
+      runCount += results.reduce((total, value) => total + value, 0);
     } catch (error) {
       if (
         typeof error === "object" &&
@@ -350,22 +397,11 @@ async function main(): Promise<void> {
         return;
       }
 
-      if (error instanceof Error) {
-        console.error(
-          `Failed to prepare evaluation ${getEvalIdentifier(evalDefinition)}: ${error.message}`,
-        );
-      } else {
-        console.error(
-          "Failed to prepare evaluation",
-          getEvalIdentifier(evalDefinition),
-        );
-      }
+      console.error(
+        `Failed to complete evaluation ${evalId}: ${error instanceof Error ? error.message : error}`,
+      );
       process.exitCode = 1;
       return;
-    } finally {
-      if (repoDir) {
-        cleanupRepository(repoDir, evalDefinition);
-      }
     }
   }
 
@@ -576,23 +612,6 @@ function finalizeAgentDiff(entry: DatasetEval, repoDir: string): string | null {
   }
 
   return null;
-}
-
-function resetRepositoryToBaseline(entry: DatasetEval, repoDir: string): void {
-  try {
-    execSync(`git reset --hard ${entry.to}`, {
-      cwd: repoDir,
-      stdio: "ignore",
-    });
-    execSync(`git clean -fd`, {
-      cwd: repoDir,
-      stdio: "ignore",
-    });
-  } catch (error) {
-    throw new Error(
-      error instanceof Error ? error.message : String(error),
-    );
-  }
 }
 
 async function evaluateScoresForRun(
