@@ -10,11 +10,7 @@ type SupportedModel = NonNullable<GenerateObjectOptions["model"]>;
 
 const DEFAULT_BASE_URL = "https://opencode.ai/zen/v1";
 const OPENCODE_PREFIX = "opencode/";
-const API_KEY_ENV_VARS = [
-  "OPENCODE_ZEN_API_KEY",
-  "OPENCODE_ZEN_KEY",
-  "ZEN_API_KEY",
-];
+const API_KEY_ENV_VARS = ["OPENCODE_API_KEY"];
 
 type ProviderBundle = {
   openai: ReturnType<typeof createOpenAI>;
@@ -37,7 +33,7 @@ function resolveZenApiKey(): string {
     false,
     [
       "Missing OpenCode Zen API key.",
-      "Set OPENCODE_ZEN_KEY (or OPENCODE_ZEN_API_KEY) before running the CLI.",
+      "Set OPENCODE_API_KEY before running the CLI.",
       "See https://opencode.ai/docs/zen/ for instructions.",
     ].join(" "),
   );
