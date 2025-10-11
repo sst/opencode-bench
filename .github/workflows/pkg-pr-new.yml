@@ -42,12 +42,16 @@ jobs:
     runs-on: ubuntu-latest
     needs: publish
     if: needs.publish.result == 'success' && needs.publish.outputs.urls != ''
+    environment: production
 
     steps:
       - name: Setup Bun
         uses: oven-sh/setup-bun@v1
         with:
           bun-version: 1.2.21
+
+      - name: Install OpenCode CLI
+        run: bun add -g opencode-ai
 
       - name: Run openreval benchmark smoke test
         env:
