@@ -65,4 +65,4 @@ jobs:
           PACKAGE_SPEC="orvl@${PACKAGE_URL}"
 
           echo "Running benchmark with package ${PACKAGE_SPEC}"
-          bunx "${PACKAGE_SPEC}" --help
+          bunx "${PACKAGE_SPEC}" opencode
