@@ -1,4 +1,4 @@
-name: Publish Preview Packages
+name: Publish and Benchmark Preview Packages
 
 on:
   push:
@@ -14,6 +14,10 @@ permissions:
 jobs:
   publish:
     runs-on: ubuntu-latest
+    outputs:
+      sha: ${{ steps.publish.outputs.sha }}
+      urls: ${{ steps.publish.outputs.urls }}
+      packages: ${{ steps.publish.outputs.packages }}
 
     steps:
       - name: Checkout repository
@@ -30,6 +34,32 @@ jobs:
       - name: Build
         run: bun run build
 
-      - name: Publish preview with pkg.pr.new
+      - id: publish
+        name: Publish preview with pkg.pr.new
+        run: bunx pkg-pr-new publish --bun
+
+  benchmark:
+    runs-on: ubuntu-latest
+    needs: publish
+    if: needs.publish.result == 'success' && needs.publish.outputs.urls != ''
+
+    steps:
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v1
+        with:
+          bun-version: 1.2.21
+
+      - name: Run openreval benchmark smoke test
+        env:
+          PACKAGE_URLS: ${{ needs.publish.outputs.urls }}
         run: |
-          bunx pkg-pr-new publish
+          set -euo pipefail
+          PACKAGE_URL="${PACKAGE_URLS%% *}"
+
+          if [ -z "${PACKAGE_URL}" ]; then
+            echo "No package URL found in publish outputs." >&2
+            exit 1
+          fi
+
+          echo "Running benchmark with package ${PACKAGE_URL}"
+          bunx --use "${PACKAGE_URL}" orvl --help
