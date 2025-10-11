@@ -55,13 +55,10 @@ jobs:
 
       - name: Run openreval benchmark
         env:
-          OPENCODE_ZEN_API_KEY: ${{ secrets.OPENCODE_ZEN_API_KEY }}
+          OPENCODE_API_KEY: ${{ secrets.OPENCODE_API_KEY }}
           PACKAGE_URLS: ${{ needs.publish.outputs.urls }}
         run: |
           set -euo pipefail
-
-          echo "Environment variables before benchmark:"
-          env | sort
 
           PACKAGE_URL="${PACKAGE_URLS%% *}"
 
