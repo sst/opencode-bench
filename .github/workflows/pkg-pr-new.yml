@@ -62,5 +62,7 @@ jobs:
             exit 1
           fi
 
-          echo "Running benchmark with package ${PACKAGE_URL}"
-          bunx --use "${PACKAGE_URL}" orvl --help
+          PACKAGE_SPEC="orvl@${PACKAGE_URL}"
+
+          echo "Running benchmark with package ${PACKAGE_SPEC}"
+          bunx "${PACKAGE_SPEC}" --help
