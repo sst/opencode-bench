@@ -53,12 +53,13 @@ jobs:
       - name: Install OpenCode CLI
         run: bun add -g opencode-ai
 
-      - name: Run openreval benchmark smoke test
+      - name: Run openreval benchmark
         env:
           OPENCODE_ZEN_API_KEY: ${{ secrets.OPENCODE_ZEN_API_KEY }}
           PACKAGE_URLS: ${{ needs.publish.outputs.urls }}
         run: |
           set -euo pipefail
+
           PACKAGE_URL="${PACKAGE_URLS%% *}"
 
           if [ -z "${PACKAGE_URL}" ]; then
@@ -67,6 +68,7 @@ jobs:
           fi
 
           PACKAGE_SPEC="orvl@${PACKAGE_URL}"
+          COMMAND="bunx \"${PACKAGE_SPEC}\" opencode"
 
-          echo "Running benchmark with package ${PACKAGE_SPEC}"
+          echo "Executing: ${COMMAND}"
           bunx "${PACKAGE_SPEC}" opencode
