@@ -41,7 +41,7 @@ jobs:
   benchmark:
     runs-on: ubuntu-latest
     needs: publish
-    if: needs.publish.result == 'success' && needs.publish.outputs.packages != ''
+    if: needs.publish.result == 'success' && needs.publish.outputs.urls != ''
 
     steps:
       - name: Setup Bun
@@ -52,15 +52,15 @@ jobs:
       - name: Run openreval benchmark smoke test
         env:
           OPENCODE_ZEN_API_KEY: ${{ secrets.OPENCODE_ZEN_API_KEY }}
-          PACKAGE_LOCATORS: ${{ needs.publish.outputs.packages }}
+          PACKAGE_URLS: ${{ needs.publish.outputs.urls }}
         run: |
           set -euo pipefail
-          PACKAGE_LOCATOR="${PACKAGE_LOCATORS%% *}"
+          PACKAGE_URL="${PACKAGE_URLS%% *}"
 
-          if [ -z "${PACKAGE_LOCATOR}" ]; then
-            echo "No package locator found in publish outputs." >&2
+          if [ -z "${PACKAGE_URL}" ]; then
+            echo "No package URL found in publish outputs." >&2
             exit 1
           fi
 
-          echo "Running benchmark with package locator ${PACKAGE_LOCATOR}"
-          bunx "${PACKAGE_LOCATOR}" --help
+          echo "Running benchmark with package ${PACKAGE_URL}"
+          bunx --use "${PACKAGE_URL}" orvl --help
