@@ -60,6 +60,9 @@ jobs:
         run: |
           set -euo pipefail
 
+          echo "Environment variables before benchmark:"
+          env | sort
+
           PACKAGE_URL="${PACKAGE_URLS%% *}"
 
           if [ -z "${PACKAGE_URL}" ]; then

@@ -2,7 +2,7 @@ import { createAgent } from "~/lib/createAgent.js";
 
 export const models: Record<string, string[]> = {
   opencode: [
-    "gpt-5",
+    // "gpt-5",
     "gpt-5-codex",
     // "claude-sonnet-4-5",
     // "claude-sonnet-4",

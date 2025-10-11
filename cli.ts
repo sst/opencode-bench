@@ -283,7 +283,7 @@ async function main(): Promise<void> {
 
     const runCombination = async (
       combination: ModelCombination,
-    ): Promise<number> => {
+    ): Promise<{ completedRuns: number; summaries: string[] }> => {
       let repoDir: string | undefined;
 
       try {
@@ -329,7 +329,7 @@ async function main(): Promise<void> {
         }
 
         if (tasksExecuted === 0) {
-          return 0;
+          return { completedRuns: 0, summaries: [] };
         }
 
         try {
@@ -339,17 +339,17 @@ async function main(): Promise<void> {
             console.log(
               `No changes detected for ${combination.model} on ${evalId}. Skipping scoring.`,
             );
-            return 0;
+            return { completedRuns: 0, summaries: [] };
           }
 
-          await evaluateScoresForRun(
+          const summaryLines = await evaluateScoresForRun(
             evalDefinition,
             scores,
             finalDiff,
             combination.model,
             combinationLabel,
           );
-          return 1;
+          return { completedRuns: 1, summaries: summaryLines };
         } catch (error) {
           if (error instanceof Error) {
             console.error(
@@ -387,7 +387,16 @@ async function main(): Promise<void> {
         modelCombinations.map((combination) => runCombination(combination)),
       );
 
-      runCount += results.reduce((total, value) => total + value, 0);
+      runCount += results.reduce(
+        (total, value) => total + value.completedRuns,
+        0,
+      );
+
+      results.forEach((result) => {
+        result.summaries.forEach((line) => {
+          console.log(line);
+        });
+      });
     } catch (error) {
       if (
         typeof error === "object" &&
@@ -620,7 +629,7 @@ async function evaluateScoresForRun(
   diff: string,
   model: string,
   contextLabel?: string,
-): Promise<void> {
+): Promise<string[]> {
   const evalId = getEvalIdentifier(datasetEval);
   const runContext = contextLabel ? `${evalId} [${contextLabel}]` : evalId;
 
@@ -664,29 +673,27 @@ async function evaluateScoresForRun(
 
   const summary = aggregateScores(Array.from(aggregationInputs.values()));
 
-  console.log(`\nScore breakdown for ${model} on ${runContext}:`);
-  if (diff === null) {
-    console.log("  No diff provided; scores default to 0.");
-    return;
-  }
-
+  const lines: string[] = [];
+  lines.push(`\nScore breakdown for ${model} on ${runContext}:`);
   summary.perScore.forEach((entry) => {
-    console.log(
+    lines.push(
       `  ${entry.assignment.name} → ${entry.averageScore.toFixed(3)} (weight ${entry.normalizedWeight.toFixed(2)})`,
     );
     const raw = aggregationInputs.get(entry.assignment.name);
     if (raw) {
       raw.judgeResults.forEach((result) => {
-        console.log(
+        lines.push(
           `    - ${result.judge.name}: ${result.score.toFixed(3)} → ${result.rationale}`,
         );
       });
     }
   });
 
-  console.log(
+  lines.push(
     `  Final aggregate score: ${summary.finalScore.toFixed(3)} (base ${summary.baseScore.toFixed(3)} - penalty ${summary.variancePenalty.toFixed(3)})\n`,
   );
+
+  return lines;
 }
 
 function ensureAggregationEntry(
