@@ -290,6 +290,7 @@ async function main(): Promise<void> {
         const combinationLabel = `${evalId} ${combination.provider}/${combination.model}`;
         console.log(`[${combinationLabel}] Cloning repository...`);
         repoDir = cloneRepository(evalDefinition);
+        const referenceDiff = getDatasetDiff(evalDefinition, repoDir);
 
         let tasksExecuted = 0;
 
@@ -346,6 +347,7 @@ async function main(): Promise<void> {
             evalDefinition,
             scores,
             finalDiff,
+            referenceDiff,
             combination.model,
             combinationLabel,
           );
@@ -545,7 +547,10 @@ function getDatasetDiff(entry: DatasetEval, repoDir: string): string {
     );
   }
 
-  return entry.prompt;
+  assert(
+    false,
+    `Unable to compute git diff for ${entry.repo} between ${entry.from} and ${entry.to}.`,
+  );
 }
 
 function finalizeAgentDiff(entry: DatasetEval, repoDir: string): string | null {
@@ -627,6 +632,7 @@ async function evaluateScoresForRun(
   datasetEval: DatasetEval,
   scores: ScoreAssignment[],
   diff: string,
+  referenceDiff: string,
   model: string,
   contextLabel?: string,
 ): Promise<string[]> {
@@ -645,7 +651,11 @@ async function evaluateScoresForRun(
       }
 
       try {
-        const result = await scoreDefinition.evaluate({ diff, judge });
+        const result = await scoreDefinition.evaluate({
+          diff,
+          referenceDiff,
+          judge,
+        });
 
         ensureAggregationEntry(aggregationInputs, assignment).judgeResults.push(
           {

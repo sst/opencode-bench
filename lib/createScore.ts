@@ -4,6 +4,7 @@ import type { Judge } from "~/lib/judgeTypes.js";
 
 export interface ScoreContext {
   diff: string;
+  referenceDiff: string;
   judge: Judge;
 }
 

@@ -11,8 +11,6 @@ const datasetSchema = z.array(
       .regex(/^[^/]+\/[^/]+$/, "repo must follow the format <owner>/<name>."),
     from: z.string().min(1, "from commit SHA is required."),
     to: z.string().min(1, "to commit SHA is required."),
-    prompt: z.string().min(1, "prompt is required."),
-    commit_message: z.string().min(1, "commit message is required."),
     issues: z.array(z.number().int()),
     scores: z.record(z.number().positive())
   })
