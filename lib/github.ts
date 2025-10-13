@@ -88,7 +88,7 @@ export async function fetchPlannerCommitDiffs(
   };
 
   const commits = Array.isArray(comparisonData.commits)
-    ? comparisonData.commits.slice(1)
+    ? comparisonData.commits
     : [];
 
   if (commits.length === 0) {
@@ -115,6 +115,9 @@ export async function fetchPlannerCommitDiffs(
         );
 
         const diff = String(diffResponse.data);
+        if (diff.trim().length === 0) {
+          return null;
+        }
 
         return {
           sha,
@@ -122,10 +125,16 @@ export async function fetchPlannerCommitDiffs(
           diff,
         } satisfies PlannerCommitDiff;
       } catch (error) {
-        throw error;
+        console.error(
+          `Failed to fetch diff for commit ${sha} in ${entry.repo}:`,
+          error instanceof Error ? error.message : error,
+        );
+        return null;
       }
     }),
   );
 
-  return results;
+  return results.filter(
+    (value): value is PlannerCommitDiff => value !== null,
+  );
 }
