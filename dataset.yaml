@@ -6,8 +6,10 @@
     semantic-similarity:
       weight: 1
     checks:
-      weight: 1
+      weight: 0.3
       args:
+        setup:
+          - npm ci
         commands:
           - npm run lint
           - npm exec prettier -- --check .

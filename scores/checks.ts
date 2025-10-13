@@ -8,7 +8,8 @@ import { createScore, scoreResultSchema } from "~/lib/createScore.js";
 import { finalizeAgentChanges } from "~/lib/finalizeAgentChanges.js";
 
 const commandConfigSchema = z.object({
-  commands: z.array(z.string().min(1)).min(1, "At least one check command is required.")
+  setup: z.array(z.string().min(1)).default([]),
+  commands: z.array(z.string().min(1)).min(1, "At least one check command is required."),
 });
 
 interface CommandExecution {
@@ -38,9 +39,16 @@ Respond with JSON containing numeric 'score' (0-1) and a concise 'rationale' sum
 const COMMAND_TIMEOUT_MS = 5 * 60 * 1000;
 const OUTPUT_LIMIT = 4000;
 
-export default createScore<PreparedCheck[], z.infer<typeof commandConfigSchema>>({
+type ChecksConfig = z.infer<typeof commandConfigSchema>;
+
+export default createScore<PreparedCheck[], ChecksConfig>({
   prepare: ({ cwd, evaluation, config }) => {
     const parsedConfig = commandConfigSchema.parse(config ?? {});
+
+    parsedConfig.setup.forEach((command) => {
+      runCommand(command, cwd);
+    });
+
     const results: PreparedCheck[] = parsedConfig.commands.map((command) => ({
       command,
       baseline: runCommand(command, cwd)

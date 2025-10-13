@@ -42,6 +42,7 @@ Instructions:
 - Produce a concise, self-contained todo-style instruction that tells the execution agent what to implement.
 - Focus on the desired outcome and intent; reference filenames only when critical.
 - Be precise about goals and acceptance criteria, but avoid expanding into low-level implementation steps or exhaustive bullet lists.
+- Stay strictly within the scope of the diff. Do not request extra sections, stylistic flourishes, or broader refactors that are not shown. When text is inserted or removed, ask for the exact additions or deletions reflected in the diff.
 - Do not mention commit hashes, commit history, or that the instructions originated from a commit; speak directly to the execution agent about the required work.
 - Phrase the instruction as a direct task (e.g., “Ship…”, “Verify…”, “Refine…”) rather than a meta prompt or “You should”.
 
