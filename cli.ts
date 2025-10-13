@@ -286,6 +286,14 @@ async function main(): Promise<void> {
       return;
     }
 
+    if (!plannerTasks || plannerTasks.length === 0) {
+      console.error(
+        `Planner produced no tasks for ${evalDefinition.repo} (${evalDefinition.from}..${evalDefinition.to}).`,
+      );
+      process.exitCode = 1;
+      return;
+    }
+
     const runCombination = async (
       combination: ModelCombination,
     ): Promise<{ completedRuns: number; summaries: string[] }> => {
@@ -465,7 +473,11 @@ async function main(): Promise<void> {
 }
 
 main().catch((error) => {
-  console.error(error instanceof Error ? error.message : error);
+  if (error instanceof Error) {
+    console.error(error);
+  } else {
+    console.error(new Error(String(error)));
+  }
   process.exitCode = 1;
 });
 

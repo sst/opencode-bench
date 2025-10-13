@@ -63,7 +63,7 @@ export async function generatePlannerTask(
       : commit.diff;
 
   try {
-    const { object } = await generateObject({
+    const result = await generateObject({
       model: getZenLanguageModel(plannerModelId),
       schema: plannerSchema,
       system: systemPrompt,
@@ -80,25 +80,16 @@ ${truncatedDiff}
 Return the JSON object describing the task.`,
     });
 
-    const trimmedCommit = object.commit.trim();
+    const trimmedCommit = result.object.commit.trim();
     return {
       commit: trimmedCommit.length > 0 ? trimmedCommit : commit.sha,
-      prompt: sanitizePlannerPrompt(object.prompt),
+      prompt: sanitizePlannerPrompt(result.object.prompt),
     };
   } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    console.error(
-      `Planner failed for commit ${commit.sha} in ${entry.repo}: ${message}. Falling back to commit title.`,
-    );
-
-    const fallbackPrompt = commit.title.trim()
-      ? `Deliver the work described by "${commit.title.trim()}" without referencing version control history.`
-      : "Apply the required change exactly as described, without referencing version control history.";
-
-    return {
-      commit: commit.sha,
-      prompt: sanitizePlannerPrompt(fallbackPrompt),
-    };
+    const formatted =
+      error instanceof Error ? error : new Error(String(error));
+    formatted.message = `Planner failed for commit ${commit.sha} in ${entry.repo}: ${formatted.message}`;
+    throw formatted;
   }
 }
 
