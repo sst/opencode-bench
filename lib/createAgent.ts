@@ -13,14 +13,12 @@ export type AgentCommandSpec =
     };
 
 export type AgentExecutor = (
-  provider: string,
   model: string,
   prompt: AgentPrompt
 ) => AgentCommandSpec | Promise<AgentCommandSpec>;
 
 export interface AgentDefinition {
   run: (
-    provider: string,
     model: string,
     prompt: AgentPrompt,
     cwd?: string,
@@ -39,8 +37,8 @@ export interface AgentRunOptions {
 
 export function createAgent(executor: AgentExecutor): AgentDefinition {
   return {
-    async run(provider, model, prompt, cwd, options) {
-      const spec = await executor(provider, model, prompt);
+    async run(model, prompt, cwd, options) {
+      const spec = await executor(model, prompt);
       const normalized = normalizeCommandSpec(spec);
 
       options?.onStart?.(normalized.display);

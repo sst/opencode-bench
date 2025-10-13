@@ -2,7 +2,7 @@
   "lockfileVersion": 1,
   "workspaces": {
     "": {
-      "name": "openreval",
+      "name": "opencode-bench",
       "dependencies": {
         "@ai-sdk/anthropic": "^2.0.26",
         "@ai-sdk/openai": "^2.0.48",

@@ -1,7 +1,7 @@
-> open real evals
+> opencode bench
 ```bash
 orvl opencode # run opencode on all models x evals x scores
-orvl opencode --model qwen3-coder # filter by model across all evals x scores
+orvl opencode --model opencode/qwen3-coder # filter by model across all evals x scores
 orvl opencode --eval noworneverev/graphrag-visualizer # filter by eval across models x scores
 orvl opencode --eval noworneverev/graphrag-visualizer --score semantic-similarity # filter by eval and score
 ```
@@ -189,14 +189,11 @@ Potential scores across three judges.
 
 `agents/opencode.ts`
 ```typescript
-export const models = {
-	"openai": ["gpt-4o"],
-	"anthropic": ["claude-sonnet-4"]
-} // useful for assertions and matrix testing
+export const models = ["openai/gpt-4o", "anthropic/claude-sonnet-4"] // useful for assertions and matrix testing
 
-export default createAgent((provider, model, prompt) => {
+export default createAgent((model, prompt) => {
 	void prompt
-	return `opencode run -m ${provider}/${model}`
+	return `opencode run -m ${model}`
 })
 ```
 
@@ -206,12 +203,9 @@ To test out the the benchmark itself, we can have a dummy agent that we measure 
 
 `agents/dummy-bad.ts`
 ```typescript
-export const models = {
-	"openai": ["gpt-4o"],
-	"anthropic": ["claude-sonnet-4"]
-} // useful for assertions and matrix testing
+export const models = ["openai/gpt-4o", "anthropic/claude-sonnet-4"] // useful for assertions and matrix testing
 
-export default createAgent((provider, model, prompt) => {
+export default createAgent((model, prompt) => {
 	// fs.writeFile to write dummy files
 	return `echo ...`
 })

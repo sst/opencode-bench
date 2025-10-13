@@ -17,6 +17,7 @@ import {
   type PlannerCommitDiff,
   type PlannerTask,
 } from "~/lib/planner.js";
+import { finalizeAgentChanges } from "~/lib/finalizeAgentChanges.js";
 import type { Judge } from "~/lib/judgeTypes.js";
 import { judges } from "~/judges.js";
 import { aggregateScores } from "~/lib/utils/scoreAggregation.js";
@@ -95,18 +96,26 @@ function resolveModels(
     }
   }
 
-  Object.entries(agent.models).forEach(([provider, models]) => {
-    if (providerFilter && provider !== providerFilter) {
+  agent.models.forEach((entry) => {
+    const [providerPart, modelPart] = entry.includes("/")
+      ? entry.split("/", 2)
+      : [agent.name, entry];
+
+    if (!providerPart || !modelPart) {
       return;
     }
 
-    models.forEach((model) => {
-      if (!normalizedModelFilter || model === normalizedModelFilter) {
-        combinations.push({
-          provider,
-          model,
-        });
-      }
+    if (providerFilter && providerPart !== providerFilter) {
+      return;
+    }
+
+    if (normalizedModelFilter && modelPart !== normalizedModelFilter) {
+      return;
+    }
+
+    combinations.push({
+      provider: providerPart,
+      model: modelPart,
     });
   });
 
@@ -284,15 +293,42 @@ async function main(): Promise<void> {
     const runCombination = async (
       combination: ModelCombination,
     ): Promise<{ completedRuns: number; summaries: string[] }> => {
-      let repoDir: string | undefined;
+      let cwd: string | undefined;
 
       try {
         const combinationLabel = `${evalId} ${combination.provider}/${combination.model}`;
         console.log(`[${combinationLabel}] Cloning repository...`);
-        repoDir = cloneRepository(evalDefinition);
-        const referenceDiff = getDatasetDiff(evalDefinition, repoDir);
+        cwd = cloneRepository(evalDefinition);
+        const preparedScores = new Map<string, unknown>();
+
+        for (const assignment of scores) {
+          const scoreDefinition = scoreRegistry[assignment.name];
+
+          if (!scoreDefinition) {
+            console.error(`Score ${assignment.name} is not registered.`);
+            continue;
+          }
+
+          try {
+            const prepared = await scoreDefinition.prepare({
+              evaluation: evalDefinition,
+              cwd,
+            });
+            preparedScores.set(assignment.name, prepared);
+          } catch (error) {
+            const message =
+              error instanceof Error ? error.message : String(error);
+            console.error(
+              `Failed to prepare score ${assignment.name} for ${combinationLabel}: ${message}`,
+            );
+            process.exitCode = 1;
+            throw abortToken;
+          }
+        }
 
         let tasksExecuted = 0;
+
+        const fullModel = `${combination.provider}/${combination.model}`;
 
         for (const task of plannerTasks) {
           const logPrefix = `${combinationLabel} ${task.commit}`;
@@ -300,12 +336,11 @@ async function main(): Promise<void> {
           try {
             const promptForAgent = task.prompt;
             await agent.definition.run(
-              combination.provider,
-              combination.model,
+              fullModel,
               promptForAgent,
-              repoDir,
+              cwd,
               {
-                onStart: (commandString) => {
+                onStart: (commandString: string) => {
                   console.log(`[${logPrefix}] ${commandString.trim()}`);
                 },
                 logPrefix,
@@ -316,13 +351,10 @@ async function main(): Promise<void> {
           } catch (error) {
             if (error instanceof Error) {
               console.error(
-                `Failed to render command for ${combination.model}: ${error.message}`,
+                `Failed to render command for ${fullModel}: ${error.message}`,
               );
             } else {
-              console.error(
-                "Failed to render command for",
-                combination.model,
-              );
+              console.error("Failed to render command for", fullModel);
             }
             process.exitCode = 1;
             throw abortToken;
@@ -333,32 +365,32 @@ async function main(): Promise<void> {
           return { completedRuns: 0, summaries: [] };
         }
 
+        const hasChanges = finalizeAgentChanges(evalDefinition, cwd);
+
+        if (!hasChanges) {
+          console.log(
+            `No changes detected for ${fullModel} on ${evalId}. Skipping scoring.`,
+          );
+          return { completedRuns: 0, summaries: [] };
+        }
+
         try {
-          const finalDiff = finalizeAgentDiff(evalDefinition, repoDir);
-
-          if (finalDiff === null) {
-            console.log(
-              `No changes detected for ${combination.model} on ${evalId}. Skipping scoring.`,
-            );
-            return { completedRuns: 0, summaries: [] };
-          }
-
           const summaryLines = await evaluateScoresForRun(
             evalDefinition,
             scores,
-            finalDiff,
-            referenceDiff,
-            combination.model,
+            combination,
             combinationLabel,
+            cwd,
+            preparedScores,
           );
           return { completedRuns: 1, summaries: summaryLines };
         } catch (error) {
           if (error instanceof Error) {
             console.error(
-              `Failed to evaluate scores for ${combination.model}: ${error.message}`,
+              `Failed to evaluate scores for ${fullModel}: ${error.message}`,
             );
           } else {
-            console.error("Failed to evaluate scores for", combination.model);
+            console.error("Failed to evaluate scores for", fullModel);
           }
           process.exitCode = 1;
           throw abortToken;
@@ -378,8 +410,8 @@ async function main(): Promise<void> {
         process.exitCode = 1;
         throw abortToken;
       } finally {
-        if (repoDir) {
-          cleanupRepository(repoDir, evalDefinition);
+        if (cwd) {
+          cleanupRepository(cwd, evalDefinition);
         }
       }
     };
@@ -470,13 +502,13 @@ function cloneRepository(entry: DatasetEval): string {
 
 function getCommitDiffs(
   entry: DatasetEval,
-  repoDir: string,
+  cwd: string,
 ): PlannerCommitDiff[] {
   try {
     const commitRange = execSync(
       `git rev-list --ancestry-path --reverse ${entry.from}..${entry.to}`,
       {
-        cwd: repoDir,
+        cwd,
         encoding: "utf8",
       },
     )
@@ -488,7 +520,7 @@ function getCommitDiffs(
       let title = "";
       try {
         title = execSync(`git log -1 --pretty=%s ${sha}`, {
-          cwd: repoDir,
+          cwd,
           encoding: "utf8",
         }).trim();
       } catch (error) {
@@ -503,7 +535,7 @@ function getCommitDiffs(
         diff = execSync(
           `git show ${sha} --format=format: --unified=5 --no-color`,
           {
-            cwd: repoDir,
+            cwd,
             encoding: "utf8",
           },
         );
@@ -530,112 +562,15 @@ function getCommitDiffs(
   return [];
 }
 
-function getDatasetDiff(entry: DatasetEval, repoDir: string): string {
-  try {
-    const diff = execSync(`git diff --unified=5 ${entry.from} ${entry.to}`, {
-      cwd: repoDir,
-      encoding: "utf8",
-    });
-
-    if (diff.trim().length > 0) {
-      return diff;
-    }
-  } catch (error) {
-    console.error(
-      `Failed to compute git diff for ${entry.repo}:`,
-      error instanceof Error ? error.message : error,
-    );
-  }
-
-  assert(
-    false,
-    `Unable to compute git diff for ${entry.repo} between ${entry.from} and ${entry.to}.`,
-  );
-}
-
-function finalizeAgentDiff(entry: DatasetEval, repoDir: string): string | null {
-  try {
-    execSync(`git config user.email "openreval@example.com"`, {
-      cwd: repoDir,
-      stdio: "ignore",
-    });
-    execSync(`git config user.name "OpenReval Agent"`, {
-      cwd: repoDir,
-      stdio: "ignore",
-    });
-  } catch (error) {
-    console.error(
-      "Failed to configure git user for agent diff:",
-      error instanceof Error ? error.message : error,
-    );
-  }
-
-  try {
-    execSync(`git add --all`, {
-      cwd: repoDir,
-      stdio: "ignore",
-    });
-  } catch (error) {
-    console.error(
-      "Failed to stage agent changes:",
-      error instanceof Error ? error.message : error,
-    );
-  }
-
-  let hasStagedChanges = false;
-  try {
-    execSync(`git diff --cached --quiet`, {
-      cwd: repoDir,
-      stdio: "ignore",
-    });
-  } catch {
-    hasStagedChanges = true;
-  }
-
-  if (hasStagedChanges) {
-    try {
-      execSync(`git commit --no-verify -m "openreval-agent-snapshot"`, {
-        cwd: repoDir,
-        stdio: "ignore",
-      });
-    } catch (error) {
-      console.error(
-        "Failed to commit agent changes:",
-        error instanceof Error ? error.message : error,
-      );
-    }
-  }
-
-  try {
-    const diff = execSync(`git diff --unified=5 ${entry.to} HEAD`, {
-      cwd: repoDir,
-      encoding: "utf8",
-    });
-
-    const trimmed = diff.trim();
-    if (trimmed.length === 0) {
-      return null;
-    }
-
-    return diff;
-  } catch (error) {
-    console.error(
-      "Failed to compute final agent diff:",
-      error instanceof Error ? error.message : error,
-    );
-  }
-
-  return null;
-}
-
 async function evaluateScoresForRun(
   datasetEval: DatasetEval,
   scores: ScoreAssignment[],
-  diff: string,
-  referenceDiff: string,
-  model: string,
-  contextLabel?: string,
+  combination: ModelCombination,
+  contextLabel: string | undefined,
+  cwd: string,
+  preparedReferences: Map<string, unknown>,
 ): Promise<string[]> {
+  const modelLabel = `${combination.provider}/${combination.model}`;
   const evalId = getEvalIdentifier(datasetEval);
   const runContext = contextLabel ? `${evalId} [${contextLabel}]` : evalId;
 
@@ -650,11 +585,21 @@ async function evaluateScoresForRun(
         continue;
       }
 
+      if (!preparedReferences.has(assignment.name)) {
+        console.error(
+          `Score ${assignment.name} did not provide prepared references.`,
+        );
+        continue;
+      }
+
+      const reference = preparedReferences.get(assignment.name);
+
       try {
         const result = await scoreDefinition.evaluate({
-          diff,
-          referenceDiff,
           judge,
+          reference,
+          evaluation: datasetEval,
+          cwd,
         });
 
         ensureAggregationEntry(aggregationInputs, assignment).judgeResults.push(
@@ -684,7 +629,7 @@ async function evaluateScoresForRun(
   const summary = aggregateScores(Array.from(aggregationInputs.values()));
 
   const lines: string[] = [];
-  lines.push(`\nScore breakdown for ${model} on ${runContext}:`);
+  lines.push(`\nScore breakdown for ${modelLabel} on ${runContext}:`);
   summary.perScore.forEach((entry) => {
     lines.push(
       `  ${entry.assignment.name} → ${entry.averageScore.toFixed(3)} (weight ${entry.normalizedWeight.toFixed(2)})`,

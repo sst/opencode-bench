@@ -5,12 +5,12 @@ import type { AgentDefinition } from "~/lib/createAgent.js";
 export interface AgentRegistration {
   name: string;
   definition: AgentDefinition;
-  models: Record<string, string[]>;
+  models: string[];
 }
 
 interface AgentModuleShape {
   default?: AgentDefinition;
-  models?: Record<string, string[]>;
+  models?: string[];
 }
 
 function createAgentRegistration(
@@ -21,7 +21,7 @@ function createAgentRegistration(
   const models = module.models;
 
   assert(definition, `Agent module ${name} is missing a default export.`);
-  assert(models, `Agent module ${name} is missing the exported models map.`);
+  assert(models, `Agent module ${name} is missing the exported models list.`);
 
   return { name, definition, models };
 }
