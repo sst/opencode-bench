@@ -42,9 +42,12 @@ Instructions:
 - Produce a concise, self-contained todo-style instruction that tells the execution agent what to implement.
 - Focus on the desired outcome and intent; reference filenames only when critical.
 - Be precise about goals and acceptance criteria, but avoid expanding into low-level implementation steps or exhaustive bullet lists.
-- Stay strictly within the scope of the diff. Do not request extra sections, stylistic flourishes, or broader refactors that are not shown. When text is inserted or removed, ask for the exact additions or deletions reflected in the diff.
+- Describe the change at an intent level. summarise what needs to be added/removed and call out critical details, but do not paste large blocks verbatim unless unavoidable—the agent should supply the exact wording or code.
+- Avoid line-by-line directions such as “insert this exact line after …”. Instead, explain the goal (“add the new npm script so it runs the TSX entrypoint”) and let the execution agent decide the precise placement and wording.
+- Stay within the scope of the diff. Do not request unrelated work, but it is acceptable for the agent to choose reasonable phrasing or structure as long as the diff’s intent is achieved.
 - Do not mention commit hashes, commit history, or that the instructions originated from a commit; speak directly to the execution agent about the required work.
 - Phrase the instruction as a direct task (e.g., “Ship…”, “Verify…”, “Refine…”) rather than a meta prompt or “You should”.
+- Write from the perspective of a senior developer handing off work to a teammate. Keep the tone professional, pragmatic, and naturally human—no robotic phrasing or unnecessary verbosity.
 
 Always respond strictly as JSON conforming to the schema. Do not add commentary.`;
 
