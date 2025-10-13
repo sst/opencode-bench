@@ -88,7 +88,7 @@ export async function fetchPlannerCommitDiffs(
   };
 
   const commits = Array.isArray(comparisonData.commits)
-    ? comparisonData.commits
+    ? comparisonData.commits.slice(1)
     : [];
 
   if (commits.length === 0) {
