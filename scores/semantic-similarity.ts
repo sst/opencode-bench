@@ -2,15 +2,10 @@ import { execSync } from "node:child_process";
 import { strict as assert } from "node:assert";
 
 import { generateObject } from "ai";
-import { z } from "zod";
 
-import { createScore } from "~/lib/createScore.js";
+import { createScore, scoreResultSchema } from "~/lib/createScore.js";
+import { fetchComparisonDiff } from "~/lib/github.js";
 import { finalizeAgentChanges } from "~/lib/finalizeAgentChanges.js";
-
-const similaritySchema = z.object({
-  score: z.number().min(0).max(1),
-  rationale: z.string().min(1),
-});
 
 const systemPrompt = `You are scoring how well an autonomous agent replicated a reference diff.
 The agent was instructed to implement precisely the changes shown in the reference diff.
@@ -21,15 +16,9 @@ Compare the candidate diff to the reference and judge semantic similarity:
 Return JSON with keys 'score' (0-1) and 'rationale' explaining your judgement. Score 1 only when the candidate fulfills the reference requirements; score 0 when it fails to implement them.`;
 
 export default createScore({
-  prepare: ({ evaluation, cwd }) => {
+  prepare: async ({ evaluation }) => {
     try {
-      const diff = execSync(
-        `git diff --unified=5 ${evaluation.from} ${evaluation.to}`,
-        {
-          cwd,
-          encoding: "utf8",
-        },
-      );
+      const diff = await fetchComparisonDiff(evaluation);
 
       assert(
         diff.trim().length > 0,
@@ -45,11 +34,11 @@ export default createScore({
     }
   },
   evaluate: async ({ evaluation, cwd, judge, reference }) => {
-    finalizeAgentChanges(evaluation, cwd);
+    finalizeAgentChanges(evaluation, cwd, evaluation.from);
     let candidateDiff: string;
     try {
       candidateDiff = execSync(
-        `git diff --unified=5 ${evaluation.to} HEAD`,
+        `git diff --unified=5 ${evaluation.from} HEAD`,
         {
           cwd,
           encoding: "utf8",
@@ -78,7 +67,7 @@ export default createScore({
     try {
       const { object } = await generateObject({
         model: judge.model,
-        schema: similaritySchema,
+        schema: scoreResultSchema,
         system: systemPrompt,
         temperature: 0,
         prompt: `Reference diff:\n${reference}\n\nCandidate diff:\n${candidateDiff}\n\nCompare the candidate changes against the reference expectations and respond with JSON.`,

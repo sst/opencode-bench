@@ -3,11 +3,19 @@
   to: 2760114f2647ebec8f63e0ecc2dc87a8cd4096ac
   issues: []
   scores:
-    semantic-similarity: 1
+    semantic-similarity:
+      weight: 1
+    checks:
+      weight: 1
+      args:
+        commands:
+          - npm run lint
+          - npm exec prettier -- --check .
 
 - repo: AlaminPu1007/algorithm-visualizer
   from: ca409519ec96a83ec8d6c2ba30f2487f8d601719
   to: 21845e972dd8e2378cbcd16accc5ae8cdd37acb2
   issues: []
   scores:
-    semantic-similarity: 1
+    semantic-similarity:
+      weight: 1

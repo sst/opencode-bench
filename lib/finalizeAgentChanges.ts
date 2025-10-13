@@ -2,7 +2,11 @@ import { execSync } from "node:child_process";
 
 import type { DatasetEval } from "~/lib/dataset.js";
 
-export function finalizeAgentChanges(entry: DatasetEval, cwd: string): boolean {
+export function finalizeAgentChanges(
+  entry: DatasetEval,
+  cwd: string,
+  baselineCommit: string,
+): boolean {
   try {
     execSync(`git config user.email "opencode-bench@example.com"`, {
       cwd,
@@ -56,7 +60,7 @@ export function finalizeAgentChanges(entry: DatasetEval, cwd: string): boolean {
   }
 
   try {
-    execSync(`git diff --exit-code ${entry.to} HEAD`, {
+    execSync(`git diff --exit-code ${baselineCommit} HEAD`, {
       cwd,
       stdio: "ignore",
     });

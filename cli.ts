@@ -12,11 +12,8 @@ import type { AgentRegistration } from "~/agents/index.js";
 import { listScores, scores as scoreRegistry } from "~/scores/index.js";
 import { dataset } from "~/lib/dataset.js";
 import type { DatasetEval, ScoreAssignment } from "~/lib/dataset.js";
-import {
-  generatePlannerTasks,
-  type PlannerCommitDiff,
-  type PlannerTask,
-} from "~/lib/planner.js";
+import { generatePlannerTasks, type PlannerTask } from "~/lib/planner.js";
+import { fetchPlannerCommitDiffs } from "~/lib/github.js";
 import { finalizeAgentChanges } from "~/lib/finalizeAgentChanges.js";
 import type { Judge } from "~/lib/judgeTypes.js";
 import { judges } from "~/judges.js";
@@ -253,17 +250,20 @@ async function main(): Promise<void> {
 
     const abortToken = { __abortEval: true } as const;
 
-    let plannerRepoDir: string | undefined;
     let plannerTasks: PlannerTask[] = [];
 
     const evalId = getEvalIdentifier(evalDefinition);
 
     try {
       console.log(
-        `[${evalId} planner] Cloning repository for planner context...`,
+        `[${evalId} planner] Fetching commit diffs from GitHub...`,
       );
-      plannerRepoDir = cloneRepository(evalDefinition);
-      const commitDiffs = getCommitDiffs(evalDefinition, plannerRepoDir);
+      const commitDiffs = await fetchPlannerCommitDiffs(evalDefinition);
+
+      assert(
+        commitDiffs.length > 0,
+        `No commits found between ${evalDefinition.from} and ${evalDefinition.to} for ${evalDefinition.repo}.`,
+      );
 
       plannerTasks = await generatePlannerTasks(
         evalDefinition,
@@ -284,10 +284,6 @@ async function main(): Promise<void> {
       }
       process.exitCode = 1;
       return;
-    } finally {
-      if (plannerRepoDir) {
-        cleanupRepository(plannerRepoDir, evalDefinition);
-      }
     }
 
     const runCombination = async (
@@ -298,7 +294,8 @@ async function main(): Promise<void> {
       try {
         const combinationLabel = `${evalId} ${combination.provider}/${combination.model}`;
         console.log(`[${combinationLabel}] Cloning repository...`);
-        cwd = cloneRepository(evalDefinition);
+        const baselineCommit = evalDefinition.from;
+        cwd = cloneRepositoryAtCommit(evalDefinition, baselineCommit);
         const preparedScores = new Map<string, unknown>();
 
         for (const assignment of scores) {
@@ -313,6 +310,7 @@ async function main(): Promise<void> {
             const prepared = await scoreDefinition.prepare({
               evaluation: evalDefinition,
               cwd,
+              config: assignment.args,
             });
             preparedScores.set(assignment.name, prepared);
           } catch (error) {
@@ -365,7 +363,11 @@ async function main(): Promise<void> {
           return { completedRuns: 0, summaries: [] };
         }
 
-        const hasChanges = finalizeAgentChanges(evalDefinition, cwd);
+        const hasChanges = finalizeAgentChanges(
+          evalDefinition,
+          cwd,
+          baselineCommit,
+        );
 
         if (!hasChanges) {
           console.log(
@@ -480,86 +482,37 @@ function cleanupRepository(tempDir: string, entry: DatasetEval): void {
   }
 }
 
-function cloneRepository(entry: DatasetEval): string {
+function cloneRepositoryAtCommit(
+  entry: DatasetEval,
+  commitSha: string,
+): string {
   const remoteUrl = `https://github.com/${entry.repo}.git`;
   const tempDir = mkdtempSync(join(tmpdir(), "openreval-"));
 
   try {
-    execSync(`git clone ${remoteUrl} .`, {
+    execSync(`git init`, { cwd: tempDir, stdio: "ignore" });
+    execSync(`git remote add origin ${remoteUrl}`, {
       cwd: tempDir,
       stdio: "ignore",
     });
-    execSync(`git checkout ${entry.to}`, {
+    execSync(`git fetch --depth 1 origin ${commitSha}`, {
       cwd: tempDir,
       stdio: "ignore",
     });
+    execSync(`git checkout --detach FETCH_HEAD`, {
+      cwd: tempDir,
+      stdio: "ignore",
+    });
+    execSync(`git reset --hard FETCH_HEAD`, {
+      cwd: tempDir,
+      stdio: "ignore",
+    });
+
     return tempDir;
   } catch (error) {
     cleanupRepository(tempDir, entry);
     throw error;
   }
-}
-
-function getCommitDiffs(
-  entry: DatasetEval,
-  cwd: string,
-): PlannerCommitDiff[] {
-  try {
-    const commitRange = execSync(
-      `git rev-list --ancestry-path --reverse ${entry.from}..${entry.to}`,
-      {
-        cwd,
-        encoding: "utf8",
-      },
-    )
-      .split("\n")
-      .map((line) => line.trim())
-      .filter((line) => line.length > 0);
-
-    return commitRange.map((sha) => {
-      let title = "";
-      try {
-        title = execSync(`git log -1 --pretty=%s ${sha}`, {
-          cwd,
-          encoding: "utf8",
-        }).trim();
-      } catch (error) {
-        console.error(
-          `Failed to read commit title for ${sha} in ${entry.repo}:`,
-          error instanceof Error ? error.message : error,
-        );
-      }
-
-      let diff = "";
-      try {
-        diff = execSync(
-          `git show ${sha} --format=format: --unified=5 --no-color`,
-          {
-            cwd,
-            encoding: "utf8",
-          },
-        );
-      } catch (error) {
-        console.error(
-          `Failed to compute diff for commit ${sha} in ${entry.repo}:`,
-          error instanceof Error ? error.message : error,
-        );
-      }
-
-      return {
-        sha,
-        title: title || "(no commit title)",
-        diff,
-      };
-    });
-  } catch (error) {
-    console.error(
-      `Failed to enumerate commits for ${entry.repo}:`,
-      error instanceof Error ? error.message : error,
-    );
-  }
-
-  return [];
 }
 
 async function evaluateScoresForRun(
@@ -600,6 +553,7 @@ async function evaluateScoresForRun(
           reference,
           evaluation: datasetEval,
           cwd,
+          config: assignment.args,
         });
 
         ensureAggregationEntry(aggregationInputs, assignment).judgeResults.push(

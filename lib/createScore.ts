@@ -1,16 +1,25 @@
 import { strict as assert } from "node:assert";
 
+import { z } from "zod";
+
 import type { DatasetEval } from "~/lib/dataset.js";
 import type { Judge } from "~/lib/judgeTypes.js";
 
-export interface ScorePreparationContext {
+export const scoreResultSchema = z.object({
+  score: z.number().min(0).max(1),
+  rationale: z.string().min(1)
+});
+
+export interface ScorePreparationContext<Config = unknown> {
   evaluation: DatasetEval;
   cwd: string;
+  config: Config;
 }
 
-export interface ScoreEvaluationContext<Reference> {
+export interface ScoreEvaluationContext<Reference, Config = unknown> {
   evaluation: DatasetEval;
   cwd: string;
+  config: Config;
   judge: Judge;
   reference: Reference;
 }
@@ -20,33 +29,37 @@ export interface ScoreResult {
   rationale: string;
 }
 
-export interface ScoreHooks<Reference> {
+export interface ScoreHooks<Reference, Config = unknown> {
   prepare?: (
-    context: ScorePreparationContext,
+    context: ScorePreparationContext<Config>,
   ) => Reference | Promise<Reference>;
   evaluate: (
-    context: ScoreEvaluationContext<Reference>,
+    context: ScoreEvaluationContext<Reference, Config>,
   ) => ScoreResult | Promise<ScoreResult>;
 }
 
-export interface ScoreDefinition<Reference = unknown> {
-  prepare(context: ScorePreparationContext): Promise<Reference>;
-  evaluate(context: ScoreEvaluationContext<Reference>): Promise<ScoreResult>;
+export interface ScoreDefinition<Reference = unknown, Config = unknown> {
+  prepare(context: ScorePreparationContext<Config>): Promise<Reference>;
+  evaluate(
+    context: ScoreEvaluationContext<Reference, Config>,
+  ): Promise<ScoreResult>;
 }
 
-export function createScore<Reference = unknown>(
-  hooks: ScoreHooks<Reference>,
-): ScoreDefinition<Reference> {
+export function createScore<Reference = unknown, Config = unknown>(
+  hooks: ScoreHooks<Reference, Config>,
+): ScoreDefinition<Reference, Config> {
   const prepareHook =
     hooks.prepare ??
     (async () => undefined as Reference);
 
   return {
-    async prepare(context: ScorePreparationContext): Promise<Reference> {
+    async prepare(
+      context: ScorePreparationContext<Config>,
+    ): Promise<Reference> {
       return prepareHook(context);
     },
     async evaluate(
-      context: ScoreEvaluationContext<Reference>,
+      context: ScoreEvaluationContext<Reference, Config>,
     ): Promise<ScoreResult> {
       const raw = await hooks.evaluate(context);
       assert(

@@ -23,6 +23,18 @@ const plannerSchema = z.object({
   prompt: z.string().min(1),
 });
 
+function sanitizePlannerPrompt(text: string): string {
+  const trimmed = text.trim();
+  if (trimmed.length === 0) {
+    return "Apply the referenced change precisely as described, without introducing unrelated work.";
+  }
+
+  return trimmed
+    .replace(/\bcommits\b/gi, "changes")
+    .replace(/\bcommit\b/gi, "change")
+    .replace(/\bsource control\b/gi, "version control");
+}
+
 const systemPrompt = `You are Planner, a planning assistant that turns a single Git commit's diff into an actionable directive for an execution agent.
 
 Instructions:
@@ -35,7 +47,7 @@ Instructions:
 
 Always respond strictly as JSON conforming to the schema. Do not add commentary.`;
 
-const plannerModelId = fallback("PLANNER_MODEL", "opencode/gpt-5");
+const plannerModelId = fallback("PLANNER_MODEL", "opencode/claude-sonnet-4-5");
 
 export async function generatePlannerTask(
   entry: DatasetEval,
@@ -51,6 +63,7 @@ export async function generatePlannerTask(
       model: getZenLanguageModel(plannerModelId),
       schema: plannerSchema,
       system: systemPrompt,
+      temperature: 0,
       prompt: `Repository: ${entry.repo}
 Base commit: ${entry.from}
 Target commit: ${entry.to}
@@ -66,7 +79,7 @@ Return the JSON object describing the task.`,
     const trimmedCommit = object.commit.trim();
     return {
       commit: trimmedCommit.length > 0 ? trimmedCommit : commit.sha,
-      prompt: object.prompt.trim(),
+      prompt: sanitizePlannerPrompt(object.prompt),
     };
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
@@ -74,9 +87,13 @@ Return the JSON object describing the task.`,
       `Planner failed for commit ${commit.sha} in ${entry.repo}: ${message}. Falling back to commit title.`,
     );
 
+    const fallbackPrompt = commit.title.trim()
+      ? `Deliver the work described by "${commit.title.trim()}" without referencing version control history.`
+      : "Apply the required change exactly as described, without referencing version control history.";
+
     return {
       commit: commit.sha,
-      prompt: `Deliver the work described by "${commit.title.trim() || "the latest changes"}" without referencing source control history.`,
+      prompt: sanitizePlannerPrompt(fallbackPrompt),
     };
   }
 }

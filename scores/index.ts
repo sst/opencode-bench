@@ -1,12 +1,14 @@
 import type { ScoreDefinition } from "~/lib/createScore.js";
 
+import checks from "~/scores/checks.js";
 import semanticSimilarity from "~/scores/semantic-similarity.js";
 
 // TODO: Restore UI score when implementation returns.
 // TODO: Restore code-quality score when implementation returns.
 
-export const scores: Record<string, ScoreDefinition> = {
-  "semantic-similarity": semanticSimilarity
+export const scores: Record<string, ScoreDefinition<any, any>> = {
+  "semantic-similarity": semanticSimilarity,
+  checks
 };
 
 export function getScore(name: string): ScoreDefinition | undefined {
