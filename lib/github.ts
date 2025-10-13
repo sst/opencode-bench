@@ -88,14 +88,12 @@ export async function fetchPlannerCommitDiffs(
   };
 
   const commits = Array.isArray(comparisonData.commits)
-    ? comparisonData.commits.slice(1)
+    ? comparisonData.commits
     : [];
 
   if (commits.length === 0) {
     return [];
   }
-  console.log(commits);
-
   const results = await Promise.all(
     commits.map(async (commit) => {
       const sha = commit.sha;
@@ -124,14 +122,10 @@ export async function fetchPlannerCommitDiffs(
           diff,
         } satisfies PlannerCommitDiff;
       } catch (error) {
-        console.error(
-          `Failed to fetch diff for commit ${sha} in ${entry.repo}:`,
-          error instanceof Error ? error.message : error,
-        );
-        return null;
+        throw error;
       }
     }),
   );
 
-  return results.filter((value): value is PlannerCommitDiff => value !== null);
+  return results;
 }

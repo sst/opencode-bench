@@ -56,6 +56,7 @@ jobs:
       - name: Run openreval benchmark
         env:
           OPENCODE_API_KEY: ${{ secrets.OPENCODE_API_KEY }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           PACKAGE_URLS: ${{ needs.publish.outputs.urls }}
         run: |
           set -euo pipefail
