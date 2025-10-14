@@ -3,8 +3,8 @@ import { strict as assert } from "node:assert";
 import process from "node:process";
 
 import { execSync } from "node:child_process";
-import { mkdtempSync, rmSync } from "node:fs";
-import { join } from "node:path";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { dirname, join } from "node:path";
 import { tmpdir } from "node:os";
 
 import { getAgent, listAgents } from "~/agents/index.js";
@@ -16,12 +16,16 @@ import { generatePlannerTasks, type PlannerTask } from "~/lib/planner.js";
 import { fetchPlannerCommitDiffs } from "~/lib/github.js";
 import { finalizeAgentChanges } from "~/lib/finalizeAgentChanges.js";
 import type { Judge } from "~/lib/judgeTypes.js";
-import { judges } from "~/judges.js";
+import { judges, getJudgeModelId } from "~/judges.js";
 import { aggregateScores } from "~/lib/utils/scoreAggregation.js";
 import type {
   JudgeScoreResult,
   ScoreAggregationInput,
 } from "~/lib/utils/scoreAggregation.js";
+import type {
+  BenchmarkExport,
+  EvaluationRunExport,
+} from "~/types/export.js";
 
 type ScoreName = ScoreAssignment["name"];
 
@@ -34,9 +38,14 @@ type FilterKey = "model" | "eval" | "score";
 type CliFilters = Partial<Record<FilterKey, string>>;
 const VALID_OPTION_KEYS: FilterKey[] = ["model", "eval", "score"];
 
+interface ParsedCliOptions {
+  filters: CliFilters;
+  outputPath?: string;
+}
+
 async function printHelp(): Promise<void> {
   console.log(
-    "Usage: orvl <agent> [--model <model>] [--eval <owner/name>] [--score <score>]",
+    "Usage: orvl <agent> [--model <model>] [--eval <owner/name>] [--score <score>] [--output <file>]",
   );
   console.log("");
   console.log("Examples:");
@@ -46,6 +55,7 @@ async function printHelp(): Promise<void> {
   console.log(
     "  orvl opencode --eval noworneverev/graphrag-visualizer --score semantic-similarity",
   );
+  console.log("  orvl opencode --output results.json");
   console.log("");
   const agents = await listAgents();
   console.log(
@@ -124,9 +134,10 @@ function resolveModels(
   return combinations;
 }
 
-function parseFilters(tokens: string[]): CliFilters {
+function parseOptions(tokens: string[]): ParsedCliOptions {
   const filters: CliFilters = {};
-  const allowed = new Set<FilterKey>(VALID_OPTION_KEYS);
+  let outputPath: string | undefined;
+  const allowed = new Set<string>([...VALID_OPTION_KEYS, "output"]);
 
   let index = 0;
   while (index < tokens.length) {
@@ -139,13 +150,7 @@ function parseFilters(tokens: string[]): CliFilters {
     const option = token.slice(2);
     const [rawKey, inlineValue] = option.split("=", 2);
     assert(rawKey, "Invalid CLI option format.");
-    assert(allowed.has(rawKey as FilterKey), `Unknown option "--${rawKey}".`);
-
-    const key = rawKey as FilterKey;
-    assert(
-      filters[key] === undefined,
-      `Option "--${key}" specified multiple times.`,
-    );
+    assert(allowed.has(rawKey), `Unknown option "--${rawKey}".`);
 
     let value = inlineValue;
     if (value === undefined) {
@@ -153,18 +158,31 @@ function parseFilters(tokens: string[]): CliFilters {
       const next = tokens[index];
       assert(
         next !== undefined && !next.startsWith("--"),
-        `Option "--${key}" requires a value.`,
+        `Option "--${rawKey}" requires a value.`,
       );
       value = tokens[index];
     }
 
-    assert(value, `Option "--${key}" cannot be empty.`);
+    assert(value, `Option "--${rawKey}" cannot be empty.`);
 
-    filters[key] = value;
+    if (rawKey === "output") {
+      assert(
+        outputPath === undefined,
+        'Option "--output" specified multiple times.',
+      );
+      outputPath = value;
+    } else {
+      const key = rawKey as FilterKey;
+      assert(
+        filters[key] === undefined,
+        `Option "--${key}" specified multiple times.`,
+      );
+      filters[key] = value;
+    }
     index += 1;
   }
 
-  return filters;
+  return { filters, outputPath };
 }
 
 function isHelpRequest(arg: string | undefined): boolean {
@@ -183,8 +201,11 @@ async function main(): Promise<void> {
   }
 
   let filters: CliFilters;
+  let outputPath: string | undefined;
   try {
-    filters = parseFilters(args.slice(1));
+    const parsed = parseOptions(args.slice(1));
+    filters = parsed.filters;
+    outputPath = parsed.outputPath;
   } catch (error) {
     if (error instanceof Error) {
       console.error(error.message);
@@ -235,6 +256,7 @@ async function main(): Promise<void> {
   }
 
   let runCount = 0;
+  const runExports: EvaluationRunExport[] = [];
 
   for (const evalDefinition of selectedEvals) {
     const availableScores = evalDefinition.scores;
@@ -296,7 +318,11 @@ async function main(): Promise<void> {
 
     const runCombination = async (
       combination: ModelCombination,
-    ): Promise<{ completedRuns: number; summaries: string[] }> => {
+    ): Promise<{
+      completedRuns: number;
+      summaries: string[];
+      exports: EvaluationRunExport[];
+    }> => {
       let cwd: string | undefined;
 
       try {
@@ -368,7 +394,7 @@ async function main(): Promise<void> {
         }
 
         if (tasksExecuted === 0) {
-          return { completedRuns: 0, summaries: [] };
+          return { completedRuns: 0, summaries: [], exports: [] };
         }
 
         const hasChanges = finalizeAgentChanges(
@@ -381,11 +407,12 @@ async function main(): Promise<void> {
           console.log(
             `No changes detected for ${fullModel} on ${evalId}. Skipping scoring.`,
           );
-          return { completedRuns: 0, summaries: [] };
+          return { completedRuns: 0, summaries: [], exports: [] };
         }
 
         try {
-          const summaryLines = await evaluateScoresForRun(
+          const evaluationResult = await evaluateScoresForRun(
+            agentName,
             evalDefinition,
             scores,
             combination,
@@ -393,7 +420,11 @@ async function main(): Promise<void> {
             cwd,
             preparedScores,
           );
-          return { completedRuns: 1, summaries: summaryLines };
+          return {
+            completedRuns: 1,
+            summaries: evaluationResult.lines,
+            exports: [evaluationResult.exportData],
+          };
         } catch (error) {
           if (error instanceof Error) {
             console.error(
@@ -440,6 +471,7 @@ async function main(): Promise<void> {
         result.summaries.forEach((line) => {
           console.log(line);
         });
+        runExports.push(...result.exports);
       });
     } catch (error) {
       if (
@@ -453,6 +485,28 @@ async function main(): Promise<void> {
       console.error(
         `Failed to complete evaluation ${evalId}: ${error instanceof Error ? error.message : error}`,
       );
+      process.exitCode = 1;
+      return;
+    }
+  }
+
+  if (outputPath) {
+    try {
+      const directory = dirname(outputPath);
+      if (directory && directory !== ".") {
+        mkdirSync(directory, { recursive: true });
+      }
+
+      const exportPayload: BenchmarkExport = {
+        version: 1,
+        runs: runExports,
+      };
+
+      writeFileSync(outputPath, JSON.stringify(exportPayload, null, 2));
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : "Unknown error writing output.";
+      console.error(`Failed to write export to ${outputPath}: ${message}`);
       process.exitCode = 1;
       return;
     }
@@ -528,14 +582,15 @@ function cloneRepositoryAtCommit(
 }
 
 async function evaluateScoresForRun(
+  agentName: string,
   datasetEval: DatasetEval,
   scores: ScoreAssignment[],
   combination: ModelCombination,
   contextLabel: string | undefined,
   cwd: string,
   preparedReferences: Map<string, unknown>,
-): Promise<string[]> {
-  const modelLabel = `${combination.provider}/${combination.model}`;
+): Promise<{ lines: string[]; exportData: EvaluationRunExport }> {
+  const modelId = `${combination.provider}/${combination.model}`;
   const evalId = getEvalIdentifier(datasetEval);
   const runContext = contextLabel ? `${evalId} [${contextLabel}]` : evalId;
 
@@ -595,7 +650,7 @@ async function evaluateScoresForRun(
   const summary = aggregateScores(Array.from(aggregationInputs.values()));
 
   const lines: string[] = [];
-  lines.push(`\nScore breakdown for ${modelLabel} on ${runContext}:`);
+  lines.push(`\nScore breakdown for ${modelId} on ${runContext}:`);
   summary.perScore.forEach((entry) => {
     lines.push(
       `  ${entry.assignment.name} → ${entry.averageScore.toFixed(3)} (weight ${entry.normalizedWeight.toFixed(2)})`,
@@ -614,7 +669,48 @@ async function evaluateScoresForRun(
     `  Final aggregate score: ${summary.finalScore.toFixed(3)} (base ${summary.baseScore.toFixed(3)} - penalty ${summary.variancePenalty.toFixed(3)})\n`,
   );
 
-  return lines;
+  const scoreExports: EvaluationRunExport["scores"] = summary.perScore.map(
+    (entry) => {
+      const raw = aggregationInputs.get(entry.assignment.name);
+      const judges =
+        raw?.judgeResults.map((result) => ({
+          name: result.judge.name,
+          model: getJudgeModelId(result.judge.name),
+          score: result.score,
+          rationale: result.rationale,
+        })) ?? [];
+
+      return {
+        assignment: {
+          name: entry.assignment.name,
+          weight: entry.assignment.weight,
+          args: entry.assignment.args,
+        },
+        averageScore: entry.averageScore,
+        normalizedWeight: entry.normalizedWeight,
+        variance: entry.variance,
+        judges,
+      };
+    },
+  );
+
+  const exportData: EvaluationRunExport = {
+    agent: agentName,
+    evaluation: {
+      repo: datasetEval.repo,
+      from: datasetEval.from,
+      to: datasetEval.to,
+    },
+    model: modelId,
+    summary: {
+      finalScore: summary.finalScore,
+      baseScore: summary.baseScore,
+      variancePenalty: summary.variancePenalty,
+    },
+    scores: scoreExports,
+  };
+
+  return { lines, exportData };
 }
 
 function ensureAggregationEntry(

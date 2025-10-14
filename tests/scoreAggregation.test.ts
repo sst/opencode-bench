@@ -13,7 +13,7 @@ import type { Judge, JudgeName } from "~/lib/judgeTypes.js";
 */
 const createJudge = (name: JudgeName): Judge => ({
   name,
-  model: name
+  model: name as unknown as Judge["model"]
 });
 
 describe("aggregateScores", () => {

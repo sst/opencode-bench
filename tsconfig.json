@@ -9,6 +9,7 @@
     "paths": {
       "~/*": ["./*"]
     },
+    "types": ["bun-types", "node"],
     "esModuleInterop": true,
     "forceConsistentCasingInFileNames": true,
     "strict": true,
@@ -20,7 +21,9 @@
     "scores/**/*.ts",
     "lib/**/*.ts",
     "config/**/*.ts",
+    "scripts/**/*.ts",
     "tests/**/*.ts",
+    "types/**/*.ts",
     "types/**/*.d.ts"
   ],
   "exclude": ["dist", "node_modules"]
