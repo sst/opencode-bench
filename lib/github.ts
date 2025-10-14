@@ -87,7 +87,6 @@ export async function fetchPlannerCommitDiffs(
     }>;
   };
 
-  // TODO: the indirect commit issue is back (check the first dataset)
   const commits = Array.isArray(comparisonData.commits)
     ? comparisonData.commits
     : [];
@@ -95,6 +94,7 @@ export async function fetchPlannerCommitDiffs(
   if (commits.length === 0) {
     return [];
   }
+
   const results = await Promise.all(
     commits.map(async (commit) => {
       const sha = commit.sha;

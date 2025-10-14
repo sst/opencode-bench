@@ -115,7 +115,7 @@ function toEvalSummaries(exportData: BenchmarkExport): EvalSummary[] {
 
 function buildPayload(evalSummaries: EvalSummary[]) {
   const embeds = evalSummaries.map((summary) => ({
-    title: `[${summary.eval}](https://github.com/${summary.eval})`,
+    title: summary.eval,
     description: [
       `**${summary.final.toFixed(3)}**`,
       `\`\`\`${summary.model}\`\`\``,
@@ -123,12 +123,7 @@ function buildPayload(evalSummaries: EvalSummary[]) {
     color: embedColor,
     fields: summary.rows.map((row) => ({
       name: row.name,
-      value: [
-        `• Weight: ${formatRawWeight(row.weight)}`,
-        `• Normalized Weight: ${formatNormalizedWeight(row.normalizedWeight)}`,
-        `• Average: ${row.average.toFixed(3)}`,
-        `• Variance: ${row.variance.toFixed(3)}`,
-      ].join("\n"),
+      value: row.average.toFixed(3),
       inline: false,
     })),
   }));
