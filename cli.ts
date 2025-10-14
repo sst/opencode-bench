@@ -651,9 +651,16 @@ async function evaluateScoresForRun(
 
   const lines: string[] = [];
   lines.push(`\nScore breakdown for ${modelId} on ${runContext}:`);
+  const formatRawWeight = (value: number): string => {
+    if (Number.isInteger(value)) {
+      return value.toString();
+    }
+    return Number(value.toPrecision(6)).toString();
+  };
+
   summary.perScore.forEach((entry) => {
     lines.push(
-      `  ${entry.assignment.name} → ${entry.averageScore.toFixed(3)} (weight ${entry.normalizedWeight.toFixed(2)})`,
+      `  ${entry.assignment.name} → ${entry.averageScore.toFixed(3)} (weight ${formatRawWeight(entry.assignment.weight)}, normalized ${entry.normalizedWeight.toFixed(3)})`,
     );
     const raw = aggregationInputs.get(entry.assignment.name);
     if (raw) {

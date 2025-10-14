@@ -1,8 +1,9 @@
+#!/usr/bin/env bun
 /**
  * Discord notifier for benchmark results.
  *
  * Run with:
- *   bun run tsx scripts/discord-sample.ts [path/to/export.json]
+ *   bun run scripts/discord-sample.ts [path/to/export.json]
  * If DISCORD_WEBHOOK_URL is set, the payload will be sent automatically.
  */
 
@@ -27,6 +28,16 @@ type EvalSummary = {
 
 const colorHex = "0c0c0e";
 const embedColor = parseInt(colorHex, 16);
+
+const formatRawWeight = (value: number): string => {
+  if (Number.isInteger(value)) {
+    return value.toString();
+  }
+  return Number(value.toPrecision(6)).toString();
+};
+
+const formatNormalizedWeight = (value: number): string =>
+  Number(value.toFixed(3)).toString();
 
 const sampleExport: BenchmarkExport = {
   version: 1,
@@ -106,15 +117,15 @@ function buildPayload(evalSummaries: EvalSummary[]) {
   const embeds = evalSummaries.map((summary) => ({
     title: `[${summary.eval}](https://github.com/${summary.eval})`,
     description: [
-      `Model:\n\`\`\`\n${summary.model}\n\`\`\``,
-      `Score: **${summary.final.toFixed(3)}**`,
+      `**${summary.final.toFixed(3)}**`,
+      `\`\`\`${summary.model}\`\`\``,
     ].join("\n"),
     color: embedColor,
     fields: summary.rows.map((row) => ({
       name: row.name,
       value: [
-        `• Weight: ${row.weight.toFixed(2)}`,
-        `• Normalized Weight: ${row.normalizedWeight.toFixed(2)}`,
+        `• Weight: ${formatRawWeight(row.weight)}`,
+        `• Normalized Weight: ${formatNormalizedWeight(row.normalizedWeight)}`,
         `• Average: ${row.average.toFixed(3)}`,
         `• Variance: ${row.variance.toFixed(3)}`,
       ].join("\n"),
@@ -166,8 +177,8 @@ async function main(): Promise<void> {
   console.log("===== Plain-text preview =====\n");
   for (const summary of evalSummaries) {
     console.log(`Eval: ${summary.eval}`);
-    console.log(`Model: ${summary.model}`);
     console.log(`Score: ${summary.final.toFixed(3)}`);
+    console.log(`Model: ${summary.model}`);
     summary.rows.forEach((row) => {
       console.log(
         `  - ${row.name}: weight=${row.weight.toFixed(2)}, normalized=${row.normalizedWeight.toFixed(

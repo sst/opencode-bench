@@ -87,6 +87,7 @@ export async function fetchPlannerCommitDiffs(
     }>;
   };
 
+  // TODO: the indirect commit issue is back (check the first dataset)
   const commits = Array.isArray(comparisonData.commits)
     ? comparisonData.commits
     : [];
@@ -134,7 +135,5 @@ export async function fetchPlannerCommitDiffs(
     }),
   );
 
-  return results.filter(
-    (value): value is PlannerCommitDiff => value !== null,
-  );
+  return results.filter((value): value is PlannerCommitDiff => value !== null);
 }

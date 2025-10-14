@@ -46,13 +46,18 @@ export default createScore<PreparedCheck[], ChecksConfig>({
     const parsedConfig = commandConfigSchema.parse(config ?? {});
 
     parsedConfig.setup.forEach((command) => {
-      runCommand(command, cwd);
+      const result = runCommand(command, cwd);
+      logSetupExecution(command, result);
     });
 
-    const results: PreparedCheck[] = parsedConfig.commands.map((command) => ({
-      command,
-      baseline: runCommand(command, cwd)
-    }));
+    const results: PreparedCheck[] = parsedConfig.commands.map((command) => {
+      const baseline = runCommand(command, cwd);
+      logExecution("baseline", command, baseline);
+      return {
+        command,
+        baseline
+      };
+    });
 
     assert(
       results.length > 0,
@@ -67,6 +72,7 @@ export default createScore<PreparedCheck[], ChecksConfig>({
     reference.forEach((entry) => {
       if (!entry.after) {
         entry.after = runCommand(entry.command, cwd);
+        logExecution("after", entry.command, entry.after);
       }
     });
 
@@ -160,6 +166,66 @@ function formatExecution(execution: CommandExecution): string {
   const error = execution.errorMessage ? ` error: ${execution.errorMessage}` : "";
 
   return `${status} (${exitInfo}, ${duration})${error}\nstdout: ${stdout}\nstderr: ${stderr}`;
+}
+
+function logExecution(stage: "baseline" | "after", command: string, execution: CommandExecution): void {
+  const header =
+    stage === "baseline" ? "[checks] Baseline" : "[checks] After agent";
+  const formatted = formatExecution(execution);
+  console.log(`${header} ${command}\n${formatted}\n`);
+
+  if (!execution.success) {
+    const stdoutLabel =
+      stage === "baseline"
+        ? "[checks] Baseline stdout"
+        : "[checks] After agent stdout";
+    const stderrLabel =
+      stage === "baseline"
+        ? "[checks] Baseline stderr"
+        : "[checks] After agent stderr";
+
+    const rawStdout = execution.stdout?.trim() ?? "";
+    const rawStderr = execution.stderr?.trim() ?? "";
+
+    console.log(
+      `${stdoutLabel} ${command}\n${rawStdout.length > 0 ? rawStdout : "<empty>"}\n`,
+    );
+    console.log(
+      `${stderrLabel} ${command}\n${rawStderr.length > 0 ? rawStderr : "<empty>"}\n`,
+    );
+
+    if (execution.errorMessage) {
+      const errorLabel =
+        stage === "baseline"
+          ? "[checks] Baseline error"
+          : "[checks] After agent error";
+      console.log(`${errorLabel} ${command}\n${execution.errorMessage}\n`);
+    }
+  }
+}
+
+function logSetupExecution(command: string, execution: CommandExecution): void {
+  const formatted = formatExecution(execution);
+  console.log(`[checks] Setup ${command}\n${formatted}\n`);
+
+  if (!execution.success) {
+    const stdoutLabel = `[checks] Setup stdout`;
+    const stderrLabel = `[checks] Setup stderr`;
+
+    const rawStdout = execution.stdout?.trim() ?? "";
+    const rawStderr = execution.stderr?.trim() ?? "";
+
+    console.log(
+      `${stdoutLabel} ${command}\n${rawStdout.length > 0 ? rawStdout : "<empty>"}\n`,
+    );
+    console.log(
+      `${stderrLabel} ${command}\n${rawStderr.length > 0 ? rawStderr : "<empty>"}\n`,
+    );
+
+    if (execution.errorMessage) {
+      console.log(`[checks] Setup error ${command}\n${execution.errorMessage}\n`);
+    }
+  }
 }
 
 function summarizeOutput(output: string): string {
