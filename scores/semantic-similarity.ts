@@ -7,19 +7,27 @@ import { createScore, scoreResultSchema } from "~/lib/createScore.js";
 import { fetchComparisonDiff } from "~/lib/github.js";
 import { finalizeAgentChanges } from "~/lib/finalizeAgentChanges.js";
 
-const systemPrompt = `You are the judge for how faithfully an autonomous agent reproduced a reference Git commit.
+const systemPrompt = `You are the judge for how faithfully an autonomous agent reproduced a reference git commit.
 
-This is a contract test: the candidate must implement the *same behavioural changes* that appear in the reference diff. Use the following rubric:
-- 1.0 → The candidate touches the same files, delivers the same functional behaviour, and does not add or remove meaningful logic. Wording tweaks (punctuation, capitalization, sentence flow) are acceptable only if the underlying instructions / commands / API usage remain identical.
-- 0.7 → Only minor stylistic variations (e.g. different phrasing or comments) while every command, API, and code path still matches the reference intent.
-- 0.3 → Partially correct. Some required edits are missing or altered (different CLI commands, different helper functions, changed control flow), but portions of the reference are implemented correctly.
-- 0.0 → Any required change is missing, reversed, or significantly different. Extra functionality or alternate workflows (new helper APIs, different commands, different script structure) must be treated as failures unless they are functionally equivalent.
+Scoring rubric:
+- 1.0 → Candidate touches the same files, produces the same behaviour, and adds no extra logic. README/command changes must match exactly; only punctuation or sentence-flow tweaks are acceptable.
+- 0.7 → Only cosmetic differences (wording, formatting) while every command, API call, and code path is functionally identical to the reference.
+- 0.3 → Partial implementation. Some required edits are missing or altered (different CLI commands, helper functions, control flow), but part of the reference diff is satisfied.
+- 0.0 → Required changes are missing, reversed, or replaced with alternative workflows. Added logic is a failure unless it is behaviourally identical.
 
-When comparing README or docs edits, ensure that the setup steps, command invocations, file names, and instructions stay aligned with the reference. Changing the tooling (e.g. switching CLI commands) or reordering steps is a deviation unless the resulting behaviour is identical.
+Checklist:
+1. Files touched: the same files must be modified or deleted.
+2. README/docs: CLI commands, setup steps, filenames, and flags must match. Changing the tooling (e.g. swapping starters or adding npm install steps) is a major deviation (score ≤ 0.3).
+3. Code paths/APIs: functions must call the same APIs with the same arguments. Using a different API (e.g. replacing createDocumentFromPrismic with createDocument) is a major deviation.
+4. Extra logic: additional helper functions or refactors are acceptable only if they are behaviour-neutral. Extensive rewrites should lower the score.
+5. Minimal change preference: prefer implementations that stick closely to the reference structure; penalize expansive rewrites even if the intent seems similar.
 
-When comparing code edits, verify that the same functions, API calls, side-effects, and error handling exist. Additional helper functions or refactors are *not* acceptable if they alter intent or behaviour.
+Examples:
+- Acceptable variation: Reference says “Run \`npm run dev\`.” Candidate says “Run npm run dev to start the server.” (same command).
+- Unacceptable variation: Reference says “Run \`npx @slicemachine/init@latest --starter course-fizzi-next\`.” Candidate uses “npx prismicio@latest …” (different workflow → score ≤ 0.3).
+- Unacceptable variation: Reference script calls createDocumentFromPrismic. Candidate calls createDocument and adds new helper functions. This is a behavioural change → score ≤ 0.3.
 
-Return JSON with 'score' (0-1) and a rationale citing the most important matches / deviations. Always justify why the score was chosen.`;
+Return JSON with 'score' (0–1) and a concise rationale that cites the key matches and deviations.`;
 
 export default createScore({
   prepare: async ({ evaluation }) => {

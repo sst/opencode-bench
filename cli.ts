@@ -255,31 +255,35 @@ async function main(): Promise<void> {
     return;
   }
 
-  let runCount = 0;
-  const runExports: EvaluationRunExport[] = [];
-
-  for (const evalDefinition of selectedEvals) {
+  const processEvaluation = async (
+    evalDefinition: DatasetEval,
+    scoreFilter: ScoreName | undefined,
+    combinations: ModelCombination[],
+    agentRegistration: AgentRegistration,
+    agentLabel: string,
+  ): Promise<{
+    runCount: number;
+    exports: EvaluationRunExport[];
+    attemptedScore: boolean;
+  }> => {
     const availableScores = evalDefinition.scores;
-    const scores: ScoreAssignment[] = scoreFilterName
+    const scores: ScoreAssignment[] = scoreFilter
       ? availableScores.filter(
-          (assignment) => assignment.name === scoreFilterName,
+          (assignment) => assignment.name === scoreFilter,
         )
       : availableScores;
 
     if (scores.length === 0) {
-      continue;
+      return { runCount: 0, exports: [], attemptedScore: false };
     }
 
     const abortToken = { __abortEval: true } as const;
+    const evalId = getEvalIdentifier(evalDefinition);
 
     let plannerTasks: PlannerTask[] = [];
 
-    const evalId = getEvalIdentifier(evalDefinition);
-
     try {
-      console.log(
-        `[${evalId} planner] Fetching commit diffs from GitHub...`,
-      );
+      console.log(`[${evalId} planner] Fetching commit diffs from GitHub...`);
       const commitDiffs = await fetchPlannerCommitDiffs(evalDefinition);
 
       assert(
@@ -305,15 +309,7 @@ async function main(): Promise<void> {
         console.error("Failed to prepare evaluation", evalId);
       }
       process.exitCode = 1;
-      return;
-    }
-
-    if (!plannerTasks || plannerTasks.length === 0) {
-      console.error(
-        `Planner produced no tasks for ${evalDefinition.repo} (${evalDefinition.from}..${evalDefinition.to}).`,
-      );
-      process.exitCode = 1;
-      return;
+      throw new Error("evaluation preparation failed");
     }
 
     const runCombination = async (
@@ -359,17 +355,15 @@ async function main(): Promise<void> {
         }
 
         let tasksExecuted = 0;
-
         const fullModel = `${combination.provider}/${combination.model}`;
 
         for (const task of plannerTasks) {
           const logPrefix = `${combinationLabel} ${task.commit}`;
 
           try {
-            const promptForAgent = task.prompt;
-            await agent.definition.run(
+            await agentRegistration.definition.run(
               fullModel,
-              promptForAgent,
+              task.prompt,
               cwd,
               {
                 onStart: (commandString: string) => {
@@ -386,7 +380,7 @@ async function main(): Promise<void> {
                 `Failed to render command for ${fullModel}: ${error.message}`,
               );
             } else {
-              console.error("Failed to render command for", fullModel);
+            console.error("Failed to render command for", fullModel);
             }
             process.exitCode = 1;
             throw abortToken;
@@ -412,7 +406,7 @@ async function main(): Promise<void> {
 
         try {
           const evaluationResult = await evaluateScoresForRun(
-            agentName,
+            agentLabel,
             evalDefinition,
             scores,
             combination,
@@ -459,10 +453,10 @@ async function main(): Promise<void> {
 
     try {
       const results = await Promise.all(
-        modelCombinations.map((combination) => runCombination(combination)),
+        combinations.map((combination) => runCombination(combination)),
       );
 
-      runCount += results.reduce(
+      const completed = results.reduce(
         (total, value) => total + value.completedRuns,
         0,
       );
@@ -471,23 +465,70 @@ async function main(): Promise<void> {
         result.summaries.forEach((line) => {
           console.log(line);
         });
-        runExports.push(...result.exports);
       });
+
+      const exports = results.flatMap((result) => result.exports);
+
+      return { runCount: completed, exports, attemptedScore: true };
     } catch (error) {
       if (
         typeof error === "object" &&
         error !== null &&
         "__abortEval" in error
       ) {
-        return;
+        throw new Error("evaluation aborted");
       }
 
       console.error(
         `Failed to complete evaluation ${evalId}: ${error instanceof Error ? error.message : error}`,
       );
       process.exitCode = 1;
-      return;
+      throw new Error("evaluation failed");
     }
+  };
+
+  let evaluationResults: Array<{
+    runCount: number;
+    exports: EvaluationRunExport[];
+    attemptedScore: boolean;
+  }>;
+  try {
+    evaluationResults = await Promise.all(
+      selectedEvals.map((evalDefinition) =>
+        processEvaluation(
+          evalDefinition,
+          scoreFilterName,
+          modelCombinations,
+          agent,
+          agentName,
+        ),
+      ),
+    );
+  } catch {
+    return;
+  }
+
+  const runCount = evaluationResults.reduce(
+    (total, result) => total + result.runCount,
+    0,
+  );
+
+  const runExports = evaluationResults.flatMap((result) => result.exports);
+
+  if (
+    scoreFilterName &&
+    !evaluationResults.some((result) => result.attemptedScore)
+  ) {
+    console.error(
+      `Score ${scoreFilterName} is not available for the selected evaluations.`,
+    );
+    process.exitCode = 1;
+    return;
+  }
+
+  if (runCount === 0) {
+    console.error("No runs matched the provided filters.");
+    process.exitCode = 1;
   }
 
   if (outputPath) {
@@ -510,19 +551,6 @@ async function main(): Promise<void> {
       process.exitCode = 1;
       return;
     }
-  }
-
-  if (scoreFilterName && runCount === 0) {
-    console.error(
-      `Score ${scoreFilterName} is not available for the selected evaluations.`,
-    );
-    process.exitCode = 1;
-    return;
-  }
-
-  if (runCount === 0) {
-    console.error("No runs matched the provided filters.");
-    process.exitCode = 1;
   }
 }
 
