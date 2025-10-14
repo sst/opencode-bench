@@ -29,16 +29,6 @@ type EvalSummary = {
 const colorHex = "0c0c0e";
 const embedColor = parseInt(colorHex, 16);
 
-const formatRawWeight = (value: number): string => {
-  if (Number.isInteger(value)) {
-    return value.toString();
-  }
-  return Number(value.toPrecision(6)).toString();
-};
-
-const formatNormalizedWeight = (value: number): string =>
-  Number(value.toFixed(3)).toString();
-
 const sampleExport: BenchmarkExport = {
   version: 1,
   runs: [

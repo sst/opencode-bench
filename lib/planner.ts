@@ -2,6 +2,7 @@ import { generateObject } from "ai";
 import { z } from "zod";
 
 import type { DatasetEval } from "~/lib/dataset.js";
+import { plannerExamples } from "~/lib/plannerExamples.js";
 import { getZenLanguageModel } from "~/lib/zenModels.js";
 
 const fallback = (envName: string, defaultValue: string): string =>
@@ -35,7 +36,7 @@ function sanitizePlannerPrompt(text: string): string {
     .replace(/\bsource control\b/gi, "version control");
 }
 
-const systemPrompt = `You are Planner, a planning assistant that turns a single Git commit's diff into an actionable directive for an execution agent.
+const baseSystemPrompt = `You are Planner, a planning assistant that turns a single Git commit's diff into an actionable directive for an execution agent.
 
 Instructions:
 - Understand the intent of the change from the diff and commit title provided.
@@ -53,6 +54,21 @@ Always respond strictly as JSON conforming to the schema. Do not add commentary.
 
 const plannerModelId = fallback("PLANNER_MODEL", "opencode/claude-sonnet-4-5");
 
+function buildSystemPrompt(): string {
+  if (plannerExamples.length === 0) {
+    return baseSystemPrompt;
+  }
+
+  const examplesSection = plannerExamples
+    .map(
+      (example, index) =>
+        `Example ${index + 1} diff:\n${example.diff}\n\nExample ${index + 1} instruction:\n${example.prompt}`,
+    )
+    .join("\n\n---\n\n");
+
+  return `${baseSystemPrompt}\n\n---\n${examplesSection}`;
+}
+
 export async function generatePlannerTask(
   entry: DatasetEval,
   commit: PlannerCommitDiff,
@@ -66,7 +82,7 @@ export async function generatePlannerTask(
     const result = await generateObject({
       model: getZenLanguageModel(plannerModelId),
       schema: plannerSchema,
-      system: systemPrompt,
+      system: buildSystemPrompt(),
       temperature: 0,
       prompt: `Repository: ${entry.repo}
 Base commit: ${entry.from}

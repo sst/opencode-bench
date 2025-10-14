@@ -244,7 +244,7 @@ async function main(): Promise<void> {
     return;
   }
 
-  const evalFilter = filters.eval;
+  const evalFilter = normalizeEvalFilter(filters.eval);
   const selectedEvals = evalFilter
     ? dataset.filter((entry) => getEvalIdentifier(entry) === evalFilter)
     : dataset;
@@ -733,4 +733,17 @@ function ensureAggregationEntry(
 
   // Non-null assertion safe because we just set it if missing.
   return map.get(assignment.name)!;
+}
+
+function normalizeEvalFilter(value: string | undefined): string | undefined {
+  if (!value) {
+    return value;
+  }
+
+  const suffix = "/benchmark";
+  if (value.endsWith(suffix)) {
+    return value.slice(0, -suffix.length);
+  }
+
+  return value;
 }
