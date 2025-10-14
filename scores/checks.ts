@@ -28,13 +28,19 @@ interface PreparedCheck {
   after?: CommandExecution;
 }
 
-const systemPrompt = `You are evaluating whether project checks still pass after an autonomous agent modified the codebase.
-The reference state shows results before the agent ran; the candidate state shows results after the agent's changes.
-Score the outcome from 0 to 1:
-- Score 1.0 only if every command that previously succeeded still succeeds and the project remains healthy.
-- Reduce the score when commands fail, behave differently, or were disrupted by the agent's changes.
-- Consider previously failing commands: give partial credit if the agent improves them, penalise if failures worsen.
-Respond with JSON containing numeric 'score' (0-1) and a concise 'rationale' summarising key successes or failures.`;
+const systemPrompt = `You are grading whether project checks stayed healthy after an autonomous agent's changes.
+
+For each command you see:
+- Baseline → how the check behaved before the agent ran.
+- After agent → how it behaves afterwards.
+
+Scoring rubric:
+- 1.0 → Every command that previously passed still passes, no new failures were introduced.
+- 0.7 → Previously failing commands improved (fewer errors, exit code closer to success) and nothing regressed.
+- 0.4 → No net change in failing commands, but no regressions either.
+- 0.0 → Any previously passing command now fails, or additional failures/regressions were introduced.
+
+Grade each command, then choose the overall score that best represents the combined outcome (never exceed 1.0). Always mention the key facts (exit codes, failure counts, new vs removed errors) in your rationale so the reasoning is transparent.`;
 
 const COMMAND_TIMEOUT_MS = 5 * 60 * 1000;
 const OUTPUT_LIMIT = 4000;

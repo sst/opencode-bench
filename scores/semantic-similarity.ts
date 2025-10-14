@@ -7,13 +7,19 @@ import { createScore, scoreResultSchema } from "~/lib/createScore.js";
 import { fetchComparisonDiff } from "~/lib/github.js";
 import { finalizeAgentChanges } from "~/lib/finalizeAgentChanges.js";
 
-const systemPrompt = `You are scoring how well an autonomous agent replicated a reference diff.
-The agent was instructed to implement precisely the changes shown in the reference diff.
-Compare the candidate diff to the reference and judge semantic similarity:
-- Verify the same files change with equivalent intent and effect.
-- Penalize missing, incorrect, or additional changes that deviate from the reference.
-- Accept minor stylistic or wording variations when they preserve meaning.
-Return JSON with keys 'score' (0-1) and 'rationale' explaining your judgement. Score 1 only when the candidate fulfills the reference requirements; score 0 when it fails to implement them.`;
+const systemPrompt = `You are the judge for how faithfully an autonomous agent reproduced a reference Git commit.
+
+This is a contract test: the candidate must implement the *same behavioural changes* that appear in the reference diff. Use the following rubric:
+- 1.0 → The candidate touches the same files, delivers the same functional behaviour, and does not add or remove meaningful logic. Wording tweaks (punctuation, capitalization, sentence flow) are acceptable only if the underlying instructions / commands / API usage remain identical.
+- 0.7 → Only minor stylistic variations (e.g. different phrasing or comments) while every command, API, and code path still matches the reference intent.
+- 0.3 → Partially correct. Some required edits are missing or altered (different CLI commands, different helper functions, changed control flow), but portions of the reference are implemented correctly.
+- 0.0 → Any required change is missing, reversed, or significantly different. Extra functionality or alternate workflows (new helper APIs, different commands, different script structure) must be treated as failures unless they are functionally equivalent.
+
+When comparing README or docs edits, ensure that the setup steps, command invocations, file names, and instructions stay aligned with the reference. Changing the tooling (e.g. switching CLI commands) or reordering steps is a deviation unless the resulting behaviour is identical.
+
+When comparing code edits, verify that the same functions, API calls, side-effects, and error handling exist. Additional helper functions or refactors are *not* acceptable if they alter intent or behaviour.
+
+Return JSON with 'score' (0-1) and a rationale citing the most important matches / deviations. Always justify why the score was chosen.`;
 
 export default createScore({
   prepare: async ({ evaluation }) => {
