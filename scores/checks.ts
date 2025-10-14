@@ -9,7 +9,9 @@ import { finalizeAgentChanges } from "~/lib/finalizeAgentChanges.js";
 
 const commandConfigSchema = z.object({
   setup: z.array(z.string().min(1)).default([]),
-  commands: z.array(z.string().min(1)).min(1, "At least one check command is required."),
+  commands: z
+    .array(z.string().min(1))
+    .min(1, "At least one check command is required."),
 });
 
 interface CommandExecution {
@@ -39,11 +41,11 @@ Scoring rubric:
 - 0.7 → Previously failing commands improved (fewer errors, exit code closer to success) and nothing regressed.
 - 0.4 → No net change in failing commands, but no regressions either.
 - 0.0 → Any previously passing command now fails, or additional failures/regressions were introduced.
+Use these as anchors—select any value between 0 and 1 that reflects the overall health (e.g. 0.6 if improvements outweigh minor regressions). Avoid snapping to the sample numbers unless they match exactly.
 
 Grade each command, then choose the overall score that best represents the combined outcome (never exceed 1.0). Always mention the key facts (exit codes, failure counts, new vs removed errors) in your rationale so the reasoning is transparent.`;
 
 const COMMAND_TIMEOUT_MS = 5 * 60 * 1000;
-const OUTPUT_LIMIT = 4000;
 
 type ChecksConfig = z.infer<typeof commandConfigSchema>;
 
@@ -61,13 +63,13 @@ export default createScore<PreparedCheck[], ChecksConfig>({
       logExecution("baseline", command, baseline);
       return {
         command,
-        baseline
+        baseline,
       };
     });
 
     assert(
       results.length > 0,
-      `Score "checks" requires at least one command for ${evaluation.repo}.`
+      `Score "checks" requires at least one command for ${evaluation.repo}.`,
     );
 
     return results;
@@ -90,7 +92,7 @@ export default createScore<PreparedCheck[], ChecksConfig>({
         schema: scoreResultSchema,
         system: systemPrompt,
         temperature: 0,
-        prompt
+        prompt,
       });
 
       return object;
@@ -98,10 +100,10 @@ export default createScore<PreparedCheck[], ChecksConfig>({
       const message = error instanceof Error ? error.message : String(error);
       return {
         score: 0,
-        rationale: `Checks score evaluation failed: ${message}`
+        rationale: `Checks score evaluation failed: ${message}`,
       };
     }
-  }
+  },
 });
 
 function runCommand(command: string, cwd: string): CommandExecution {
@@ -113,8 +115,8 @@ function runCommand(command: string, cwd: string): CommandExecution {
     timeout: COMMAND_TIMEOUT_MS,
     env: {
       ...process.env,
-      CI: process.env.CI ?? "1"
-    }
+      CI: process.env.CI ?? "1",
+    },
   });
 
   const runtimeMs = Date.now() - start;
@@ -142,7 +144,7 @@ function runCommand(command: string, cwd: string): CommandExecution {
     stdout,
     stderr,
     runtimeMs,
-    errorMessage
+    errorMessage,
   };
 }
 
@@ -154,7 +156,7 @@ function buildJudgePrompt(entries: PreparedCheck[]): string {
       return [
         `Check ${index + 1}: ${entry.command}`,
         `Baseline: ${baseline}`,
-        `After agent: ${after}`
+        `After agent: ${after}`,
       ].join("\n");
     })
     .join("\n\n");
@@ -167,14 +169,20 @@ function formatExecution(execution: CommandExecution): string {
   const exitInfo =
     execution.exitCode !== null ? `exit ${execution.exitCode}` : "no exit code";
   const duration = `${execution.runtimeMs}ms`;
-  const stderr = summarizeOutput(execution.stderr);
-  const stdout = summarizeOutput(execution.stdout);
-  const error = execution.errorMessage ? ` error: ${execution.errorMessage}` : "";
+  const stdout = execution.stdout?.trim() ?? "";
+  const stderr = execution.stderr?.trim() ?? "";
+  const error = execution.errorMessage
+    ? ` error: ${execution.errorMessage}`
+    : "";
 
-  return `${status} (${exitInfo}, ${duration})${error}\nstdout: ${stdout}\nstderr: ${stderr}`;
+  return `${status} (${exitInfo}, ${duration})${error}\nstdout: ${stdout.length > 0 ? stdout : "<empty>"}\nstderr: ${stderr.length > 0 ? stderr : "<empty>"}`;
 }
 
-function logExecution(stage: "baseline" | "after", command: string, execution: CommandExecution): void {
+function logExecution(
+  stage: "baseline" | "after",
+  command: string,
+  execution: CommandExecution,
+): void {
   const header =
     stage === "baseline" ? "[checks] Baseline" : "[checks] After agent";
   const formatted = formatExecution(execution);
@@ -229,20 +237,9 @@ function logSetupExecution(command: string, execution: CommandExecution): void {
     );
 
     if (execution.errorMessage) {
-      console.log(`[checks] Setup error ${command}\n${execution.errorMessage}\n`);
+      console.log(
+        `[checks] Setup error ${command}\n${execution.errorMessage}\n`,
+      );
     }
   }
-}
-
-function summarizeOutput(output: string): string {
-  if (!output) {
-    return "<empty>";
-  }
-
-  const normalized = output.trim();
-  if (normalized.length <= OUTPUT_LIMIT) {
-    return normalized;
-  }
-
-  return `${normalized.slice(0, OUTPUT_LIMIT)}…`;
 }

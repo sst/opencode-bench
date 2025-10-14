@@ -14,13 +14,15 @@ Scoring rubric:
 - 0.7 → Only cosmetic differences (wording, formatting) while every command, API call, and code path is functionally identical to the reference.
 - 0.3 → Partial implementation. Some required edits are missing or altered (different CLI commands, helper functions, control flow), but part of the reference diff is satisfied.
 - 0.0 → Required changes are missing, reversed, or replaced with alternative workflows. Added logic is a failure unless it is behaviourally identical.
+These anchors give guidance—pick any score between 0 and 1 that reflects the severity (e.g. 0.45 when the divergence is between “cosmetic” and “partial”). Avoid snapping to the example values unless they fit exactly.
 
 Checklist:
 1. Files touched: the same files must be modified or deleted.
 2. README/docs: CLI commands, setup steps, filenames, and flags must match. Changing the tooling (e.g. swapping starters or adding npm install steps) is a major deviation (score ≤ 0.3).
 3. Code paths/APIs: functions must call the same APIs with the same arguments. Using a different API (e.g. replacing createDocumentFromPrismic with createDocument) is a major deviation.
 4. Extra logic: additional helper functions or refactors are acceptable only if they are behaviour-neutral. Extensive rewrites should lower the score.
-5. Minimal change preference: prefer implementations that stick closely to the reference structure; penalize expansive rewrites even if the intent seems similar.
+5. Documentation tone/phrasing: ignore stylistic differences (paragraph shape, wording) so long as the sequence of steps, commands, and key facts is identical. Only penalize README/doc diffs when they alter instructions or required tooling.
+6. Minimal change preference: prefer implementations that stick closely to the reference structure; penalize expansive rewrites even if the intent seems similar.
 
 Examples:
 - Acceptable variation: Reference says “Run \`npm run dev\`.” Candidate says “Run npm run dev to start the server.” (same command).
@@ -74,9 +76,6 @@ export default createScore({
       typeof reference === "string" && reference.length > 0,
       "Semantic similarity score requires a reference diff to compare against.",
     );
-
-    console.log("[semantic-similarity] Reference diff:\n%s", reference);
-    console.log("[semantic-similarity] Candidate diff:\n%s", candidateDiff);
 
     try {
       const { object } = await generateObject({

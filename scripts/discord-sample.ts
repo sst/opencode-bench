@@ -3,7 +3,7 @@
  * Discord notifier for benchmark results.
  *
  * Run with:
- *   bun run scripts/discord-sample.ts [path/to/export.json]
+ *   bun run scripts/discord-sample.ts [path/to/export.json)]
  * If DISCORD_WEBHOOK_URL is set, the payload will be sent automatically.
  */
 
@@ -19,11 +19,15 @@ type ScoreRow = {
   variance: number;
 };
 
-type EvalSummary = {
-  eval: string;
-  model: string;
+type ModelSummary = {
+  id: string;
   final: number;
   rows: ScoreRow[];
+};
+
+type EvalSummary = {
+  eval: string;
+  models: ModelSummary[];
 };
 
 const colorHex = "0c0c0e";
@@ -32,6 +36,44 @@ const embedColor = parseInt(colorHex, 16);
 const sampleExport: BenchmarkExport = {
   version: 1,
   runs: [
+    {
+      agent: "opencode",
+      evaluation: {
+        repo: "prismicio-community/course-fizzi-next",
+        from: "e90e3f4e07119d60e8822d4f474f6dfa5afe589f",
+        to: "2760114f2647ebec8f63e0ecc2dc87a8cd4096ac",
+      },
+      model: "opencode/claude-sonnet-4-5",
+      summary: {
+        finalScore: 0.902,
+        baseScore: 0.905,
+        variancePenalty: 0.003,
+      },
+      scores: [
+        {
+          assignment: {
+            name: "semantic-similarity",
+            weight: 0.77,
+            args: undefined,
+          },
+          averageScore: 0.905,
+          normalizedWeight: 0.77,
+          variance: 0.030,
+          judges: [],
+        },
+        {
+          assignment: {
+            name: "checks",
+            weight: 0.23,
+            args: undefined,
+          },
+          averageScore: 0.980,
+          normalizedWeight: 0.23,
+          variance: 0.000,
+          judges: [],
+        },
+      ],
+    },
     {
       agent: "opencode",
       evaluation: {
@@ -89,34 +131,54 @@ function loadExport(): BenchmarkExport {
 }
 
 function toEvalSummaries(exportData: BenchmarkExport): EvalSummary[] {
-  return exportData.runs.map((run) => ({
-    eval: run.evaluation.repo,
-    model: run.model,
-    final: run.summary.finalScore,
-    rows: run.scores.map((score) => ({
+  const evalMap = new Map<string, ModelSummary[]>();
+
+  exportData.runs.forEach((run) => {
+    const modelIds = Array.isArray(run.model) ? run.model : [run.model];
+    const modelRows = run.scores.map((score) => ({
       name: score.assignment.name,
       weight: score.assignment.weight,
       normalizedWeight: score.normalizedWeight,
       average: score.averageScore,
       variance: score.variance,
-    })),
+    }));
+
+    const summaries = evalMap.get(run.evaluation.repo) ?? [];
+
+    modelIds.forEach((modelId) => {
+      summaries.push({
+        id: modelId,
+        final: run.summary.finalScore,
+        rows: modelRows,
+      });
+    });
+
+    evalMap.set(run.evaluation.repo, summaries);
+  });
+
+  return Array.from(evalMap.entries()).map(([repo, models]) => ({
+    eval: repo,
+    models,
   }));
 }
 
 function buildPayload(evalSummaries: EvalSummary[]) {
-  const embeds = evalSummaries.map((summary) => ({
-    title: summary.eval,
-    description: [
-      `**${summary.final.toFixed(3)}**`,
-      `\`\`\`${summary.model}\`\`\``,
-    ].join("\n"),
-    color: embedColor,
-    fields: summary.rows.map((row) => ({
-      name: row.name,
-      value: row.average.toFixed(3),
+  const embeds = evalSummaries.map((summary) => {
+    const fields = summary.models.map((model) => ({
+      name: model.id,
+      value: [
+        `Score: ${model.final.toFixed(3)}`,
+        ...model.rows.map((row) => `${row.name}: ${row.average.toFixed(3)}`),
+      ].join("\n"),
       inline: false,
-    })),
-  }));
+    }));
+
+    return {
+      title: summary.eval,
+      color: embedColor,
+      fields,
+    };
+  });
 
   const content =
     process.env.GITHUB_RUN_ID && process.env.GITHUB_REPOSITORY
@@ -130,7 +192,6 @@ function buildPayload(evalSummaries: EvalSummary[]) {
     embeds,
   };
 }
-
 async function sendWebhook(payload: unknown): Promise<void> {
   const webhookUrl = process.env.DISCORD_WEBHOOK_URL?.trim();
   if (!webhookUrl) {
@@ -162,14 +223,12 @@ async function main(): Promise<void> {
   console.log("===== Plain-text preview =====\n");
   for (const summary of evalSummaries) {
     console.log(`Eval: ${summary.eval}`);
-    console.log(`Score: ${summary.final.toFixed(3)}`);
-    console.log(`Model: ${summary.model}`);
-    summary.rows.forEach((row) => {
-      console.log(
-        `  - ${row.name}: weight=${row.weight.toFixed(2)}, normalized=${row.normalizedWeight.toFixed(
-          2,
-        )}, average=${row.average.toFixed(3)}, variance=${row.variance.toFixed(3)}`,
-      );
+    summary.models.forEach((model) => {
+      console.log(`Model: ${model.id}`);
+      console.log(`  Score: ${model.final.toFixed(3)}`);
+      model.rows.forEach((row) => {
+        console.log(`    - ${row.name}: ${row.average.toFixed(3)}`);
+      });
     });
     console.log("");
   }
