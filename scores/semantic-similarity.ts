@@ -9,27 +9,72 @@ import { finalizeAgentChanges } from "~/lib/finalizeAgentChanges.js";
 
 const systemPrompt = `You are the judge for how faithfully an autonomous agent reproduced a reference git commit.
 
+IMPORTANT: You must select exactly ONE of these discrete scores: 0, 0.25, 0.5, 0.75, or 1.0. Do not use intermediate values.
+When borderline between two levels, round UP to the higher score if the candidate demonstrates effort toward that level's requirements.
+
 Scoring rubric:
-- 1.0 → Candidate touches the same files, produces the same behaviour, and adds no extra logic. README/command changes must match exactly; only punctuation or sentence-flow tweaks are acceptable.
-- 0.7 → Only cosmetic differences (wording, formatting) while every command, API call, and code path is functionally identical to the reference.
-- 0.3 → Partial implementation. Some required edits are missing or altered (different CLI commands, helper functions, control flow), but part of the reference diff is satisfied.
-- 0.0 → Required changes are missing, reversed, or replaced with alternative workflows. Added logic is a failure unless it is behaviourally identical.
-These anchors give guidance—pick any score between 0 and 1 that reflects the severity (e.g. 0.45 when the divergence is between “cosmetic” and “partial”). Avoid snapping to the example values unless they fit exactly.
+
+1.0 - Perfect Match
+- Touches exactly the same files
+- Produces identical behavior
+- No extra logic added
+- README/docs: Commands, flags, and setup steps match exactly (only punctuation/flow tweaks allowed)
+Examples:
+  • Reference adds "npm run dev" to README, updates server.ts to use port 3000, modifies config.json → Candidate does all three with only minor README phrasing differences
+  • Reference removes deprecated getUserById(), replaces 5 call sites with fetchUser() → Candidate does exactly the same
+
+0.75 - Cosmetic Differences Only
+- All files touched correctly
+- Functionally identical (same APIs, same arguments, same control flow)
+- Only differences: variable names, code formatting, comment wording, documentation phrasing
+- No behavioral changes whatsoever
+Examples:
+  • Reference: function calculate(data) → Candidate: function calculate(items) (different param names only)
+  • Reference adds auth with auth.login(username, password) → Candidate uses auth.login(user, pass) with added code comments
+  • Reference updates README "Run the following command: npm install" → Candidate "Install dependencies using npm install"
+
+0.5 - Functional but Divergent
+- Majority of required changes present
+- Some files or edits missing
+- Core functionality works but uses different approaches (different APIs, alternative implementations)
+- May have minor behavioral differences
+Examples:
+  • Reference implements auth with passport.authenticate('local') → Candidate uses custom middleware for auth (works but different)
+  • Reference updates 4 files with error handling → Candidate updates 3 of 4 files (missing one)
+  • Reference adds CLI flag --config using commander → Candidate adds --config using yargs (different library, same outcome)
+  • Reference refactors 5 functions to async/await → Candidate refactors 3 of 5 (partial completion)
+
+0.25 - Partial Implementation
+- Only a fraction of requirements met (<50%)
+- Missing major edits or files
+- Significant deviations: different CLI commands, altered workflows, major logic changes
+- Some core functionality absent
+Examples:
+  • Reference updates 6 files, adds API endpoints, updates README with 4 commands → Candidate updates 2 files, adds 1 endpoint, README unchanged
+  • Reference migrates from REST to GraphQL (10 files) → Candidate converts only 2 of 10 files
+  • Reference: npx @slicemachine/init@latest --starter course-fizzi-next → Candidate uses npx prismicio@latest init (different workflow)
+  • Reference adds database.connect() with pooling → Candidate keeps old connection, adds unrelated logging
+
+0.0 - Failed/Wrong
+- Required changes missing or reversed
+- Wrong files modified
+- Replaced with incompatible alternative workflows
+- Added logic that changes behavior incorrectly
+Examples:
+  • Reference removes deprecated oldMethod() → Candidate keeps oldMethod()
+  • Reference updates 5 specific files → Candidate updates 5 different unrelated files
+  • Reference fixes bug by adding null check → Candidate removes the code entirely
+  • Reference adds feature X → Candidate makes no changes or unrelated changes
 
 Checklist:
 1. Files touched: the same files must be modified or deleted.
-2. README/docs: CLI commands, setup steps, filenames, and flags must match. Changing the tooling (e.g. swapping starters or adding npm install steps) is a major deviation (score ≤ 0.3).
-3. Code paths/APIs: functions must call the same APIs with the same arguments. Using a different API (e.g. replacing createDocumentFromPrismic with createDocument) is a major deviation.
+2. README/docs: CLI commands, setup steps, filenames, and flags must match. Changing the tooling is a major deviation (0.25 or lower).
+3. Code paths/APIs: functions must call the same APIs with the same arguments. Using a different API is a major deviation (0.5 or lower).
 4. Extra logic: additional helper functions or refactors are acceptable only if they are behaviour-neutral. Extensive rewrites should lower the score.
-5. Documentation tone/phrasing: ignore stylistic differences (paragraph shape, wording) so long as the sequence of steps, commands, and key facts is identical. Only penalize README/doc diffs when they alter instructions or required tooling.
-6. Minimal change preference: prefer implementations that stick closely to the reference structure; penalize expansive rewrites even if the intent seems similar.
+5. Documentation tone/phrasing: ignore stylistic differences so long as the sequence of steps, commands, and key facts is identical. Only penalize when instructions or tooling differ.
+6. Minimal change preference: prefer implementations that stick closely to the reference structure; penalize expansive rewrites.
 
-Examples:
-- Acceptable variation: Reference says “Run \`npm run dev\`.” Candidate says “Run npm run dev to start the server.” (same command).
-- Unacceptable variation: Reference says “Run \`npx @slicemachine/init@latest --starter course-fizzi-next\`.” Candidate uses “npx prismicio@latest …” (different workflow → score ≤ 0.3).
-- Unacceptable variation: Reference script calls createDocumentFromPrismic. Candidate calls createDocument and adds new helper functions. This is a behavioural change → score ≤ 0.3.
-
-Return JSON with 'score' (0–1) and a concise rationale that cites the key matches and deviations.`;
+Return JSON with 'score' (must be exactly one of: 0, 0.25, 0.5, 0.75, 1.0) and a concise rationale that cites the key matches and deviations.`;
 
 export default createScore({
   prepare: async ({ evaluation }) => {

@@ -6,7 +6,12 @@ import type { DatasetEval } from "~/lib/dataset.js";
 import type { Judge } from "~/lib/judgeTypes.js";
 
 export const scoreResultSchema = z.object({
-  score: z.number().min(0).max(1),
+  score: z.number().refine(
+    (val) => [0, 0.25, 0.5, 0.75, 1.0].includes(val),
+    {
+      message: "Score must be one of: 0, 0.25, 0.5, 0.75, 1.0"
+    }
+  ),
   rationale: z.string().min(1)
 });
 
