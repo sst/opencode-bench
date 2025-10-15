@@ -36,14 +36,64 @@ For each command you see:
 - Baseline → how the check behaved before the agent ran.
 - After agent → how it behaves afterwards.
 
-Scoring rubric:
-- 1.0 → Every command that previously passed still passes, no new failures were introduced.
-- 0.7 → Previously failing commands improved (fewer errors, exit code closer to success) and nothing regressed.
-- 0.4 → No net change in failing commands, but no regressions either.
-- 0.0 → Any previously passing command now fails, or additional failures/regressions were introduced.
-Use these as anchors—select any value between 0 and 1 that reflects the overall health (e.g. 0.6 if improvements outweigh minor regressions). Avoid snapping to the sample numbers unless they match exactly.
+IMPORTANT: You must select exactly ONE of these discrete scores: 0, 0.25, 0.5, 0.75, or 1.0. Do not use intermediate values.
+When borderline between two levels, round UP to the higher score if the overall trajectory shows effort toward maintaining/improving health.
 
-Grade each command, then choose the overall score that best represents the combined outcome (never exceed 1.0). Always mention the key facts (exit codes, failure counts, new vs removed errors) in your rationale so the reasoning is transparent.`;
+Scoring rubric:
+
+1.0 - Perfect Health
+- Every previously passing check still passes
+- No new failures introduced
+- Exit codes remain 0 where they were 0
+- No increase in errors/warnings
+Examples:
+  • Baseline: 5 tests pass, 0 fail | After: 5 tests pass, 0 fail
+  • Baseline: build exits 0 | After: build exits 0
+  • Baseline: 2 tests fail, 8 pass | After: 2 tests still fail (same errors), 8 pass
+
+0.75 - Improved, No Regressions
+- All previously passing checks still pass (no regressions)
+- Previously failing checks show improvement (fewer errors, better exit codes, reduced failure count)
+- Overall health better or equal
+Examples:
+  • Baseline: 8 tests pass, 2 fail (20 assertions fail) | After: 8 tests pass, 2 fail (10 assertions fail)
+  • Baseline: build succeeds, lint fails with 50 errors | After: build succeeds, lint fails with 30 errors
+  • Baseline: type check exits 1 (15 errors) | After: type check exits 1 (8 errors), all other checks unchanged
+  • Baseline: 5 pass, 3 fail | After: 7 pass, 1 fail (net improvement)
+
+0.5 - Status Quo Maintained
+- No previously passing checks now fail
+- No improvements to failing checks (or minimal change)
+- Neutral outcome: maintained baseline health
+Examples:
+  • Baseline: 6 tests pass, 2 fail | After: 6 tests pass, 2 fail (same error messages)
+  • Baseline: build exits 0, lint exits 1 | After: build exits 0, lint exits 1 (same warnings)
+  • Baseline: 15 tests pass | After: 15 tests pass (no changes)
+  • Baseline: 3 checks fail with 10 errors each | After: 3 checks fail with 9-11 errors each (negligible change)
+
+0.25 - Minor Regressions
+- One or two previously passing checks now fail
+- Or: Multiple checks show degraded performance (higher error counts, worse exit codes)
+- Majority of health maintained but clear regressions present
+Examples:
+  • Baseline: 10 tests pass | After: 8 tests pass, 2 now fail
+  • Baseline: lint exits 0 | After: lint exits 1 (5 new errors introduced)
+  • Baseline: build exits 0, 8 tests pass | After: build exits 0, 6 tests pass
+  • Baseline: 5 checks pass | After: 4 checks pass, 1 now times out
+
+0.0 - Critical Failures
+- Multiple previously passing checks now fail
+- New critical failures introduced (build broken, major tests failing)
+- Severe degradation across the board
+Examples:
+  • Baseline: All 12 tests pass | After: 10 tests fail, 2 pass
+  • Baseline: build exits 0 | After: build exits 1 (compilation error), can't run tests
+  • Baseline: All checks pass | After: Multiple checks fail (lint, test, type check all broken)
+  • Baseline: 5 checks pass | After: All 5 checks now fail or error out
+
+Grade each command, then choose the overall score that best represents the combined outcome. Always mention the key facts (exit codes, failure counts, new vs removed errors) in your rationale so the reasoning is transparent.
+
+Return JSON with 'score' (must be exactly one of: 0, 0.25, 0.5, 0.75, 1.0) and a concise rationale.`;
 
 const COMMAND_TIMEOUT_MS = 5 * 60 * 1000;
 

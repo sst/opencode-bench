@@ -49,6 +49,7 @@ Instructions:
 - Do not mention commit hashes, commit history, or that the instructions originated from a commit; speak directly to the execution agent about the required work.
 - Phrase the instruction as a direct task (e.g., “Ship…”, “Verify…”, “Refine…”) rather than a meta prompt or “You should”.
 - Write from the perspective of a senior developer handing off work to a teammate. Keep the tone professional, pragmatic, and naturally human—no robotic phrasing or unnecessary verbosity.
+- All changes should be as tested and production-ready as if you were committing them yourself. The agent should be instructed to "run" or "build" or "test" as appropriate to ensure quality.
 
 Always respond strictly as JSON conforming to the schema. Do not add commentary.`;
 
