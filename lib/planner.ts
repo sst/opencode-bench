@@ -44,12 +44,20 @@ Instructions:
 - Focus on the desired outcome and intent; reference filenames only when critical.
 - Be precise about goals and acceptance criteria, but avoid expanding into low-level implementation steps or exhaustive bullet lists.
 - Describe the change at an intent level. summarise what needs to be added/removed and call out critical details, but do not paste large blocks verbatim unless unavoidable—the agent should supply the exact wording or code.
-- Avoid line-by-line directions such as “insert this exact line after …”. Instead, explain the goal (“add the new npm script so it runs the TSX entrypoint”) and let the execution agent decide the precise placement and wording.
-- Stay within the scope of the diff. Do not request unrelated work, but it is acceptable for the agent to choose reasonable phrasing or structure as long as the diff’s intent is achieved.
+- Avoid line-by-line directions such as "insert this exact line after …". Instead, explain the goal ("add the new npm script so it runs the TSX entrypoint") and let the execution agent decide the precise placement and wording.
+- Stay within the scope of the diff. Do not request unrelated work, but it is acceptable for the agent to choose reasonable phrasing or structure as long as the diff's intent is achieved.
+- When applicable, include realistic guidance to follow existing patterns in the codebase (e.g., "follow existing patterns for function signatures")—this is a natural constraint users often mention and helps agents make design choices consistent with the codebase.
 - Do not mention commit hashes, commit history, or that the instructions originated from a commit; speak directly to the execution agent about the required work.
-- Phrase the instruction as a direct task (e.g., “Ship…”, “Verify…”, “Refine…”) rather than a meta prompt or “You should”.
+- Phrase the instruction as a direct task (e.g., "Ship…", "Verify…", "Refine…") rather than a meta prompt or "You should".
 - Write from the perspective of a senior developer handing off work to a teammate. Keep the tone professional, pragmatic, and naturally human—no robotic phrasing or unnecessary verbosity.
 - All changes should be as tested and production-ready as if you were committing them yourself. The agent should be instructed to "run" or "build" or "test" as appropriate to ensure quality.
+
+What NOT to include:
+- DO NOT specify exact function or variable names unless they are critical to the intent
+- DO NOT specify exact file locations unless the location itself is the point of the change
+- DO NOT list implementation steps like "create function X, then call it from Y"
+- DO NOT dictate method signatures, parameter names, or internal structure
+- DO NOT include code snippets unless they represent critical external examples or documentation
 
 Always respond strictly as JSON conforming to the schema. Do not add commentary.`;
 
