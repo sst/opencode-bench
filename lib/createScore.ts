@@ -7,9 +7,9 @@ import type { Judge } from "~/lib/judgeTypes.js";
 
 export const scoreResultSchema = z.object({
   score: z.number().refine(
-    (val) => [0, 0.25, 0.5, 0.75, 1.0].includes(val),
+    (val) => val === 0 || val === 1,
     {
-      message: "Score must be one of: 0, 0.25, 0.5, 0.75, 1.0"
+      message: "Score must be binary: 0 (fail) or 1 (pass)"
     }
   ),
   rationale: z.string().min(1)
