@@ -1,0 +1,173 @@
+{
+  "version": 1,
+  "runs": [
+    {
+      "agent": "opencode",
+      "evaluation": {
+        "repo": "DataDog/datadog-lambda-python",
+        "from": "93d4a07fa61a4d4d2feec08e722505a9e0cc8657",
+        "to": "d7763789f262b2da228f8210509e302e6e510d0a"
+      },
+      "model": "opencode/gpt-5-codex",
+      "summary": {
+        "finalScore": 0.05128205128205127,
+        "baseScore": 0.07692307692307691,
+        "variancePenalty": 0.02564102564102564
+      },
+      "scores": [
+        {
+          "assignment": {
+            "name": "semantic-similarity",
+            "weight": 1
+          },
+          "averageScore": 0,
+          "normalizedWeight": 0.7692307692307692,
+          "variance": 0,
+          "judges": [
+            {
+              "name": "claude-4.5",
+              "model": "opencode/claude-sonnet-4-5",
+              "score": 0,
+              "rationale": "The candidate diff fails to faithfully reproduce the observable behavior of the reference commit due to a critical difference in function signature:\n\n**Critical Difference - Function Signature:**\n- **Reference**: `submit_batch_item_failures_metric(response, lambda_context)` - response is the FIRST parameter\n- **Candidate**: `submit_batch_item_failures_metric(lambda_context, response)` - lambda_context is the FIRST parameter\n\nThis is a breaking API change that affects all call sites.\n\n**Impact on Call Sites:**\n\nIn `wrapper.py`:\n- **Reference**: `submit_batch_item_failures_metric(self.response, context)`\n- **Candidate**: `submit_batch_item_failures_metric(context, self.response)`\n\nThe candidate correctly adjusts the call site to match its swapped signature, but this means the function has a fundamentally different API than the reference.\n\n**Impact on Tests:**\n\nIn `test_wrapper.py`:\n- **Reference tests**: Verify `call_args[0]` contains the response (first argument)\n- **Candidate tests**: Verify `args[0]` is lambda_context and `args[1]` is response\n\nThe tests confirm the different parameter ordering.\n\n**Other Observations:**\n\nWhile the candidate adds more detailed debug logging (which is an implementation detail and normally acceptable), the parameter order difference is NOT an implementation detail - it's part of the public API signature that other code depends on.\n\nThe core logic is equivalent (checking enhanced metrics, validating response type, extracting batchItemFailures, submitting metric), but the function signature mismatch means any external code calling this function would break when switching between these implementations.\n\n**Conclusion:**\nThis is a FAIL because the function signature is part of the observable behavior - it defines how the function is called throughout the codebase. The parameter order must match for the implementations to be equivalent."
+            },
+            {
+              "name": "gpt-5-codex",
+              "model": "opencode/gpt-5-codex",
+              "score": 0,
+              "rationale": "FAIL: The candidate’s changes reverse the argument order for submit_batch_item_failures_metric (lambda_context first, response second), whereas the reference commit expects (response, lambda_context). This alters the observable API and behavior; code calling the function with the reference order would fail. Wrapper and tests likewise use the reversed order, diverging from the reference. Thus the implementation does not faithfully reproduce the reference behavior."
+            },
+            {
+              "name": "kimi",
+              "model": "opencode/kimi-k2",
+              "score": 0,
+              "rationale": "FAIL: The candidate implementation has a critical API signature mismatch. In the reference, the function is defined as `submit_batch_item_failures_metric(response, lambda_context)` (response first, context second), but in the candidate it is defined as `submit_batch_item_failures_metric(lambda_context, response)` (context first, response second). This parameter order change alters the public API contract, making it incompatible with any code expecting the reference signature. Additionally, the wrapper integration calls the function with the wrong argument order (`context, self.response` instead of `self.response, context`), which would cause runtime errors. While the core logic and test coverage are largely equivalent, this API signature difference is a breaking change that fails the observable behavior requirement."
+            }
+          ]
+        },
+        {
+          "assignment": {
+            "name": "checks",
+            "weight": 0.3,
+            "args": {
+              "setup": [
+                "python3 -m venv .venv",
+                "./.venv/bin/python -m pip install \".[dev]\""
+              ],
+              "commands": [
+                "./.venv/bin/pytest -vv",
+                "./.venv/bin/flake8 datadog_lambda/"
+              ]
+            }
+          },
+          "averageScore": 0.3333333333333333,
+          "normalizedWeight": 0.23076923076923075,
+          "variance": 0.22222222222222224,
+          "judges": [
+            {
+              "name": "claude-4.5",
+              "model": "opencode/claude-sonnet-4-5",
+              "score": 0,
+              "rationale": "\n**Step 1: Baseline Check Inventory**\n\nCheck 1: `./.venv/bin/pytest -vv`\n- Baseline: PASS (exit 0)\n- 896 tests passed, 1 warning\n\nCheck 2: `./.venv/bin/flake8 datadog_lambda/`\n- Baseline: FAIL (exit 1)\n- Multiple E231 (missing whitespace after ':') violations across multiple files\n\n**Step 2: After-Agent Check Inventory**\n\nCheck 1: `./.venv/bin/pytest -vv`\n- After agent: PASS (exit 0)\n- 903 tests passed, 1 warning\n\nCheck 2: `./.venv/bin/flake8 datadog_lambda/`\n- After agent: FAIL (exit 1)\n- Same E231 violations as baseline PLUS 3 new E501 violations (line too long) in datadog_lambda/metric.py:\n  - Line 221: 102 > 100 characters\n  - Line 235: 105 > 100 characters\n  - Line 241: 109 > 100 characters\n\n**Step 3: Regression Detection**\n\nCheck 1 (pytest):\n- Baseline: PASS (exit 0, 896 tests passed)\n- After agent: PASS (exit 0, 903 tests passed)\n- Status: No regression. Actually improved - 7 more tests now pass (896 → 903)\n\nCheck 2 (flake8):\n- Baseline: FAIL (exit 1) with ~43 E231 violations\n- After agent: FAIL (exit 1) with ~43 E231 violations + 3 NEW E501 violations\n- Status: **REGRESSION DETECTED** - New linting errors introduced\n\n**Step 4: Exit Code Analysis**\n\nCheck 1:\n- Baseline exit code: 0\n- After agent exit code: 0\n- No degradation\n\nCheck 2:\n- Baseline exit code: 1\n- After agent exit code: 1\n- Exit code unchanged, but error count increased (43 → 46 violations)\n\n**Step 5: Final Decision**\n\n- Check 1 (pytest): Previously passing, still passing ✓\n- Check 2 (flake8): Previously failing, still failing BUT with additional errors ✗\n\nThe critical question: Did any previously passing check start failing?\n- Check 1 was passing and remains passing\n- Check 2 was already failing in baseline\n\nHowever, Check 2 got WORSE - it now has 3 additional E501 violations that were not present in the baseline. While the check was already failing, the agent introduced NEW failures on top of existing ones. This represents a degradation in code quality.\n\nAccording to the strict evaluation criteria: \"Any degradation from baseline = FAIL\" and \"Find problems, not excuse them.\" The agent made the flake8 check worse by introducing 3 new line-too-long violations in datadog_lambda/metric.py.\n\n**Step 6: Detailed Rationale**\n\nThe agent maintained the passing pytest check (even improved it with 7 more tests), but introduced 3 new flake8 violations (E501 line too long errors) in datadog_lambda/metric.py. While flake8 was already failing at baseline, the agent made it worse by adding new violations. This constitutes a regression in code quality standards.\n\n**Score: 0 (FAIL)** - The agent introduced new linting errors that were not present in the baseline, representing a degradation in code quality.\n"
+            },
+            {
+              "name": "gpt-5-codex",
+              "model": "opencode/gpt-5-codex",
+              "score": 1,
+              "rationale": "Step 1 – Baseline: pytest exit 0 (pass); flake8 exit 1 (fail). Step 2 – After agent: pytest exit 0 (pass); flake8 exit 1 (fail). Step 3 – Regression check: the only previously passing check (pytest) still passes; no baseline-pass check failed. Step 4 – Exit codes unchanged (pytest 0→0; flake8 1→1). Step 5 – All baseline-pass checks continue to pass, so no regression. Step 6 – Conclusion: despite flake8 gaining additional errors, it was already failing, so no regression introduced. Result: PASS (1)."
+            },
+            {
+              "name": "kimi",
+              "model": "opencode/kimi-k2",
+              "score": 0,
+              "rationale": "Step 1 – Baseline Check Inventory\n- pytest: 896 collected, 896 passed, exit 0 → PASS\n- flake8: exit 1, 37 E231 (missing-whitespace) errors → FAIL\n\nStep 2 – After-Agent Check Inventory\n- pytest: 903 collected, 903 passed, exit 0 → PASS (no regression, +7 tests)\n- flake8: exit 1, 37 E231 errors **plus 3 new E501 line-too-long errors** → FAIL\n\nStep 3 – Regression Detection\n- flake8 introduced 3 brand-new E501 failures that did not exist in the baseline. These are new failures in a check that was already failing, but the key criterion is: did any previously passing check start failing? YES — the flake8 run now has additional failures (the E501s) that it did not have before. Even though the exit code stayed 1, the agent increased the failure count, which is a regression under the zero-tolerance rule.\n\nStep 4 – Exit-Code Analysis\n- pytest: 0 → 0 (no change)\n- flake8: 1 → 1 (same exit code, but more errors)\n\nStep 5 – Final Decision\nBecause new failures were introduced in flake8 (previously passing lines now violate E501), the agent regressed the codebase.\n\nStep 6 – Summary\nThe agent added 7 new passing tests but also introduced 3 new flake8 violations. Under a zero-tolerance policy for regressions, this equals FAIL."
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "agent": "opencode",
+      "evaluation": {
+        "repo": "DataDog/datadog-lambda-python",
+        "from": "93d4a07fa61a4d4d2feec08e722505a9e0cc8657",
+        "to": "d7763789f262b2da228f8210509e302e6e510d0a"
+      },
+      "model": "opencode/claude-sonnet-4-5",
+      "summary": {
+        "finalScore": 0.23076923076923075,
+        "baseScore": 0.23076923076923075,
+        "variancePenalty": 0
+      },
+      "scores": [
+        {
+          "assignment": {
+            "name": "semantic-similarity",
+            "weight": 1
+          },
+          "averageScore": 0,
+          "normalizedWeight": 0.7692307692307692,
+          "variance": 0,
+          "judges": [
+            {
+              "name": "claude-4.5",
+              "model": "opencode/claude-sonnet-4-5",
+              "score": 0,
+              "rationale": "The candidate diff fails to reproduce the observable behavior of the reference commit in several critical ways:\n\n## Critical Differences:\n\n### 1. **Different Function Logic (FAIL)**\n**Reference**: Submits metric for ANY count of batch item failures, including 0:\n```python\nif batch_item_failures is not None and isinstance(batch_item_failures, list):\n    lambda_metric(\n        \"aws.lambda.enhanced.batch_item_failures\",\n        len(batch_item_failures),  # Can be 0\n        ...\n    )\n```\n\n**Candidate**: Only submits metric when count > 0:\n```python\nfailure_count = len(batch_item_failures)\nif failure_count > 0:  # Extra condition!\n    lambda_metric(metric_name, failure_count, ...)\n```\n\nThis is a **fundamental behavioral difference**. The reference will emit a metric with value 0 when there are no failures, while the candidate will not emit any metric at all.\n\n### 2. **Different Test Assertions (FAIL)**\n**Reference test** `test_submit_batch_item_failures_with_no_failures`:\n```python\nresponse = {\"batchItemFailures\": []}\nsubmit_batch_item_failures_metric(response, context)\nself.mock_lambda_metric.assert_called_once_with(\n    \"aws.lambda.enhanced.batch_item_failures\",\n    0,  # Expects metric to be called with 0\n    ...\n)\n```\n\n**Candidate test** `test_submit_batch_item_failures_with_empty_list`:\n```python\nresponse = {\"batchItemFailures\": []}\nsubmit_batch_item_failures_metric(response, context)\nself.mock_lambda_metric.assert_not_called()  # Expects NO call\n```\n\nThe candidate test explicitly asserts the OPPOSITE behavior - that no metric is submitted when the list is empty.\n\n### 3. **Different Integration Point (FAIL)**\n**Reference**: Calls function in `_after` method at line 296 (before status code extraction)\n**Candidate**: Calls function in `_after` method at line 368 (after cold start trace logic)\n\nThese are different locations in the execution flow, which could affect timing and error handling.\n\n### 4. **Test Coverage Differences**\nThe reference has 6 test cases in `TestBatchItemFailuresMetric`, while the candidate has 9 test cases. The candidate adds extra tests that aren't in the reference, but more importantly, the assertions for the empty list case contradict the reference behavior.\n\n## Summary:\nThe most critical failure is that the candidate implementation will NOT emit a metric when `batchItemFailures` is an empty list, while the reference implementation WILL emit a metric with value 0. This is a fundamental difference in observable behavior that would be caught in production - monitoring dashboards would show different data, and alerts based on this metric would behave differently."
+            },
+            {
+              "name": "gpt-5-codex",
+              "model": "opencode/gpt-5-codex",
+              "score": 0,
+              "rationale": "The candidate implementation of submit_batch_item_failures_metric skips emitting the metric when the failure list is empty (count 0), while the reference commit emits the metric with a value of 0. Corresponding tests were also altered to expect no call in that case. This diverges from the intended observable behavior, so the reproduction fails."
+            },
+            {
+              "name": "kimi",
+              "model": "opencode/kimi-k2",
+              "score": 0,
+              "rationale": "The candidate implementation has a critical behavioral difference from the reference: it only submits the metric when failure_count > 0, whereas the reference submits the metric for ANY list (including empty lists with 0 failures). This is observable behavior - the reference will emit a metric with value 0 for empty batchItemFailures, but the candidate will not emit any metric at all. Additionally, the test coverage is incomplete: the candidate tests do NOT verify that a metric with value 0 is submitted for an empty list (they assert the metric is NOT called), which directly contradicts the reference behavior. The reference explicitly tests this scenario and expects the metric to be called with value 0. These differences in metric emission behavior and test assertions make the implementations non-equivalent."
+            }
+          ]
+        },
+        {
+          "assignment": {
+            "name": "checks",
+            "weight": 0.3,
+            "args": {
+              "setup": [
+                "python3 -m venv .venv",
+                "./.venv/bin/python -m pip install \".[dev]\""
+              ],
+              "commands": [
+                "./.venv/bin/pytest -vv",
+                "./.venv/bin/flake8 datadog_lambda/"
+              ]
+            }
+          },
+          "averageScore": 1,
+          "normalizedWeight": 0.23076923076923075,
+          "variance": 0,
+          "judges": [
+            {
+              "name": "claude-4.5",
+              "model": "opencode/claude-sonnet-4-5",
+              "score": 1,
+              "rationale": "\n**Step 1: Baseline Check Inventory**\n\nCheck 1: `./.venv/bin/pytest -vv`\n- Baseline: PASS (exit 0)\n- 896 tests passed, 1 warning\n\nCheck 2: `./.venv/bin/flake8 datadog_lambda/`\n- Baseline: FAIL (exit 1)\n- Multiple E231 style violations (missing whitespace after ':')\n\n**Step 2: After-Agent Check Inventory**\n\nCheck 1: `./.venv/bin/pytest -vv`\n- After agent: PASS (exit 0)\n- 908 tests passed, 1 warning\n\nCheck 2: `./.venv/bin/flake8 datadog_lambda/`\n- After agent: FAIL (exit 1)\n- Same E231 style violations as baseline\n\n**Step 3: Regression Detection**\n\nCheck 1 (pytest):\n- Baseline: PASS (exit 0, 896 tests passed)\n- After agent: PASS (exit 0, 908 tests passed)\n- Status: NO REGRESSION - Actually improved! The agent added 12 new passing tests (896 → 908)\n\nCheck 2 (flake8):\n- Baseline: FAIL (exit 1)\n- After agent: FAIL (exit 1)\n- Status: NO REGRESSION - Both failed with identical violations. The check was already failing before the agent ran.\n\n**Step 4: Exit Code Analysis**\n\nCheck 1:\n- Baseline exit code: 0\n- After-agent exit code: 0\n- No degradation ✓\n\nCheck 2:\n- Baseline exit code: 1\n- After-agent exit code: 1\n- No degradation (was already failing) ✓\n\n**Step 5: Final Decision**\n\n- ALL previously passing checks still pass? ✓ YES (Check 1 still passes)\n- NO new failures introduced? ✓ YES (Check 2 was already failing in baseline)\n\nBoth checkmarks are present, so the score is 1 (PASS).\n\n**Step 6: Detailed Rationale**\n\nThe agent successfully maintained project health and actually improved it:\n\n1. **Check 1 (pytest)**: The test suite remained passing (exit 0 → exit 0) and actually improved from 896 to 908 passing tests. This indicates the agent added 12 new tests that all pass. This is a clear improvement, not a regression.\n\n2. **Check 2 (flake8)**: This check was already failing in the baseline with exit code 1 and multiple E231 style violations. After the agent's changes, it still fails with exit code 1 and the exact same violations. Since this check was already failing before the agent ran, maintaining the same failure state is not a regression.\n\n**Key criterion**: Did any previously passing check start failing? \nAnswer: NO. The only passing check (pytest) remained passing and actually improved.\n\nThe agent maintained the baseline health and improved test coverage without introducing any regressions.\n"
+            },
+            {
+              "name": "gpt-5-codex",
+              "model": "opencode/gpt-5-codex",
+              "score": 1,
+              "rationale": "Baseline passing check: pytest (exit 0). Baseline failing check: flake8 (exit 1).\nAfter agent: pytest still exit 0 (passes); flake8 still exit 1 (continues failing as before).\nNo previously passing check regressed, so overall status is PASS."
+            },
+            {
+              "name": "kimi",
+              "model": "opencode/kimi-k2",
+              "score": 1,
+              "rationale": "Step 1: Baseline Check Inventory\n- pytest: PASS (exit 0, 896 tests passed)\n- flake8: FAIL (exit 1, 35 E231 whitespace errors)\n\nStep 2: After-Agent Check Inventory\n- pytest: PASS (exit 0, 908 tests passed - 12 additional tests added)\n- flake8: FAIL (exit 1, identical 35 E231 whitespace errors)\n\nStep 3: Regression Detection\n- pytest: All 896 previously passing tests still pass, plus 12 new tests pass\n- flake8: No change - same failures as baseline (no regressions)\n\nStep 4: Exit Code Analysis\n- pytest: exit 0 → exit 0 (maintained)\n- flake8: exit 1 → exit 1 (maintained)\n\nStep 5: Final Decision\n✓ ALL previously passing checks still pass\n✓ NO new failures introduced\nThe agent improved the test suite by adding 12 new passing tests while maintaining all existing functionality. The flake8 failures were pre-existing and unchanged.\n\nKey facts: 896→908 tests passed, exit codes maintained at 0 for pytest and 1 for flake8, no regressions detected."
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

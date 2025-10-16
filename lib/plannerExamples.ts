@@ -8,24 +8,6 @@ import diff_d7763789f262b2da228f8210509e302e6e510d0a from "~/planner/examples/d7
 export const plannerExamples: PlannerExample[] = [
   {
     diff: diff_d7763789f262b2da228f8210509e302e6e510d0a,
-    prompt: `Add a new feature to count the number of "batchItemFailures" returned by a Lambda function and emit a new enhanced metric for the value. It should be named \`aws.lambda.enhanced.batch_item_failures\`. The metric should be created in metric.py and set in the \`_after\` method in \`wrapper.py\` based on the \`self.response\` object. The docs for this are
-\`\`\`
-# Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
-# SPDX-License-Identifier: Apache-2.0
-
-def lambda_handler(event, context):
-    if event:
-        batch_item_failures = []
-        sqs_batch_response = {}
-
-        for record in event["Records"]:
-            try:
-                print(f"Processed message: {record['body']}")
-            except Exception as e:
-                batch_item_failures.append({"itemIdentifier": record['messageId']})
-
-        sqs_batch_response["batchItemFailures"] = batch_item_failures
-        return sqs_batch_response
-\`\`\``,
+    prompt: `Add a metric to track Lambda batch item failures. When Lambda functions return a response containing batch item failures (the batchItemFailures field), we should emit a count of how many items failed as an enhanced metric. This should only happen when enhanced metrics are enabled and the response structure is valid. Follow existing codebase patterns for function signatures and integration points. Include comprehensive test coverage for various scenarios including responses with failures, empty failures, missing fields, and edge cases.`,
   },
 ];
