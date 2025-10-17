@@ -3,10 +3,16 @@
   to: 2760114f2647ebec8f63e0ecc2dc87a8cd4096ac
   issues: []
   scores:
-    semantic-similarity:
-      weight: 1
-    checks:
+    api-signature:
+      weight: 0.2
+    logic-equivalence:
       weight: 0.3
+    integration-points:
+      weight: 0.2
+    test-coverage:
+      weight: 0.2
+    checks:
+      weight: 0.1
       args:
         setup:
           - npm ci
@@ -19,10 +25,16 @@
   to: d7763789f262b2da228f8210509e302e6e510d0a
   issues: []
   scores:
-    semantic-similarity:
-      weight: 1
-    checks:
+    api-signature:
+      weight: 0.2
+    logic-equivalence:
       weight: 0.3
+    integration-points:
+      weight: 0.2
+    test-coverage:
+      weight: 0.2
+    checks:
+      weight: 0.1
       args:
         setup:
           - python3 -m venv .venv
@@ -36,5 +48,13 @@
   to: 21845e972dd8e2378cbcd16accc5ae8cdd37acb2
   issues: []
   scores:
-    semantic-similarity:
-      weight: 1
+    api-signature:
+      weight: 0.2
+    logic-equivalence:
+      weight: 0.3
+    integration-points:
+      weight: 0.2
+    test-coverage:
+      weight: 0.2
+    checks:
+      weight: 0.1

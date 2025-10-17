@@ -47,7 +47,7 @@ From both diffs, list each test and what it tests:
 ### Step 2: Compare Scenario Coverage
 
 **Test Scenario Example:**
-```
+\`\`\`
 Reference test_with_failures:
 - Input: {"batchItemFailures": [{"id": "1"}, {"id": "2"}]}
 - Assertion: metric called with value 2
@@ -55,11 +55,11 @@ Reference test_with_failures:
 Candidate test_with_failures:
 - Input: {"batchItemFailures": [{"id": "1"}, {"id": "2"}, {"id": "3"}]}
 - Assertion: metric called with value 3
-```
-→ **MATCH** - same scenario (failures present), different data but same concept
+\`\`\`
+-> **MATCH** - same scenario (failures present), different data but same concept
 
 **Missing Scenario Example:**
-```
+\`\`\`
 Reference has:
 - test_with_failures
 - test_with_no_failures (empty list)
@@ -70,20 +70,20 @@ Candidate has:
 - test_with_failures
 - test_with_no_field
 - test_with_null_response
-```
-→ **NO MATCH** - missing test_with_no_failures scenario
+\`\`\`
+-> **NO MATCH** - missing test_with_no_failures scenario
 
 ### Step 3: Compare Assertions
 
 **Assertion Example:**
-```
+\`\`\`
 Reference:
 assert mock_metric.called_once_with("metric_name", 0, ...)
 
 Candidate:
 assert not mock_metric.called()
-```
-→ **NO MATCH** - different assertions (expects call vs expects no call)
+\`\`\`
+-> **NO MATCH** - different assertions (expects call vs expects no call)
 
 ### Step 4: Make Your Decision
 
@@ -104,7 +104,7 @@ assert not mock_metric.called()
 ## EXAMPLES
 
 **PASS Example:**
-```
+\`\`\`
 Reference (unittest):
 class TestBatchFailures(unittest.TestCase):
     def test_with_failures(self):
@@ -117,11 +117,11 @@ def test_with_failures():
     response = {"batchItemFailures": [{"id": "1"}]}
     submit_metric(response, ctx)
     assert mock_called_once()
-```
+\`\`\`
 **Verdict**: PASS - same scenario, different test framework
 
 **FAIL Example:**
-```
+\`\`\`
 Reference has 6 tests:
 1. test_with_failures
 2. test_with_no_failures (empty list)
@@ -138,21 +138,21 @@ Candidate has 5 tests:
 5. test_with_metrics_disabled
 
 Missing: test_with_no_failures
-```
+\`\`\`
 **Verdict**: FAIL - missing test scenario for empty list
 
 **FAIL Example (Different Assertion):**
-```
+\`\`\`
 Reference test_empty_list:
 response = {"batchItemFailures": []}
 submit_metric(response, ctx)
-assert_called_with("metric", 0, ...)  # Expects metric with value 0
+assert_called_with("metric", 0, ...)  // Expects metric with value 0
 
 Candidate test_empty_list:
 response = {"batchItemFailures": []}
 submit_metric(response, ctx)
-assert_not_called()  # Expects NO metric call
-```
+assert_not_called()  // Expects NO metric call
+\`\`\`
 **Verdict**: FAIL - tests same scenario but expects different outcome
 
 ---

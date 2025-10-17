@@ -47,43 +47,45 @@ From both diffs, identify:
 ### Step 2: Compare Each Integration Point
 
 **Import Location:**
-```
+\`\`\`
 Reference:
-# In file: wrapper.py, line 47
+// In file: wrapper.py, line 47
 from datadog_lambda.metric import submit_batch_item_failures_metric
 
 Candidate:
-# In file: wrapper.py, line 47
+// In file: wrapper.py, line 47
 from datadog_lambda.metric import submit_batch_item_failures_metric
-```
-→ **MATCH** - same file, same import
+\`\`\`
+-> **MATCH** - same file, same import
 
 **Call Location:**
-```
+\`\`\`
 Reference:
-# In file: wrapper.py, inside _after() method, line 296
+// In file: wrapper.py, inside _after() method, line 296
 submit_batch_item_failures_metric(self.response, context)
 
 Candidate:
-# In file: wrapper.py, inside _after() method, line 296
+// In file: wrapper.py, inside _after() method, line 296
 submit_batch_item_failures_metric(self.response, context)
-```
-→ **MATCH** - same file, same function, same location
+\`\`\`
+-> **MATCH** - same file, same function, same location
 
 **Call Timing:**
-```
+\`\`\`
 Reference:
-def _after(self, event, context):
-    submit_batch_item_failures_metric(self.response, context)  # Line 296
-    status_code = extract_http_status_code_tag(...)  # Line 298
+def _after(self, event, context) {
+    submit_batch_item_failures_metric(self.response, context)  // Line 296
+    status_code = extract_http_status_code_tag(...)  // Line 298
+}
 
 Candidate:
-def _after(self, event, context):
-    cold_start_trace_logic(...)  # Line 360
-    submit_batch_item_failures_metric(self.response, context)  # Line 368
-    status_code = extract_http_status_code_tag(...)  # Line 370
-```
-→ **NO MATCH** - called at different point in execution flow
+def _after(self, event, context) {
+    cold_start_trace_logic(...)  // Line 360
+    submit_batch_item_failures_metric(self.response, context)  // Line 368
+    status_code = extract_http_status_code_tag(...)  // Line 370
+}
+\`\`\`
+-> **NO MATCH** - called at different point in execution flow
 
 ### Step 3: Make Your Decision
 
@@ -104,44 +106,48 @@ def _after(self, event, context):
 ## EXAMPLES
 
 **PASS Example:**
-```
+\`\`\`
 Reference:
-# wrapper.py, _after method, line 47-49
+// wrapper.py, _after method, line 47-49
 from datadog_lambda.metric import submit_batch_item_failures_metric
 ...
-def _after(self, event, context):
-    try:
+def _after(self, event, context) {
+    try {
         submit_batch_item_failures_metric(self.response, context)
         status_code = extract_http_status_code_tag(...)
+    }
+}
 
 Candidate:
-# wrapper.py, _after method, line 47-49
+// wrapper.py, _after method, line 47-49
 from datadog_lambda.metric import submit_batch_item_failures_metric
 ...
-def _after(self, event, context):
-    try:
+def _after(self, event, context) {
+    try {
         submit_batch_item_failures_metric(self.response, context)
         status_code = extract_http_status_code_tag(...)
-```
+    }
+}
+\`\`\`
 **Verdict**: PASS - same file, same method, same relative position
 
 **FAIL Example:**
-```
+\`\`\`
 Reference:
-# wrapper.py, _after method, line 296
+// wrapper.py, _after method, line 296
 submit_batch_item_failures_metric(self.response, context)
 status_code = extract_http_status_code_tag(...)
 
 Candidate:
-# wrapper.py, _after method, line 368 (different location)
+// wrapper.py, _after method, line 368 (different location)
 cold_start_trace(...)
 submit_batch_item_failures_metric(self.response, context)
 status_code = extract_http_status_code_tag(...)
-```
+\`\`\`
 **Verdict**: FAIL - called at different point in execution (after cold_start_trace)
 
 **PASS Example (Variable Names Don't Matter):**
-```
+\`\`\`
 Reference:
 submit_batch_item_failures_metric(self.response, context)
 
@@ -149,7 +155,7 @@ Candidate:
 lambda_response = self.response
 lambda_ctx = context
 submit_batch_item_failures_metric(lambda_response, lambda_ctx)
-```
+\`\`\`
 **Verdict**: PASS - different variable names but same values passed
 
 ---

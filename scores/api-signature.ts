@@ -53,25 +53,25 @@ From both diffs, list out:
 For each signature in the reference, find it in the candidate:
 
 **Function Example:**
-```
+\`\`\`
 Reference: def submit_metric(response, context, options=None)
 Candidate: def submit_metric(response, context, options=None)
-→ MATCH
-```
+-> MATCH
+\`\`\`
 
 **Parameter Order Example:**
-```
+\`\`\`
 Reference: def submit_metric(response, context)
 Candidate: def submit_metric(context, response)
-→ NO MATCH - different parameter order
-```
+-> NO MATCH - different parameter order
+\`\`\`
 
 **Parameter Names Example:**
-```
+\`\`\`
 Reference: def process(data, config)
 Candidate: def process(input_data, settings)
-→ NO MATCH - different parameter names
-```
+-> NO MATCH - different parameter names
+\`\`\`
 
 ### Step 3: Make Your Decision
 
@@ -91,7 +91,7 @@ Candidate: def process(input_data, settings)
 ## EXAMPLES
 
 **PASS Example:**
-```
+\`\`\`
 Reference:
 def calculate_total(items, tax_rate, discount=0.0):
     ...
@@ -100,11 +100,11 @@ Candidate:
 def calculate_total(items, tax_rate, discount=0.0):
     # Different implementation but same signature
     ...
-```
+\`\`\`
 **Verdict**: PASS - signature matches exactly
 
 **FAIL Example:**
-```
+\`\`\`
 Reference:
 def calculate_total(items, tax_rate, discount=0.0):
     ...
@@ -112,11 +112,11 @@ def calculate_total(items, tax_rate, discount=0.0):
 Candidate:
 def calculate_total(tax_rate, items, discount=0.0):
     ...
-```
+\`\`\`
 **Verdict**: FAIL - parameter order changed (items and tax_rate swapped)
 
 **FAIL Example:**
-```
+\`\`\`
 Reference:
 def process_request(request, context):
     ...
@@ -124,7 +124,7 @@ def process_request(request, context):
 Candidate:
 def process_request(req, ctx):
     ...
-```
+\`\`\`
 **Verdict**: FAIL - parameter names changed (even though they're reasonable abbreviations)
 
 ---

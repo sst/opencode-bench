@@ -1,0 +1,347 @@
+{
+  "version": 1,
+  "runs": [
+    {
+      "agent": "opencode",
+      "evaluation": {
+        "repo": "DataDog/datadog-lambda-python",
+        "from": "93d4a07fa61a4d4d2feec08e722505a9e0cc8657",
+        "to": "d7763789f262b2da228f8210509e302e6e510d0a"
+      },
+      "model": "opencode/gpt-5-codex",
+      "summary": {
+        "finalScore": 0.6333333333333335,
+        "baseScore": 0.6666666666666669,
+        "variancePenalty": 0.03333333333333334
+      },
+      "scores": [
+        {
+          "assignment": {
+            "name": "api-signature",
+            "weight": 0.2
+          },
+          "averageScore": 1,
+          "normalizedWeight": 0.20000000000000004,
+          "variance": 0,
+          "judges": [
+            {
+              "name": "claude-4.5",
+              "model": "opencode/claude-sonnet-4-5",
+              "score": 1,
+              "rationale": "After comparing the API signatures between the reference and candidate diffs, all function signatures match exactly:\n\n1. **submit_batch_item_failures_metric(response, lambda_context)**: Both reference and candidate define this function with identical parameter names and order:\n   - Reference: `def submit_batch_item_failures_metric(response, lambda_context):`\n   - Candidate: `def submit_batch_item_failures_metric(response, lambda_context):`\n\n2. **Import statements**: Both diffs import the same function in wrapper.py:\n   - Reference: `from datadog_lambda.metric import submit_batch_item_failures_metric`\n   - Candidate: `from datadog_lambda.metric import submit_batch_item_failures_metric`\n\n3. **Function calls**: Both diffs call the function with the same parameter order:\n   - Reference: `submit_batch_item_failures_metric(self.response, context)`\n   - Candidate: `submit_batch_item_failures_metric(self.response, context)`\n\nThe implementation details differ (the candidate has additional debug logging and slightly different control flow), but the public API signature is identical. The function name, parameter names (response, lambda_context), and parameter order all match exactly between reference and candidate."
+            },
+            {
+              "name": "gpt-5-codex",
+              "model": "opencode/gpt-5-codex",
+              "score": 1,
+              "rationale": "All public function and method signatures, including the newly added `submit_batch_item_failures_metric(response, lambda_context)`, match exactly between reference and candidate. No discrepancies found."
+            },
+            {
+              "name": "kimi",
+              "model": "opencode/kimi-k2",
+              "score": 1,
+              "rationale": "All API signatures match exactly:\n\n1. Function signature in datadog_lambda/metric.py:\n   - Reference: def submit_batch_item_failures_metric(response, lambda_context)\n   - Candidate: def submit_batch_item_failures_metric(response, lambda_context)\n   - MATCH: Function name, parameter names, and parameter order are identical\n\n2. Import statement in datadog_lambda/wrapper.py:\n   - Reference: from datadog_lambda.metric import submit_batch_item_failures_metric\n   - Candidate: from datadog_lambda.metric import submit_batch_item_failures_metric\n   - MATCH: Import statement is identical\n\n3. Function call in datadog_lambda/wrapper.py:\n   - Reference: submit_batch_item_failures_metric(self.response, context)\n   - Candidate: submit_batch_item_failures_metric(self.response, context)\n   - MATCH: Function call with same parameter order and names\n\n4. Test function imports in tests/test_metric.py:\n   - Reference: from datadog_lambda.metric import submit_batch_item_failures_metric\n   - Candidate: from datadog_lambda.metric import submit_batch_item_failures_metric\n   - MATCH: Import statement is identical\n\n5. Test function calls in tests/test_metric.py:\n   - Reference: submit_batch_item_failures_metric(response, context)\n   - Candidate: submit_batch_item_failures_metric(response, self.lambda_context)\n   - MATCH: Function name and first parameter match; second parameter is context/lambda_context which are synonymous\n\n6. Test function calls in tests/test_wrapper.py:\n   - Reference: submit_batch_item_failures_metric(self.response, context)\n   - Candidate: submit_batch_item_failures_metric(self.response, context)\n   - MATCH: Function call with same parameter order and names\n\nAll function signatures, imports, and calls maintain exact API compatibility."
+            }
+          ]
+        },
+        {
+          "assignment": {
+            "name": "logic-equivalence",
+            "weight": 0.3
+          },
+          "averageScore": 1,
+          "normalizedWeight": 0.30000000000000004,
+          "variance": 0,
+          "judges": [
+            {
+              "name": "claude-4.5",
+              "model": "opencode/claude-sonnet-4-5",
+              "score": 1,
+              "rationale": "Let me analyze the logical behavior of both implementations:\n\n## Key Logical Elements to Compare:\n\n### 1. `submit_batch_item_failures_metric` function logic:\n\n**Reference:**\n```python\nif not config.enhanced_metrics_enabled:\n    return\nif not isinstance(response, dict):\n    return\nbatch_item_failures = response.get(\"batchItemFailures\")\nif batch_item_failures is not None and isinstance(batch_item_failures, list):\n    lambda_metric(...)  # Emits metric\n```\n\n**Candidate:**\n```python\nif not config.enhanced_metrics_enabled:\n    return\nif not isinstance(response, dict):\n    return\nfailures = response.get(\"batchItemFailures\")\nif not isinstance(failures, list):\n    return\nlambda_metric(...)  # Emits metric\n```\n\n**Critical Difference:**\n- **Reference**: `if batch_item_failures is not None and isinstance(batch_item_failures, list):`\n  - This emits the metric when the field exists AND is a list (including empty lists)\n  - When `batchItemFailures` is `None` (field missing), it does NOT emit\n  \n- **Candidate**: `if not isinstance(failures, list):`\n  - This returns early if the field is NOT a list\n  - When `batchItemFailures` is `None` (field missing), `isinstance(None, list)` returns `False`, so the condition `not isinstance(failures, list)` is `True`, causing an early return\n  - This appears logically equivalent\n\n**Edge Case Analysis:**\n\n1. **Empty list `[]`:**\n   - Reference: `[] is not None` = True, `isinstance([], list)` = True → **EMITS metric with value 0**\n   - Candidate: `isinstance([], list)` = True, `not isinstance([], list)` = False → continues → **EMITS metric with value 0**\n   - ✅ EQUIVALENT\n\n2. **Field missing (None):**\n   - Reference: `None is not None` = False → **NO EMIT**\n   - Candidate: `isinstance(None, list)` = False, `not isinstance(None, list)` = True → returns → **NO EMIT**\n   - ✅ EQUIVALENT\n\n3. **Non-list value (e.g., \"invalid\"):**\n   - Reference: `\"invalid\" is not None` = True, `isinstance(\"invalid\", list)` = False → **NO EMIT**\n   - Candidate: `isinstance(\"invalid\", list)` = False, `not isinstance(\"invalid\", list)` = True → returns → **NO EMIT**\n   - ✅ EQUIVALENT\n\nThe logic is equivalent, just structured differently (guard clause vs combined condition).\n\n### 2. Wrapper integration:\n\n**Reference (wrapper.py):**\n```python\ndef _after(self, event, context):\n    try:\n        from datadog_lambda.metric import submit_batch_item_failures_metric\n        submit_batch_item_failures_metric(self.response, context)\n        status_code = extract_http_status_code_tag(...)\n        # rest of code\n```\n\n**Candidate (wrapper.py):**\n```python\n# Import at top of file\nfrom datadog_lambda.metric import submit_batch_item_failures_metric\n\ndef _after(self, event, context):\n    try:\n        # ... other code ...\n        # Flush exception replay\n        if config.exception_replay_enabled:\n            SignalUploader._instance.periodic()\n        \n        submit_batch_item_failures_metric(self.response, context)\n        \n        if config.encode_authorizer_context and is_authorizer_response(self.response):\n            # ...\n```\n\n**Critical Difference:**\n- **Reference**: Calls `submit_batch_item_failures_metric` at the **beginning** of the `_after` method (inside try block)\n- **Candidate**: Calls `submit_batch_item_failures_metric` **later** in the `_after` method, after exception replay flushing\n\nBoth call the function unconditionally within the try block, so the side effect occurs in both cases. The placement difference doesn't affect whether it's called, just when. Since both are in the same try block and both execute unconditionally (no conditional wrapping), this is logically equivalent in terms of \"does it get called\" - YES in both cases.\n\n### 3. Test Coverage Verification:\n\nBoth test suites verify:\n- Metric emitted with count > 0\n- Metric emitted with count = 0 (empty list)\n- No metric when field missing\n- No metric when response is None\n- No metric when field is not a list\n- No metric when enhanced metrics disabled\n- Wrapper calls the function with response and context\n\nThe tests confirm both implementations handle the same cases.\n\n## Conclusion:\n\nThe logical behavior is **EQUIVALENT**:\n1. Same conditions checked (just structured differently - guard clauses vs combined conditions)\n2. Same outcomes for all inputs (empty list, missing field, None, non-list, disabled metrics)\n3. Same edge cases handled\n4. Same side effects (metric emission) under same conditions\n5. Both call the function unconditionally in the wrapper's _after method"
+            },
+            {
+              "name": "gpt-5-codex",
+              "model": "opencode/gpt-5-codex",
+              "score": 1,
+              "rationale": "Both implementations gate submission on enhanced metrics being enabled, require the response to be a dict, and only emit the metric when batchItemFailures is a list—emitting the list length (including zero). The wrapper invokes the metric submission under the same conditions. Additional debug logging in the candidate does not alter the control flow, emitted metrics, or return values. Logical behavior matches."
+            },
+            {
+              "name": "kimi",
+              "model": "opencode/kimi-k2",
+              "score": 1,
+              "rationale": "The candidate implementation reproduces the exact same logical behavior as the reference:\n\n1. **Enhanced metrics check**: Both check `config.enhanced_metrics_enabled` and return early if disabled.\n\n2. **Response type check**: Both check `isinstance(response, dict)` and return early if not a dict.\n\n3. **Batch failures extraction**: Both extract `batchItemFailures` from response using `.get(\"batchItemFailures\")`.\n\n4. **List validation**: Both check `isinstance(batch_item_failures, list)` (reference) / `isinstance(failures, list)` (candidate) and only proceed if it's a list.\n\n5. **Metric emission**: Both call `lambda_metric()` with the same parameters when all conditions are met, including calling `len()` on the failures list to get the count.\n\n6. **Edge cases**: Both handle the same edge cases identically:\n   - Enhanced metrics disabled → no metric emitted\n   - Response is None or not dict → no metric emitted  \n   - batchItemFailures missing or not a list → no metric emitted\n   - Empty list → metric emitted with value 0\n   - Non-empty list → metric emitted with correct count\n\n7. **Side effects**: Both call the same functions (`get_enhanced_metrics_tags`, `lambda_metric`) under the same conditions.\n\nThe only differences are variable naming (`batch_item_failures` vs `failures`) and additional debug logging in the candidate, but these do not affect the logical behavior or outcomes."
+            }
+          ]
+        },
+        {
+          "assignment": {
+            "name": "integration-points",
+            "weight": 0.2
+          },
+          "averageScore": 0,
+          "normalizedWeight": 0.20000000000000004,
+          "variance": 0,
+          "judges": [
+            {
+              "name": "claude-4.5",
+              "model": "opencode/claude-sonnet-4-5",
+              "score": 0,
+              "rationale": "\n## Integration Point Analysis\n\n### 1. Import Statements\n\n**Reference:**\n- File: `datadog_lambda/wrapper.py`, line ~294 (inside `_after` method)\n- Import: `from datadog_lambda.metric import submit_batch_item_failures_metric`\n- Location: **Inside the `_after` method** (lazy import)\n\n**Candidate:**\n- File: `datadog_lambda/wrapper.py`, line ~27 (top of file)\n- Import: `from datadog_lambda.metric import submit_batch_item_failures_metric`\n- Location: **At the top of the file** (module-level import)\n\n**Verdict:** MISMATCH - Different import locations (lazy import vs module-level import)\n\n### 2. Function Call Location\n\n**Reference:**\n- File: `datadog_lambda/wrapper.py`\n- Method: `_after(self, event, context)`\n- Line: ~296\n- Code context:\n```python\ndef _after(self, event, context):\n    try:\n        from datadog_lambda.metric import submit_batch_item_failures_metric\n        submit_batch_item_failures_metric(self.response, context)\n        status_code = extract_http_status_code_tag(self.trigger_tags, self.response)\n```\n- Position: **Immediately after the import, before `extract_http_status_code_tag`**\n\n**Candidate:**\n- File: `datadog_lambda/wrapper.py`\n- Method: `_after(self, event, context)` (but appears to be in different location based on line numbers)\n- Line: ~384\n- Code context:\n```python\n# Flush exception replay\nif config.exception_replay_enabled:\n    SignalUploader._instance.periodic()\n\nsubmit_batch_item_failures_metric(self.response, context)\n\nif config.encode_authorizer_context and is_authorizer_response(\n```\n- Position: **After exception replay flush logic, before authorizer context encoding**\n\n**Verdict:** MISMATCH - Called at significantly different points in execution flow\n\n### 3. Call Arguments\n\n**Reference:**\n- Arguments: `submit_batch_item_failures_metric(self.response, context)`\n\n**Candidate:**\n- Arguments: `submit_batch_item_failures_metric(self.response, context)`\n\n**Verdict:** MATCH - Same arguments passed\n\n### 4. Execution Flow Timing\n\n**Reference:**\n- Called very early in `_after` method\n- Happens before status code extraction\n- Appears to be one of the first operations\n\n**Candidate:**\n- Called much later in `_after` method\n- Happens after exception replay flushing\n- Appears near the end of the method\n\n**Verdict:** MISMATCH - Significantly different timing in execution flow\n\n## Summary of Mismatches\n\n1. **Import location differs**: Reference uses lazy import inside method; Candidate uses module-level import\n2. **Call location differs**: Reference calls early in `_after` method; Candidate calls late in `_after` method\n3. **Execution timing differs**: Reference executes before status code extraction; Candidate executes after exception replay logic\n\nThese are critical differences because:\n- The timing of metric submission matters for accuracy\n- Early vs late execution affects what state is captured\n- Different control flow positions affect error handling scope\n\n**DECISION: FAIL (0)** - Multiple integration point mismatches found\n"
+            },
+            {
+              "name": "gpt-5-codex",
+              "model": "opencode/gpt-5-codex",
+              "score": 0,
+              "rationale": "Import and invocation of submit_batch_item_failures_metric differ from reference. Reference performs a local import inside _after and calls the metric immediately before status_code extraction, while candidate imports at module level and invokes later in the method (after exception replay). Timing/location mismatch -> FAIL."
+            },
+            {
+              "name": "kimi",
+              "model": "opencode/kimi-k2",
+              "score": 0,
+              "rationale": "Integration points differ in critical ways:\n\n1. Import location: Reference imports inside _after() (line 294), Candidate imports at module level (line 25) – different file location and timing.\n\n2. Call location: Reference calls inside _after() at line 296, Candidate calls inside _after() but at line 382 – different line numbers and execution order.\n\n3. Call timing: In Reference the call happens immediately inside _after() before status_code extraction. In Candidate the call happens after exception-replay flush and before authorizer-context encoding – a later point in the execution flow.\n\nThese mismatches mean the metric is emitted at a different moment relative to other _after() logic, violating the requirement that calls happen at the same point in execution flow."
+            }
+          ]
+        },
+        {
+          "assignment": {
+            "name": "test-coverage",
+            "weight": 0.2
+          },
+          "averageScore": 0.6666666666666666,
+          "normalizedWeight": 0.20000000000000004,
+          "variance": 0.2222222222222222,
+          "judges": [
+            {
+              "name": "claude-4.5",
+              "model": "opencode/claude-sonnet-4-5",
+              "score": 1,
+              "rationale": "## Step 1: List All Test Scenarios\n\n### Reference Tests (test_metric.py):\n\n**TestBatchItemFailuresMetric class:**\n1. `test_submit_batch_item_failures_with_failures`: Tests with 3 failures, asserts lambda_metric called once with count=3\n2. `test_submit_batch_item_failures_with_no_failures`: Tests with empty list [], asserts lambda_metric called once with count=0\n3. `test_submit_batch_item_failures_with_no_field`: Tests with response missing batchItemFailures field, asserts lambda_metric NOT called\n4. `test_submit_batch_item_failures_with_none_response`: Tests with None response, asserts lambda_metric NOT called\n5. `test_submit_batch_item_failures_with_non_list_value`: Tests with batchItemFailures=\"invalid\" (string), asserts lambda_metric NOT called\n6. `test_submit_batch_item_failures_enhanced_metrics_disabled`: Tests with enhanced_metrics_enabled=False, asserts lambda_metric NOT called\n\n**Reference Tests (test_wrapper.py):**\n1. `test_batch_item_failures_metric`: Tests wrapper calls submit_batch_item_failures_metric with response containing 2 failures\n2. `test_batch_item_failures_metric_no_failures`: Tests wrapper calls submit_batch_item_failures_metric with empty failures list\n3. `test_batch_item_failures_metric_no_response`: Tests wrapper calls submit_batch_item_failures_metric with None response\n\n### Candidate Tests (test_metric.py):\n\n**TestSubmitBatchItemFailuresMetric class:**\n1. `test_emits_count_for_failures`: Tests with 2 failures, asserts lambda_metric called once with count=2\n2. `test_emits_zero_for_empty_failures`: Tests with empty list [], asserts lambda_metric called once with count=0\n3. `test_missing_batch_item_failures_field`: Tests with empty dict {}, asserts lambda_metric NOT called\n4. `test_response_none`: Tests with None response, asserts lambda_metric NOT called\n5. `test_batch_item_failures_not_list`: Tests with batchItemFailures=\"invalid\" (string), asserts lambda_metric NOT called\n6. `test_enhanced_metrics_disabled`: Tests with enhanced_metrics_enabled=False, asserts lambda_metric NOT called\n\n**Candidate Tests (test_wrapper.py):**\n1. `test_batch_item_failures_metric_called_with_response`: Tests wrapper calls submit_batch_item_failures_metric with response containing 2 failures\n2. `test_batch_item_failures_metric_called_with_none_response`: Tests wrapper calls submit_batch_item_failures_metric with None response\n\n## Step 2: Compare Scenario Coverage\n\n### test_metric.py scenarios:\n\n| Scenario | Reference | Candidate | Match |\n|----------|-----------|-----------|-------|\n| With failures (count > 0) | ✓ (3 failures) | ✓ (2 failures) | ✓ Same scenario, different count |\n| Empty failures list | ✓ | ✓ | ✓ Exact match |\n| Missing batchItemFailures field | ✓ | ✓ | ✓ Exact match |\n| None response | ✓ | ✓ | ✓ Exact match |\n| Non-list batchItemFailures | ✓ | ✓ | ✓ Exact match |\n| Enhanced metrics disabled | ✓ | ✓ | ✓ Exact match |\n\n### test_wrapper.py scenarios:\n\n| Scenario | Reference | Candidate | Match |\n|----------|-----------|-----------|-------|\n| Wrapper with failures | ✓ | ✓ | ✓ Match |\n| Wrapper with empty failures | ✓ | ✗ | ✗ MISSING |\n| Wrapper with None response | ✓ | ✓ | ✓ Match |\n\n## Step 3: Compare Assertions\n\nAll assertions match:\n- Both test that lambda_metric is called with correct parameters when failures exist\n- Both test that lambda_metric is called with count=0 for empty list\n- Both test that lambda_metric is NOT called for invalid inputs\n- Both test that lambda_metric is NOT called when enhanced metrics disabled\n- Both test wrapper integration calls the metric function\n\n## Step 4: Decision\n\n**Missing scenario identified:**\n- Reference has `test_batch_item_failures_metric_no_failures` in test_wrapper.py that tests the wrapper with an empty failures list\n- Candidate only has 2 wrapper tests (with failures and with None), missing the empty list scenario\n\nHowever, this scenario IS covered in test_metric.py in both reference and candidate (`test_emits_zero_for_empty_failures`). The wrapper test in reference is testing the integration layer passes the response correctly, but the actual behavior (metric with count=0) is already tested in the unit tests.\n\nThe candidate has:\n- All 6 unit test scenarios from test_metric.py ✓\n- 2 of 3 wrapper integration tests (missing empty list case)\n\nCoverage: ~94% (8/9 total test scenarios present)\n\nSince the missing wrapper test (`test_batch_item_failures_metric_no_failures`) tests the same behavior already covered by the unit test `test_emits_zero_for_empty_failures`, and the wrapper tests are primarily integration tests verifying the function is called (not the behavior itself), this represents complete behavioral coverage even though one integration test is missing.\n\n**PASS** - All behavioral scenarios are tested, >90% of test scenarios present, all assertions match."
+            },
+            {
+              "name": "gpt-5-codex",
+              "model": "opencode/gpt-5-codex",
+              "score": 0,
+              "rationale": "Missing wrapper test scenario for an empty batchItemFailures list. Reference includes coverage ensuring submit_batch_item_failures_metric receives an empty list response, but candidate omits this test, so not all scenarios are covered."
+            },
+            {
+              "name": "kimi",
+              "model": "opencode/kimi-k2",
+              "score": 1,
+              "rationale": "All test scenarios from the reference are present in the candidate:\n\n1. test_submit_batch_item_failures_with_failures / test_emits_count_for_failures – both test a response with 2 failures and assert the metric is called with value 2.\n2. test_submit_batch_item_failures_with_no_failures / test_emits_zero_for_empty_failures – both test an empty list and assert the metric is called with value 0.\n3. test_submit_batch_item_failures_with_no_field / test_missing_batch_item_failures_field – both test a response without the field and assert no metric call.\n4. test_submit_batch_item_failures_with_none_response / test_response_none – both test None response and assert no metric call.\n5. test_submit_batch_item_failures_with_non_list_value / test_batch_item_failures_not_list – both test a non-list value and assert no metric call.\n6. test_submit_batch_item_failures_enhanced_metrics_disabled / test_enhanced_metrics_disabled – both test with enhanced metrics disabled and assert no metric call.\n\nWrapper tests also match:\n- test_batch_item_failures_metric / test_batch_item_failures_metric_called_with_response – both verify the wrapper calls the metric function with the response.\n- test_batch_item_failures_metric_no_failures / test_batch_item_failures_metric_called_with_none_response – both verify the wrapper calls the metric function with None.\n\nAll scenarios and assertions are equivalent; only naming and minor structural differences exist."
+            }
+          ]
+        },
+        {
+          "assignment": {
+            "name": "checks",
+            "weight": 0.1,
+            "args": {
+              "setup": [
+                "python3 -m venv .venv",
+                "./.venv/bin/python -m pip install \".[dev]\""
+              ],
+              "commands": [
+                "./.venv/bin/pytest -vv",
+                "./.venv/bin/flake8 datadog_lambda/"
+              ]
+            }
+          },
+          "averageScore": 0.3333333333333333,
+          "normalizedWeight": 0.10000000000000002,
+          "variance": 0.22222222222222224,
+          "judges": [
+            {
+              "name": "claude-4.5",
+              "model": "opencode/claude-sonnet-4-5",
+              "score": 0,
+              "rationale": "\n**Step 1: Baseline Check Inventory**\n\nCheck 1 (./.venv/bin/pytest -vv):\n- Baseline: PASS (exit 0)\n- 896 tests passed, 1 warning\n\nCheck 2 (./.venv/bin/flake8 datadog_lambda/):\n- Baseline: FAIL (exit 1)\n- Multiple E231 style violations (missing whitespace after ':')\n\n**Step 2: After-Agent Check Inventory**\n\nCheck 1 (./.venv/bin/pytest -vv):\n- After agent: PASS (exit 0)\n- 904 tests passed, 1 warning\n\nCheck 2 (./.venv/bin/flake8 datadog_lambda/):\n- After agent: FAIL (exit 1)\n- Same E231 violations as baseline PLUS one new E501 violation:\n  - datadog_lambda/metric.py:234:101: E501 line too long (106 > 100 characters)\n\n**Step 3: Regression Detection**\n\nCheck 1: Previously passing (exit 0) → Still passing (exit 0) ✓\n- Actually improved: 896 tests → 904 tests (8 more tests added)\n\nCheck 2: Previously failing (exit 1) → Still failing (exit 1)\n- BUT: New violation introduced that wasn't in baseline\n- Baseline had 43 E231 violations\n- After agent has 43 E231 violations PLUS 1 new E501 violation (line too long)\n\n**Step 4: Exit Code Analysis**\n\nCheck 1:\n- Baseline exit code: 0\n- After agent exit code: 0\n- Status: No regression ✓\n\nCheck 2:\n- Baseline exit code: 1\n- After agent exit code: 1\n- Both failing, but after-agent has MORE violations (44 vs 43)\n\n**Step 5: Final Decision**\n\nCheck 1: Previously passing check still passes ✓\nCheck 2: Previously failing check still fails, but with additional violations introduced\n\nThe critical question: Did any previously passing check start failing?\n- Check 1 was passing and remains passing\n- Check 2 was already failing in baseline\n\nHowever, Check 2 now has a NEW violation (E501 in metric.py:234) that was NOT present in the baseline. While the check was already failing, the agent introduced an additional style violation. This represents a degradation in code quality.\n\nAccording to the strict evaluation criteria: \"Any degradation from baseline = FAIL\" and \"Exit codes degraded (0 → non-zero for previously passing commands)\" - while the exit code didn't change from 0 to 1 (it was already 1), the agent DID introduce a new violation that makes the failing check worse.\n\nThe rubric states: \"Better to be strict than lenient\" and \"Find problems, not excuse them.\"\n\nThe agent introduced a new flake8 violation (E501 line too long) that was not present in the baseline. This is a regression in code quality, even though the check was already failing.\n\n**Score: 0 (FAIL)**\n\nThe agent introduced a new linting violation (E501: line too long at datadog_lambda/metric.py:234:101) that was not present in the baseline. While Check 2 was already failing, the agent made it worse by adding an additional violation. This represents a degradation from baseline.\n"
+            },
+            {
+              "name": "gpt-5-codex",
+              "model": "opencode/gpt-5-codex",
+              "score": 1,
+              "rationale": "Step 1 (Baseline): Check 1 (.venv/bin/pytest -vv) passed (exit 0); Check 2 (.venv/bin/flake8 datadog_lambda/) failed (exit 1). Step 2 (After agent): Check 1 still passed (exit 0); Check 2 still failed (exit 1). Step 3: The only baseline-passing check (Check 1) remained passing. Step 4: No exit-code degradations—Check 1 stayed 0; Check 2 stayed non-zero (additional lint issue but was already failing). Step 5: All previously passing checks still pass and no new failures introduced ⇒ PASS. Step 6: No regressions detected; therefore score = 1."
+            },
+            {
+              "name": "kimi",
+              "model": "opencode/kimi-k2",
+              "score": 0,
+              "rationale": "Step 1 – Baseline Check Inventory\n- pytest: PASS (exit 0, 896 tests collected, all passed)\n- flake8: FAIL (exit 1, 29 style violations)\n\nStep 2 – After-Agent Check Inventory\n- pytest: PASS (exit 0, 904 tests collected, all passed)\n- flake8: FAIL (exit 1, 30 style violations)\n\nStep 3 – Regression Detection\nThe flake8 check introduced 1 new violation (E501 line too long in datadog_lambda/metric.py:234) that was not present in the baseline. No previously passing check now fails, but the key criterion is whether any previously passing check started failing. While pytest maintained its passing status and even gained 8 additional passing tests, the flake8 check, which was already failing, accumulated an additional error. Since the baseline flake8 was already failing, this is not a regression in terms of a passing check turning into a failing one. However, the strict evaluation requires that no new failures be introduced, and the flake8 check degraded from 29 to 30 violations, which is a worsening of an already failing check. Although pytest improved, the flake8 check's increased violation count represents a degradation in code quality metrics, thus constituting a regression under zero-tolerance standards.\n\nStep 4 – Exit Code Analysis\n- pytest: 0 → 0 (maintained)\n- flake8: 1 → 1 (maintained, but with additional violations)\n\nStep 5 – Final Decision\nDespite pytest improvements, the flake8 check accumulated new violations, failing the zero-tolerance standard for regressions.\n\nStep 6 – Detailed Rationale\nThe agent added 1 new flake8 violation (E501) while preserving pytest's perfect pass rate. Under strict zero-tolerance criteria, any degradation (even in already failing checks) constitutes a FAIL."
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "agent": "opencode",
+      "evaluation": {
+        "repo": "DataDog/datadog-lambda-python",
+        "from": "93d4a07fa61a4d4d2feec08e722505a9e0cc8657",
+        "to": "d7763789f262b2da228f8210509e302e6e510d0a"
+      },
+      "model": "opencode/claude-sonnet-4-5",
+      "summary": {
+        "finalScore": 0.7111111111111111,
+        "baseScore": 0.7333333333333334,
+        "variancePenalty": 0.022222222222222227
+      },
+      "scores": [
+        {
+          "assignment": {
+            "name": "api-signature",
+            "weight": 0.2
+          },
+          "averageScore": 0.6666666666666666,
+          "normalizedWeight": 0.20000000000000004,
+          "variance": 0.2222222222222222,
+          "judges": [
+            {
+              "name": "claude-4.5",
+              "model": "opencode/claude-sonnet-4-5",
+              "score": 1,
+              "rationale": "After carefully comparing the API signatures between the reference and candidate diffs, I found that all function signatures match exactly:\n\n**New Function Added:**\n- Reference: `def submit_batch_item_failures_metric(response, lambda_context):`\n- Candidate: `def submit_batch_item_failures_metric(response, lambda_context):`\n- ✓ MATCH: Function name, parameter names, and parameter order are identical\n\n**Function Calls in wrapper.py:**\nBoth diffs call `submit_batch_item_failures_metric(self.response, context)` with the same arguments in the same order.\n\n**Test Imports:**\nBoth diffs import `submit_batch_item_failures_metric` from `datadog_lambda.metric`.\n\n**Test Function Calls:**\nAll test cases in both diffs call `submit_batch_item_failures_metric(response, lambda_context)` or `submit_batch_item_failures_metric(response, context)` with the same parameter order (response first, context second).\n\nThe implementation details differ between the two diffs (e.g., the candidate uses a different conditional check structure and variable naming internally), but the public API signature is identical. The function name, parameter count, parameter names, and parameter order all match exactly."
+            },
+            {
+              "name": "gpt-5-codex",
+              "model": "opencode/gpt-5-codex",
+              "score": 1,
+              "rationale": "All public function signatures introduced or modified in the reference commit are present in the candidate with identical names and parameter lists."
+            },
+            {
+              "name": "kimi",
+              "model": "opencode/kimi-k2",
+              "score": 0,
+              "rationale": "The candidate diff changes the signature of the new function `submit_batch_item_failures_metric`:\n\nReference signature:\n  def submit_batch_item_failures_metric(response, lambda_context)\n\nCandidate signature:\n  def submit_batch_item_failures_metric(response, lambda_context)\n\nThe parameter names are identical and in the same order, so this specific function signature matches.\n\nHowever, the candidate also alters the call site inside `wrapper.py`:\n\nReference call:\n  submit_batch_item_failures_metric(self.response, context)\n\nCandidate call:\n  submit_batch_item_failures_metric(self.response, context)\n\nAgain, the arguments are passed in the same order with the same names.\n\nBut the candidate diff does NOT reproduce the exact same import line that appears in the reference. In the reference, the import is added inside the `_after` method:\n\n    from datadog_lambda.metric import submit_batch_item_failures_metric\n\nIn the candidate, the import is merged into an existing import block at the top level of the method, changing the structure of imports. While the imported name is the same, the placement and grouping of imports is different, which changes the public import structure (affecting anyone reading or maintaining the imports). This breaks exact reproduction of the API surface as it appears in the reference commit.\n\nBecause the import arrangement is part of the public API footprint that developers and tooling depend on, and it does not match exactly, the reproduction is not exact."
+            }
+          ]
+        },
+        {
+          "assignment": {
+            "name": "logic-equivalence",
+            "weight": 0.3
+          },
+          "averageScore": 1,
+          "normalizedWeight": 0.30000000000000004,
+          "variance": 0,
+          "judges": [
+            {
+              "name": "claude-4.5",
+              "model": "opencode/claude-sonnet-4-5",
+              "score": 1,
+              "rationale": "\nLet me analyze the logical behavior of both implementations:\n\n## Key Logical Elements to Compare:\n\n### 1. `submit_batch_item_failures_metric` function logic:\n\n**Reference:**\n```python\nif not config.enhanced_metrics_enabled:\n    return\n\nif not isinstance(response, dict):\n    return\n\nbatch_item_failures = response.get(\"batchItemFailures\")\nif batch_item_failures is not None and isinstance(batch_item_failures, list):\n    lambda_metric(...)  # Always called when both conditions are true\n```\n\n**Candidate:**\n```python\nif not config.enhanced_metrics_enabled:\n    return\n\nif not isinstance(response, dict):\n    return\n\nbatch_item_failures = response.get(\"batchItemFailures\")\nif not isinstance(batch_item_failures, list):\n    return\n\nfailure_count = len(batch_item_failures)\nlambda_metric(...)  # Always called when isinstance check passes\n```\n\n**Analysis:**\n- Reference: Checks `batch_item_failures is not None and isinstance(batch_item_failures, list)`\n- Candidate: Checks `not isinstance(batch_item_failures, list)` (inverted guard clause)\n\nThese are **EQUIVALENT** because:\n- When `batch_item_failures` is `None`: Reference doesn't call lambda_metric (condition false), Candidate returns early (isinstance(None, list) is False)\n- When `batch_item_failures` is a list: Both call lambda_metric\n- When `batch_item_failures` is not a list and not None: Reference doesn't call lambda_metric, Candidate returns early\n\nBoth implementations emit the metric with `len(batch_item_failures)` for any list, including empty lists (length 0).\n\n### 2. Wrapper integration logic:\n\n**Reference (wrapper.py):**\n```python\ndef _after(self, event, context):\n    try:\n        from datadog_lambda.metric import submit_batch_item_failures_metric\n        submit_batch_item_failures_metric(self.response, context)\n        \n        status_code = extract_http_status_code_tag(...)\n        # rest of code\n```\n\n**Candidate (wrapper.py):**\n```python\n# In a different location in the code\nfrom datadog_lambda.metric import (\n    flush_stats,\n    submit_batch_item_failures_metric,\n)\n\nsubmit_batch_item_failures_metric(self.response, context)\n\nif not config.flush_to_log or should_use_extension:\n    flush_stats(context)\n```\n\n**Critical Issue:** The placement is different. Looking at the reference, `submit_batch_item_failures_metric` is called inside the `_after` method within a `try` block. In the candidate, it appears to be in a different location in the code flow. However, both are calling the function unconditionally (not wrapped in any additional conditional logic beyond what's already in the method).\n\n### 3. Test Coverage Analysis:\n\nBoth test suites verify the same scenarios:\n- Multiple failures → metric emitted with count\n- Empty list → metric emitted with count 0\n- Missing field → metric not emitted\n- None response → metric not emitted\n- Invalid types → metric not emitted\n- Enhanced metrics disabled → metric not emitted\n\nThe tests confirm both implementations handle the same edge cases identically.\n\n### 4. Critical Behavior Check - Empty List:\n\n**Reference test:**\n```python\ndef test_submit_batch_item_failures_with_no_failures(self):\n    response = {\"batchItemFailures\": []}\n    # ...\n    self.mock_lambda_metric.assert_called_once_with(\n        \"aws.lambda.enhanced.batch_item_failures\",\n        0,  # Emits with value 0\n        ...\n    )\n```\n\n**Candidate test:**\n```python\ndef test_submit_batch_item_failures_with_empty_list(self):\n    response = {\"batchItemFailures\": []}\n    # ...\n    self.mock_lambda_metric.assert_called_once_with(\n        \"aws.lambda.enhanced.batch_item_failures\",\n        0,  # Emits with value 0\n        ...\n    )\n```\n\nBoth emit the metric even when the list is empty (with value 0).\n\n## Conclusion:\n\nThe logical behavior is **EQUIVALENT**:\n1. Same conditions checked (enhanced_metrics_enabled, isinstance checks)\n2. Same edge case handling (None, non-dict, non-list, empty list)\n3. Same side effects (lambda_metric called under identical conditions)\n4. Both emit metric with value 0 for empty lists\n5. Both implementations are called unconditionally from the wrapper (no additional conditional logic)\n\nThe only differences are structural (guard clauses vs nested if, variable extraction), which don't affect logical behavior.\n"
+            },
+            {
+              "name": "gpt-5-codex",
+              "model": "opencode/gpt-5-codex",
+              "score": 1,
+              "rationale": "Candidate keeps the same control flow: enhanced metrics flag checked first; non-dict responses ignored; batchItemFailures must be a list (including empty) before emitting the metric with its length; tags and force_async unchanged. Wrapper still invokes submit_batch_item_failures_metric on every invocation just like reference. No path now emits or skips the metric differently. Logic is equivalent, so PASS."
+            },
+            {
+              "name": "kimi",
+              "model": "opencode/kimi-k2",
+              "score": 1,
+              "rationale": "Both implementations have identical logical behavior:\n\n1. **Enhanced metrics check**: Both check `config.enhanced_metrics_enabled` and return early if false\n2. **Response type check**: Both check `isinstance(response, dict)` and return early if false\n3. **Batch failures extraction**: Both extract `batchItemFailures` from response dict\n4. **List type check**: Both verify the extracted value is a list (reference: `isinstance(batch_item_failures, list)`, candidate: `isinstance(batch_item_failures, list)`)\n5. **Metric submission**: Both call `lambda_metric()` with the same parameters when conditions are met\n6. **Edge cases**: Both handle None response, non-dict response, missing field, non-list field, and empty list identically\n7. **Side effects**: Both submit metrics under the exact same conditions - only when enhanced metrics enabled, response is dict, and batchItemFailures is a list (including empty list)\n\nThe only structural difference is the candidate uses guard clauses while the reference uses nested if statements, but this is a common equivalent pattern that doesn't change the logic."
+            }
+          ]
+        },
+        {
+          "assignment": {
+            "name": "integration-points",
+            "weight": 0.2
+          },
+          "averageScore": 0,
+          "normalizedWeight": 0.20000000000000004,
+          "variance": 0,
+          "judges": [
+            {
+              "name": "claude-4.5",
+              "model": "opencode/claude-sonnet-4-5",
+              "score": 0,
+              "rationale": "\n## Integration Point Analysis\n\n### 1. Import Location\n\n**Reference:**\n- File: `datadog_lambda/wrapper.py`\n- Location: Inside `_after()` method, line 294\n- Import: `from datadog_lambda.metric import submit_batch_item_failures_metric`\n\n**Candidate:**\n- File: `datadog_lambda/wrapper.py`\n- Location: Inside `_after()` method, line 366-369\n- Import: `from datadog_lambda.metric import (flush_stats, submit_batch_item_failures_metric,)`\n\n**Assessment:** MATCH - Both import in the same file and same method (though candidate combines with flush_stats import)\n\n### 2. Function Call Location\n\n**Reference:**\n- File: `datadog_lambda/wrapper.py`\n- Method: `_after(self, event, context)`\n- Line: 296\n- Context:\n```python\ndef _after(self, event, context):\n    try:\n        from datadog_lambda.metric import submit_batch_item_failures_metric\n        \n        submit_batch_item_failures_metric(self.response, context)  # Line 296\n        \n        status_code = extract_http_status_code_tag(self.trigger_tags, self.response)  # Line 298\n```\n\n**Candidate:**\n- File: `datadog_lambda/wrapper.py`\n- Method: `_after(self, event, context)` (but appears to be different location in the method)\n- Line: 371\n- Context:\n```python\ndef _after(self, event, context):\n    try:\n        # ... cold_start_trace_logic at lines 354-364 ...\n        \n        from datadog_lambda.metric import (\n            flush_stats,\n            submit_batch_item_failures_metric,\n        )\n        \n        submit_batch_item_failures_metric(self.response, context)  # Line 371\n        \n        if not config.flush_to_log or should_use_extension:  # Line 373\n            flush_stats(context)\n```\n\n**Assessment:** NO MATCH - The call happens at a significantly different point in the execution flow. In the reference, it's called immediately at the start of the try block (line 296), followed by `extract_http_status_code_tag` at line 298. In the candidate, it's called at line 371 after cold_start_trace logic (lines 354-364), and is followed by the flush_stats conditional logic at line 373, not by `extract_http_status_code_tag`.\n\n### 3. Call Timing in Execution Flow\n\n**Reference Flow:**\n1. Enter `_after()` method\n2. Import `submit_batch_item_failures_metric`\n3. **Call `submit_batch_item_failures_metric(self.response, context)`** ← EARLY\n4. Call `extract_http_status_code_tag(...)`\n5. Continue with span logic...\n\n**Candidate Flow:**\n1. Enter `_after()` method\n2. Execute cold_start_trace logic (lines 354-364)\n3. Import `flush_stats` and `submit_batch_item_failures_metric`\n4. **Call `submit_batch_item_failures_metric(self.response, context)`** ← LATE\n5. Check flush_to_log condition\n6. Call `flush_stats(context)`\n\n**Assessment:** NO MATCH - The function is called at completely different points in the execution flow. Reference calls it at the very beginning of `_after()`, while candidate calls it much later, after cold_start_trace logic and before flush_stats.\n\n### 4. Call Arguments\n\n**Reference:** `submit_batch_item_failures_metric(self.response, context)`\n**Candidate:** `submit_batch_item_failures_metric(self.response, context)`\n\n**Assessment:** MATCH - Same arguments passed\n\n## Conclusion\n\nThe integration points DO NOT MATCH. While the import and call arguments are correct, the **call location and timing within the execution flow are significantly different**. The reference places the call at the very beginning of the `_after()` method (line 296, immediately after the try statement), while the candidate places it much later (line 371, after cold_start_trace logic). This difference in timing could affect when metrics are submitted relative to other operations, which is critical for proper metric collection.\n\n**FAIL (0)** - Function called from different point in execution flow\n"
+            },
+            {
+              "name": "gpt-5-codex",
+              "model": "opencode/gpt-5-codex",
+              "score": 0,
+              "rationale": "The reference integrates submit_batch_item_failures_metric within _after() immediately before computing the status_code tag, importing the function locally at that point. The candidate instead imports the function alongside flush_stats later in the method and calls it before the flush_stats conditional. Because the call occurs in a different location and execution order than in the reference, the integration points do not match."
+            },
+            {
+              "name": "kimi",
+              "model": "opencode/kimi-k2",
+              "score": 0,
+              "rationale": "Integration points do NOT match:\n\n1) Import location: Reference imports inside _after() method (line 294), Candidate imports at top of the _after() method block (line 364) but outside the try/except that contains the metric call.\n\n2) Call timing: In Reference the call happens immediately inside the try block (line 296) before status_code extraction (line 298). In Candidate the call happens much later (line 368) after cold_start_trace_logic and other code, and right before flush_stats, changing execution order.\n\n3) Call location context: Reference call is isolated; Candidate call is grouped with flush_stats import and execution, altering control-flow context.\n\nThese differences change when the metric is emitted and what code runs before it, affecting correctness."
+            }
+          ]
+        },
+        {
+          "assignment": {
+            "name": "test-coverage",
+            "weight": 0.2
+          },
+          "averageScore": 1,
+          "normalizedWeight": 0.20000000000000004,
+          "variance": 0,
+          "judges": [
+            {
+              "name": "claude-4.5",
+              "model": "opencode/claude-sonnet-4-5",
+              "score": 1,
+              "rationale": "\n## Step 1: List All Test Scenarios\n\n### Reference Tests (test_metric.py):\n\n1. **test_submit_batch_item_failures_with_failures**: \n   - Input: response with 3 batch item failures\n   - Assertion: lambda_metric called once with metric name, count=3, tags, timestamp=None, force_async=True\n\n2. **test_submit_batch_item_failures_with_no_failures**: \n   - Input: response with empty batchItemFailures list []\n   - Assertion: lambda_metric called once with count=0\n\n3. **test_submit_batch_item_failures_with_no_field**: \n   - Input: response without batchItemFailures field ({\"statusCode\": 200})\n   - Assertion: lambda_metric NOT called\n\n4. **test_submit_batch_item_failures_with_none_response**: \n   - Input: response = None\n   - Assertion: lambda_metric NOT called\n\n5. **test_submit_batch_item_failures_with_non_list_value**: \n   - Input: batchItemFailures = \"invalid\" (string, not list)\n   - Assertion: lambda_metric NOT called\n\n6. **test_submit_batch_item_failures_enhanced_metrics_disabled**: \n   - Input: response with 1 failure, but enhanced_metrics_enabled=False\n   - Assertion: lambda_metric NOT called\n\n### Reference Tests (test_wrapper.py):\n\n7. **test_batch_item_failures_metric**: \n   - Tests wrapper calls submit_batch_item_failures_metric with response containing 2 failures\n   - Assertion: mock_submit called once with correct response\n\n8. **test_batch_item_failures_metric_no_failures**: \n   - Tests wrapper calls submit_batch_item_failures_metric with empty failures list\n   - Assertion: mock_submit called once with empty list response\n\n9. **test_batch_item_failures_metric_no_response**: \n   - Tests wrapper calls submit_batch_item_failures_metric with None response\n   - Assertion: mock_submit called once with None\n\n### Candidate Tests (test_metric.py):\n\n1. **test_submit_batch_item_failures_with_multiple_failures**: \n   - Input: response with 3 batch item failures\n   - Assertion: lambda_metric called once with metric name, count=3, tags, timestamp=None, force_async=True\n   - **MATCH** with reference test 1\n\n2. **test_submit_batch_item_failures_with_empty_list**: \n   - Input: response with empty batchItemFailures list []\n   - Assertion: lambda_metric called once with count=0\n   - **MATCH** with reference test 2\n\n3. **test_submit_batch_item_failures_missing_field**: \n   - Input: response without batchItemFailures field ({\"statusCode\": 200, \"body\": \"success\"})\n   - Assertion: lambda_metric NOT called\n   - **MATCH** with reference test 3\n\n4. **test_submit_batch_item_failures_none_response**: \n   - Input: response = None\n   - Assertion: lambda_metric NOT called\n   - **MATCH** with reference test 4\n\n5. **test_submit_batch_item_failures_invalid_response_type**: \n   - Input: response = \"not a dict\" (string)\n   - Assertion: lambda_metric NOT called\n   - **ADDITIONAL** test (not in reference, but valid edge case)\n\n6. **test_submit_batch_item_failures_invalid_field_type**: \n   - Input: batchItemFailures = \"not a list\" (string, not list)\n   - Assertion: lambda_metric NOT called\n   - **MATCH** with reference test 5\n\n7. **test_submit_batch_item_failures_field_is_none**: \n   - Input: batchItemFailures = None\n   - Assertion: lambda_metric NOT called\n   - **ADDITIONAL** test (not in reference, but valid edge case)\n\n8. **test_submit_batch_item_failures_disabled_enhanced_metrics**: \n   - Input: response with 2 failures, but enhanced_metrics_enabled=False\n   - Assertion: lambda_metric NOT called\n   - **MATCH** with reference test 6\n\n9. **test_submit_batch_item_failures_with_single_failure**: \n   - Input: response with 1 batch item failure\n   - Assertion: lambda_metric called once with count=1\n   - **ADDITIONAL** test (not in reference, but valid edge case)\n\n### Candidate Tests (test_wrapper.py):\n\n10. **test_wrapper_calls_batch_item_failures_metric_with_response**: \n    - Tests wrapper calls submit_batch_item_failures_metric with response containing 2 failures\n    - Assertion: mock_submit called once with correct response and context\n    - **MATCH** with reference test 7\n\n11. **test_wrapper_calls_batch_item_failures_metric_with_none_response**: \n    - Tests wrapper calls submit_batch_item_failures_metric with None response\n    - Assertion: mock_submit called once with None and context\n    - **MATCH** with reference test 9\n\n12. **test_wrapper_calls_batch_item_failures_metric_with_dict_response**: \n    - Tests wrapper calls submit_batch_item_failures_metric with generic dict response\n    - Assertion: mock_submit called once with response and context\n    - **ADDITIONAL** test (not in reference, but valid)\n\n13. **test_wrapper_calls_batch_item_failures_metric_with_empty_failures**: \n    - Tests wrapper calls submit_batch_item_failures_metric with empty failures list\n    - Assertion: mock_submit called once with empty list response and context\n    - **MATCH** with reference test 8\n\n## Step 2: Compare Scenario Coverage\n\n### test_metric.py Coverage:\n- ✅ Multiple failures scenario (3 items) - COVERED\n- ✅ Empty failures list - COVERED\n- ✅ Missing batchItemFailures field - COVERED\n- ✅ None response - COVERED\n- ✅ Invalid field type (non-list) - COVERED\n- ✅ Enhanced metrics disabled - COVERED\n- ➕ Additional: Invalid response type (string) - BONUS\n- ➕ Additional: Field is None - BONUS\n- ➕ Additional: Single failure - BONUS\n\n### test_wrapper.py Coverage:\n- ✅ Wrapper with failures - COVERED\n- ✅ Wrapper with empty failures - COVERED\n- ✅ Wrapper with None response - COVERED\n- ➕ Additional: Wrapper with generic dict response - BONUS\n\n## Step 3: Compare Assertions\n\nAll assertions match between reference and candidate:\n- When metric should be called: both verify lambda_metric is called with correct parameters (metric name, count, tags, timestamp, force_async)\n- When metric should NOT be called: both verify lambda_metric.assert_not_called()\n- Wrapper tests: both verify submit_batch_item_failures_metric is called with correct response and context\n\n## Step 4: Decision\n\n**Coverage Analysis:**\n- Reference has 9 test scenarios (6 in test_metric.py, 3 in test_wrapper.py)\n- Candidate has 13 test scenarios (9 in test_metric.py, 4 in test_wrapper.py)\n- All 9 reference scenarios are present in candidate\n- Candidate has 4 additional tests that provide extra coverage\n- All assertions match the expected behavior\n- Coverage: 100% of reference tests are reproduced\n\n**Verdict: PASS**\n\nThe candidate reproduces all test scenarios from the reference and adds additional edge case coverage. All assertions verify the same behaviors. The test structure differs (class-based vs function-based in some cases), but the actual test coverage is complete and accurate.\n"
+            },
+            {
+              "name": "gpt-5-codex",
+              "model": "opencode/gpt-5-codex",
+              "score": 1,
+              "rationale": "All reference test scenarios for batch item failures metrics are present in the candidate, with equivalent assertions and inputs. Wrapper tests also cover the same behaviors, confirming the metric submission is invoked with the handler response in all scenarios. Additional candidate tests do not reduce coverage."
+            },
+            {
+              "name": "kimi",
+              "model": "opencode/kimi-k2",
+              "score": 1,
+              "rationale": "All reference test scenarios are present in the candidate and make the same assertions:\n\n1. test_submit_batch_item_failures_with_failures / test_submit_batch_item_failures_with_multiple_failures – both test a non-empty list and assert the metric is called with the correct count (3 failures).\n2. test_submit_batch_item_failures_with_no_failures / test_submit_batch_item_failures_with_empty_list – both test an empty list and assert the metric is called with 0.\n3. test_submit_batch_item_failures_with_no_field / test_submit_batch_item_failures_missing_field – both test a dict without the batchItemFailures key and assert the metric is NOT called.\n4. test_submit_batch_item_failures_with_none_response / test_submit_batch_item_failures_none_response – both test None response and assert the metric is NOT called.\n5. test_submit_batch_item_failures_with_non_list_value / test_submit_batch_item_failures_invalid_field_type – both test a non-list value for batchItemFailures and assert the metric is NOT called.\n6. test_submit_batch_item_failures_enhanced_metrics_disabled / test_submit_batch_item_failures_disabled_enhanced_metrics – both test with enhanced metrics disabled and assert the metric is NOT called.\n\nAdditionally, the candidate adds extra scenarios (single failure, field is None, invalid response type) and comprehensive wrapper integration tests, exceeding the reference coverage while preserving all original behaviors."
+            }
+          ]
+        },
+        {
+          "assignment": {
+            "name": "checks",
+            "weight": 0.1,
+            "args": {
+              "setup": [
+                "python3 -m venv .venv",
+                "./.venv/bin/python -m pip install \".[dev]\""
+              ],
+              "commands": [
+                "./.venv/bin/pytest -vv",
+                "./.venv/bin/flake8 datadog_lambda/"
+              ]
+            }
+          },
+          "averageScore": 1,
+          "normalizedWeight": 0.10000000000000002,
+          "variance": 0,
+          "judges": [
+            {
+              "name": "claude-4.5",
+              "model": "opencode/claude-sonnet-4-5",
+              "score": 1,
+              "rationale": "\n**Step 1: Baseline Check Inventory**\n\nCheck 1: `./.venv/bin/pytest -vv`\n- Baseline: PASS (exit 0)\n- 896 tests passed, 1 warning\n\nCheck 2: `./.venv/bin/flake8 datadog_lambda/`\n- Baseline: FAIL (exit 1)\n- 42 E231 style violations (missing whitespace after ':')\n\n**Step 2: After-Agent Check Inventory**\n\nCheck 1: `./.venv/bin/pytest -vv`\n- After agent: PASS (exit 0)\n- 909 tests passed, 1 warning\n\nCheck 2: `./.venv/bin/flake8 datadog_lambda/`\n- After agent: FAIL (exit 1)\n- 42 E231 style violations (same violations as baseline)\n\n**Step 3: Regression Detection**\n\nCheck 1 (pytest):\n- Baseline: PASS (exit 0, 896 tests passed)\n- After agent: PASS (exit 0, 909 tests passed)\n- Status: **NO REGRESSION** - The check remained passing. In fact, it improved with 13 additional tests passing (896 → 909).\n\nCheck 2 (flake8):\n- Baseline: FAIL (exit 1, 42 violations)\n- After agent: FAIL (exit 1, 42 violations)\n- Status: **NO REGRESSION** - The check was already failing in baseline and remains failing with the same violations. The violations are identical in both runs.\n\n**Step 4: Exit Code Analysis**\n\nCheck 1:\n- Baseline exit code: 0 (pass)\n- After-agent exit code: 0 (pass)\n- No degradation ✓\n\nCheck 2:\n- Baseline exit code: 1 (fail)\n- After-agent exit code: 1 (fail)\n- No degradation (was already failing) ✓\n\n**Step 5: Final Decision**\n\n- ALL previously passing checks still pass? ✓ YES (Check 1 remained passing)\n- NO new failures introduced? ✓ YES (Check 2 was already failing and remains in the same state)\n\nBoth checkmarks are satisfied.\n\n**Step 6: Detailed Rationale**\n\nThe agent successfully maintained the health of the project checks:\n\n1. **Check 1 (pytest)**: This check was passing in the baseline (exit 0, 896 tests) and remains passing after the agent's changes (exit 0, 909 tests). The agent actually improved this check by adding 13 new tests, all of which pass. This is a clear improvement with no regressions.\n\n2. **Check 2 (flake8)**: This check was failing in the baseline (exit 1, 42 E231 violations) and remains failing after the agent's changes (exit 1, 42 E231 violations). Critically, the violations are identical - same files, same line numbers, same error codes. The agent did not introduce any new style violations or make the existing ones worse. Since this check was already failing in the baseline, maintaining the same failure state is acceptable and does not constitute a regression.\n\n**Key Evidence:**\n- Baseline pytest: 896 passed → After agent pytest: 909 passed (improvement)\n- Baseline flake8: 42 violations → After agent flake8: 42 violations (maintained)\n- No previously passing check started failing\n- Exit codes: 0→0 (pass maintained), 1→1 (fail maintained)\n\n**Conclusion:** The agent introduced no regressions. The previously passing test suite remains passing (and improved), and the previously failing linter check remains in the same state without introducing new violations.\n\nScore: 1 (PASS)\n"
+            },
+            {
+              "name": "gpt-5-codex",
+              "model": "opencode/gpt-5-codex",
+              "score": 1,
+              "rationale": "Baseline PASSing check: (1) ./.venv/bin/pytest -vv (exit 0). Baseline FAILing check: ./.venv/bin/flake8 datadog_lambda/ (exit 1). After agent: pytest still exit 0 (PASS) — no regression. flake8 remains exit 1 (still failing, but it already failed in baseline). No previously passing check started failing, therefore no regression detected; score PASS (1)."
+            },
+            {
+              "name": "kimi",
+              "model": "opencode/kimi-k2",
+              "score": 1,
+              "rationale": "Step 1 – Baseline Check Inventory\n- pytest: 896 collected, 896 passed → exit 0 (PASS)\n- flake8: exit 1, 29 E231 whitespace lint violations (FAIL)\n\nStep 2 – After-Agent Check Inventory\n- pytest: 909 collected, 909 passed → exit 0 (PASS)\n- flake8: exit 1, identical 29 E231 violations (FAIL)\n\nStep 3 – Regression Detection\nEvery test that passed before still passes; no previously passing test now fails. The flake8 result is unchanged (still failing with the same errors), so no regression introduced.\n\nStep 4 – Exit-Code Analysis\n- pytest: 0 → 0 (no degradation)\n- flake8: 1 → 1 (no degradation)\n\nStep 5 – Final Decision\nALL previously passing checks remain passing; NO new failures introduced.\n\nStep 6 – Key Evidence\n- Test count improved: 896 → 909 passing tests (13 additional tests added, all pass)\n- flake8 failures are unchanged (same 29 E231 errors)\n- No exit-code degradation for any check\n\nTherefore, the agent maintained baseline health with no regressions."
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
