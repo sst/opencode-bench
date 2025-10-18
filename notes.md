@@ -47,3 +47,28 @@ similar to this, we can talk to the owner of each eval once in a while and ask t
 > Now that you have a sense for where the problems in your AI are, you can decide where and if to invest in more targeted LLM judges. For example, if you find that the AI has trouble with citing sources correctly, you can created a targeted eval for that. You might not even need a LLM judge for some errors (and use a code-based assertion instead).
 
 another idea. the current semantic-similarity score rates between 0 and 1. we can divide it into multiple semantic-similarity-* judges that return a yes/no which by aggregating those binary responses we can create a rate that sounds like a fluid number.
+
+---
+[Who Validates the Validators](https://dl.acm.org/doi/pdf/10.1145/3654777.3676450)
+
+a catch-22 situation. to grade outputs, people need to externalize and define their evaluation criteria. however, the process of grading outputs helps them to define those very criteria.
+
+criteria drift. we have to grade the output ourself so we can define the criteria for an LLM judge.
+
+auditing LLM outputs is challeging due to the nature of humans of over-generalization and over-reliance.
+
+what strikes me right now is that the paper misses the ground truth aspect of our benchmark. the ground truth is what the user grades first and then creates criteria based on, but in our own case, the already defined ground truth diff based on what the developer has actually shipped, is available to us. so i do not know whether if it helps in our own case to show users few samples to grade, and then have them come up with a criteria.
+
+one takeaway is selectivity. it'd measure how much a judge marks an output as a pass and not a failure. for instance, if a selectivity of a judge is low, which means it flags most outputs as failing, but then passes a certain output, then that means it's pretty valuable or vice versa. but a judge always passing or always failing is noise.
+
+sampling. choosing which evaluations to be done by the user to identify the criteria. choosing randomly is not helpful since the evaluations won't represent what we're unsure about or what we're sure about. any non-random sampling is a win. just don't do it randomly.
+
+
+---
+
+[Grading Notes](https://www.databricks.com/blog/enhancing-llm-as-a-judge-with-grading-notes)
+
+the post notes that ground truth is hard to write. for our own case, it's easy, since that's how our dataset behaves. but the argument that it's hard to get when there are multiple answers/truths to the matter, i agree with that. since we only have one ideal solution to each problem because of the way we use each commit as a reference.
+we can give those who seed us data a voting seat on their own data. where they check what agents produced for each task and vote if it's good or bad even if it deviates from the ground truth (e.g. the actual commit diff). this way we can capture what's a deal breaker for users and what is not.
+
+as mentioned in the post, grading notes can be brought into the dataset from what the users submit, to allow unambigiouties when allowed.
