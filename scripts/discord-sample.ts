@@ -52,13 +52,24 @@ const sampleExport: BenchmarkExport = {
       scores: [
         {
           assignment: {
-            name: "semantic-similarity",
-            weight: 0.77,
+            name: "api-signature",
+            weight: 0.4,
             args: undefined,
           },
           averageScore: 0.905,
-          normalizedWeight: 0.77,
-          variance: 0.030,
+          normalizedWeight: 0.4,
+          variance: 0.03,
+          judges: [],
+        },
+        {
+          assignment: {
+            name: "logic-equivalence",
+            weight: 0.37,
+            args: undefined,
+          },
+          averageScore: 0.892,
+          normalizedWeight: 0.37,
+          variance: 0.025,
           judges: [],
         },
         {
@@ -67,9 +78,9 @@ const sampleExport: BenchmarkExport = {
             weight: 0.23,
             args: undefined,
           },
-          averageScore: 0.980,
+          averageScore: 0.98,
           normalizedWeight: 0.23,
-          variance: 0.000,
+          variance: 0.0,
           judges: [],
         },
       ],
@@ -90,13 +101,24 @@ const sampleExport: BenchmarkExport = {
       scores: [
         {
           assignment: {
-            name: "semantic-similarity",
-            weight: 0.77,
+            name: "api-signature",
+            weight: 0.4,
             args: undefined,
           },
           averageScore: 0.903,
-          normalizedWeight: 0.77,
+          normalizedWeight: 0.4,
           variance: 0.041,
+          judges: [],
+        },
+        {
+          assignment: {
+            name: "logic-equivalence",
+            weight: 0.37,
+            args: undefined,
+          },
+          averageScore: 0.888,
+          normalizedWeight: 0.37,
+          variance: 0.03,
           judges: [],
         },
         {
@@ -187,7 +209,8 @@ function buildPayload(evalSummaries: EvalSummary[]) {
 
   return {
     username: "opencode",
-    avatar_url: "https://pbs.twimg.com/profile_images/1973794620233433088/nBn75BTm_400x400.png",
+    avatar_url:
+      "https://pbs.twimg.com/profile_images/1973794620233433088/nBn75BTm_400x400.png",
     content,
     embeds,
   };

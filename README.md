@@ -3,7 +3,6 @@
 orvl opencode # run opencode on all models x evals x scores
 orvl opencode --model opencode/qwen3-coder # filter by model across all evals x scores
 orvl opencode --eval noworneverev/graphrag-visualizer # filter by eval across models x scores
-orvl opencode --eval noworneverev/graphrag-visualizer --score semantic-similarity # filter by eval and score
 ```
 
 Filters use CLI options like `--model`, `--eval`, and `--score`.
@@ -38,6 +37,9 @@ export default createScore(() => {
 })
 ```
 
+## TODO
+- [ ] Stabilize scoring by replacing flaky LLM judges for logic-equivalence, integration-points, test-coverage, and checks with deterministic analysis (see `benchmark-observations.md` for details).
+
 `scores/code-quality.ts`
 ```typescript
 export default createScore(() => {
@@ -49,72 +51,6 @@ export default createScore(() => {
 })
 ```
 
-`scores/semantic-similarity.ts`
-```typescript
-export default createScore(() => {
-	// ...
-	return {
-		score: 0.97,
-		rationale: "Baseline semantic similarity rationale"
-	}
-})
-```
-
-### Semantic Similarity
-Semantic Similarity would be an ideal solution, but it assumes the existence of canonical output which is hard to create and identify. Huge part of that quality idealism is subjective. What's ideal for us is not ideal for others.
-
-We should either come up with a standard that allows us to produce code according to those standards and best-practices to have a baseline. Or we ignore the semantic similarity, at least for most samples, to tailor that analysis to certain functions, hooks and modules.
-
-Another idea just popped to my mind this morning.
-
-Instead of ideal code, we can have a judge LLM create a project, generate rules based on the generated output, and then pass around those rules or descriptions to the agent and measure the relevance between the original generated code by the judge and the newly generated code by the agent with semantic similarity.
-
-### LLM Evaluation
-
-LLM evaluation seems like a simpler solution, three critiques (e.g. Claude 4.5, GPT-5-codex, ...) that rate code readability, missing cases and potential bugs.
-
-the equation $R=v^\top S^\top w$ produces the rates. more details in the section below.
-
-Gosu avoids sharing the benchmarks publicly because that'd potentially have labs train their models on those benchmarks. Inspired by that, we can avoid writing any canonical sample in the first place, by just having a series of prompts (that resembles the conversationalist user, rather than a one shot usage) and few LLM judges that rate the generated response.
-
-Therefore, no project would be stored in the dataset, but rather, the prompt to generate it would be there. This creates a non-deterministic benchmarks which are hard to predict which corresponds to the real world where there is no single _perfect_ or _ideal_ project that acts as a role model.
-
-This is non-deterministic and the way to reduce from that behavior is to produce few dummy agents and dummy outputs as explained below.
-
-#### The Rating Equation
-
-$$
-\underset{\text{scores table}} {S \in [0,1]^{m \times k}}, \underset{\text{model weights}} {w \in \Delta^{m-1}},\underset{\text{the score weights array}} {v \in \Delta^{k-1}} \to \underset{\text{rate}} R=v^\top S^\top w
-$$
-
-The model weights are likely to be equal since we assume those selected judge models are intelligent _enough_ equally.
-
-But the score weights should resemble our own priorities and what the benchmark cares about the most, whether we value UI beauty more, code correctness or any other score.
-
-We can as well add a disagreement penalty to avoid the high variance across models to stabilize the final rate.
-
-
-$$
-R_{pen}= R - \lambda\sum_{j} v_{j} \mathrm{Var}_{j}
-$$
-
-$$
-\underset{\text{seriousness of the penalty}} {\lambda \geq 0}
-$$
-
-$$
-\mathrm{Var}_j = \sum_i w_i \left(s_{ij} - \bar{s}_j \right)^2
-$$
-
-$$
-\bar{s}_j = \sum_i w_i s_{ij}
-$$
-
-After observing the spectrum of each judge's rating in the future, we can add calibration to account for how harsh or generous a model is.
-
-here's an ai generated sample code for the rating mechanism.
-
-```javascript
 // --- setup --------------------------------------------------
 
 // Assessors and their weights
@@ -212,6 +148,22 @@ export default createAgent((model, prompt) => {
 ```
 
 the variance between this dummy and `agents/dummy-good.ts` should be high to validate that the judges produce _fair_ scores.
+
+## Scoring Methodology
+
+All current scores are produced by LLM judges (`claude-4.5`, `gpt-5-codex`, `kimi`). For each assignment we gather their outputs into a matrix \(S \in [0,1]^{m \times k}\), where rows index judges and columns index score types. Given judge weights \(w \in \Delta^{m-1}\) (currently uniform) and assignment weights \(v \in \Delta^{k-1}\), the base score is
+
+\[
+R = v^\top S^\top w = \sum_{j=1}^k v_j \left( \sum_{i=1}^m w_i s_{ij} \right).
+\]
+
+To discourage disagreement we subtract a variance penalty (see `lib/utils/scoreAggregation.ts`):
+
+\[
+R_{\text{pen}} = R - \lambda \sum_{j=1}^k v_j \operatorname{Var}_j, \qquad \operatorname{Var}_j = \sum_{i=1}^m w_i (s_{ij} - \bar{s}_j)^2, \quad \bar{s}_j = \sum_{i=1}^m w_i s_{ij}.
+\]
+
+The tests in `tests/scoreAggregation.test.ts` exercise this aggregation. The TODO above tracks the plan to replace noisy LLM scorers with deterministic checks while keeping the same aggregation pipeline.
 
 
   rank  repo                                      stars  forks

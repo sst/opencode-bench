@@ -22,10 +22,8 @@ import type {
   JudgeScoreResult,
   ScoreAggregationInput,
 } from "~/lib/utils/scoreAggregation.js";
-import type {
-  BenchmarkExport,
-  EvaluationRunExport,
-} from "~/types/export.js";
+import type { BenchmarkExport, EvaluationRunExport } from "~/types/export.js";
+import { withRetries } from "~/lib/utils/retry.js";
 
 type ScoreName = ScoreAssignment["name"];
 
@@ -52,9 +50,7 @@ async function printHelp(): Promise<void> {
   console.log("  orvl opencode");
   console.log("  orvl opencode --model qwen3-coder");
   console.log("  orvl opencode --eval noworneverev/graphrag-visualizer");
-  console.log(
-    "  orvl opencode --eval noworneverev/graphrag-visualizer --score semantic-similarity",
-  );
+  console.log();
   console.log("  orvl opencode --output results.json");
   console.log("");
   const agents = await listAgents();
@@ -268,9 +264,7 @@ async function main(): Promise<void> {
   }> => {
     const availableScores = evalDefinition.scores;
     const scores: ScoreAssignment[] = scoreFilter
-      ? availableScores.filter(
-          (assignment) => assignment.name === scoreFilter,
-        )
+      ? availableScores.filter((assignment) => assignment.name === scoreFilter)
       : availableScores;
 
     if (scores.length === 0) {
@@ -291,10 +285,7 @@ async function main(): Promise<void> {
         `No commits found between ${evalDefinition.from} and ${evalDefinition.to} for ${evalDefinition.repo}.`,
       );
 
-      plannerTasks = await generatePlannerTasks(
-        evalDefinition,
-        commitDiffs,
-      );
+      plannerTasks = await generatePlannerTasks(evalDefinition, commitDiffs);
 
       assert(
         plannerTasks.length > 0,
@@ -359,32 +350,46 @@ async function main(): Promise<void> {
 
         for (const task of plannerTasks) {
           const logPrefix = `${combinationLabel} ${task.commit}`;
-
-          try {
-            await agentRegistration.definition.run(
-              fullModel,
-              task.prompt,
-              cwd,
-              {
-                onStart: (commandString: string) => {
-                  console.log(`[${logPrefix}] ${commandString.trim()}`);
+          await withRetries(
+            async () => {
+              await agentRegistration.definition.run(
+                fullModel,
+                task.prompt,
+                cwd,
+                {
+                  onStart: (commandString: string) => {
+                    console.log(`[${logPrefix}] ${commandString.trim()}`);
+                  },
+                  logPrefix,
                 },
-                logPrefix,
-              },
-            );
-
-            tasksExecuted += 1;
-          } catch (error) {
-            if (error instanceof Error) {
-              console.error(
-                `Failed to render command for ${fullModel}: ${error.message}`,
               );
-            } else {
-            console.error("Failed to render command for", fullModel);
-            }
+            },
+            {
+              retries: 3,
+              onRetry(error, attempt, retries) {
+                if (error instanceof Error) {
+                  console.error(
+                    `Failed to render command for ${fullModel} (attempt ${attempt}/${retries}): ${error.message}`,
+                  );
+                } else {
+                  console.error(
+                    `Failed to render command for ${fullModel} (attempt ${attempt}/${retries})`,
+                  );
+                }
+
+                if (attempt < retries) {
+                  console.log(
+                    `[${logPrefix}] Retrying agent run (attempt ${attempt + 1}/${retries})...`,
+                  );
+                }
+              },
+            },
+          ).catch((error) => {
             process.exitCode = 1;
-            throw abortToken;
-          }
+            throw error === abortToken ? error : abortToken;
+          });
+
+          tasksExecuted += 1;
         }
 
         if (tasksExecuted === 0) {
@@ -546,7 +551,9 @@ async function main(): Promise<void> {
       writeFileSync(outputPath, JSON.stringify(exportPayload, null, 2));
     } catch (error) {
       const message =
-        error instanceof Error ? error.message : "Unknown error writing output.";
+        error instanceof Error
+          ? error.message
+          : "Unknown error writing output.";
       console.error(`Failed to write export to ${outputPath}: ${message}`);
       process.exitCode = 1;
       return;
