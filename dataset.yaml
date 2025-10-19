@@ -49,12 +49,10 @@
   issues: []
   scores:
     api-signature:
-      weight: 0.2
+      weight: 0.22
     logic-equivalence:
-      weight: 0.3
+      weight: 0.34
     integration-points:
-      weight: 0.2
+      weight: 0.22
     test-coverage:
-      weight: 0.2
-    checks:
-      weight: 0.1
+      weight: 0.22

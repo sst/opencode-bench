@@ -30,6 +30,7 @@ type EvalSummary = {
   models: ModelSummary[];
 };
 
+const RADAR_CHART_BASE_URL = "https://image-charts.com/chart";
 const colorHex = "0c0c0e";
 const embedColor = parseInt(colorHex, 16);
 
@@ -184,17 +185,56 @@ function toEvalSummaries(exportData: BenchmarkExport): EvalSummary[] {
   }));
 }
 
+function buildRadarChartUrl(
+  model: ModelSummary,
+  evalName: string,
+): string | undefined {
+  if (model.rows.length === 0) {
+    return undefined;
+  }
+
+  const values = model.rows.map((row) => row.average);
+  const labels = model.rows.map((row) => row.name);
+
+  // close the radar polygon by repeating the first value/label
+  values.push(values[0]);
+  labels.push(labels[0]);
+
+  const params = new URLSearchParams({
+    chs: "600x500",
+    cht: "r",
+    chd: `t:${values.map((value) => value.toFixed(3)).join(",")}`,
+    chl: labels.join("|"),
+    chco: "1F1E1E,F8FAC780",
+    chf: "bg,s,FDFCFC|c,lg,45,FDFCFC00,0.0,FAFCE930,1.0",
+    chtt: `${evalName} • ${model.id}`,
+    chts: "1F1E1E,18",
+    chxt: "r",
+    chxr: "0,0,1,0.2",
+    chxs: "0,646262,12,0,l",
+    chm: "N*f2*,1F1E1E,0,-1,12",
+  });
+
+  return `${RADAR_CHART_BASE_URL}?${params.toString()}`;
+}
+
 function buildPayload(evalSummaries: EvalSummary[]) {
   const contentLink = resolveContentLink();
   const embeds = evalSummaries.map((summary) => {
-    const fields = summary.models.map((model) => ({
-      name: model.id,
-      value: [
+    const fields = summary.models.map((model) => {
+      const lines = [
         `Score: ${model.final.toFixed(3)}`,
         ...model.rows.map((row) => `${row.name}: ${row.average.toFixed(3)}`),
-      ].join("\n"),
-      inline: false,
-    }));
+      ];
+
+      const radarUrl = buildRadarChartUrl(model, summary.eval);
+
+      return {
+        name: radarUrl ? `[${model.id}](${radarUrl})` : model.id,
+        value: lines.join("\n"),
+        inline: false,
+      };
+    });
 
     return {
       title: summary.eval,
