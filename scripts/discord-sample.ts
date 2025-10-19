@@ -185,6 +185,7 @@ function toEvalSummaries(exportData: BenchmarkExport): EvalSummary[] {
 }
 
 function buildPayload(evalSummaries: EvalSummary[]) {
+  const contentLink = resolveContentLink();
   const embeds = evalSummaries.map((summary) => {
     const fields = summary.models.map((model) => ({
       name: model.id,
@@ -202,10 +203,7 @@ function buildPayload(evalSummaries: EvalSummary[]) {
     };
   });
 
-  const content =
-    process.env.GITHUB_RUN_ID && process.env.GITHUB_REPOSITORY
-      ? `[${process.env.GITHUB_RUN_ID}/${process.env.GITHUB_JOB ?? "job"}](https://github.com/${process.env.GITHUB_REPOSITORY}/actions/runs/${process.env.GITHUB_RUN_ID})`
-      : undefined;
+  const content = contentLink ?? undefined;
 
   return {
     username: "opencode",
@@ -214,6 +212,32 @@ function buildPayload(evalSummaries: EvalSummary[]) {
     content,
     embeds,
   };
+}
+
+function resolveContentLink(): string | undefined {
+  const repository = process.env.GITHUB_REPOSITORY;
+  if (!repository) {
+    return undefined;
+  }
+
+  const serverUrl = process.env.GITHUB_SERVER_URL ?? "https://github.com";
+  const eventName = process.env.GITHUB_EVENT_NAME;
+
+  if (eventName === "pull_request") {
+    const ref = process.env.GITHUB_REF ?? "";
+    const match = ref.match(/^refs\/pull\/(\d+)\//);
+    if (match) {
+      const prNumber = match[1];
+      return `${serverUrl}/${repository}/pull/${prNumber}`;
+    }
+  }
+
+  const sha = process.env.GITHUB_SHA;
+  if (sha) {
+    return `${serverUrl}/${repository}/commit/${sha}`;
+  }
+
+  return undefined;
 }
 async function sendWebhook(payload: unknown): Promise<void> {
   const webhookUrl = process.env.DISCORD_WEBHOOK_URL?.trim();
