@@ -203,41 +203,25 @@ function buildRadarChartUrl(
 
   const config = {
     type: "radar",
-    backgroundColor: "#FDFBF9",
     data: {
       labels,
       datasets: [
         {
           label: model.id,
           data: values,
-          backgroundColor: "rgba(188, 187, 187, 0.3)",
+          backgroundColor: "rgba(188,187,187,0.3)",
           borderColor: "#1F1E1E",
           borderWidth: 2,
-          pointBackgroundColor: "rgba(31, 30, 29, 0.9)",
-          pointBorderColor: "#FDFBF9",
-          pointHoverRadius: 5,
-          lineTension: 0.1,
         },
       ],
     },
     options: {
-      maintainAspectRatio: false,
-      layout: {
-        padding: { top: 24, right: 32, bottom: 16, left: 32 },
-      },
       plugins: {
         legend: { display: false },
         title: {
           display: true,
           text: `${evalName} • ${model.id}`,
-          color: "hsl(0, 5%, 12%)",
-          font: {
-            size: 18,
-            family: "IBM Plex Mono, SFMono-Regular, Menlo, Consolas, monospace",
-            weight: "500",
-          },
         },
-        datalabels: false,
       },
       scale: {
         ticks: {
@@ -245,35 +229,17 @@ function buildRadarChartUrl(
           min: 0,
           max: 1,
           stepSize: 0.2,
-          showLabelBackdrop: false,
-          fontColor: "hsl(0, 1%, 39%)",
-          fontFamily:
-            "IBM Plex Mono, SFMono-Regular, Menlo, Consolas, monospace",
-        },
-        gridLines: {
-          color: "rgba(176, 176, 176, 0.35)",
-        },
-        angleLines: {
-          color: "rgba(143, 139, 139, 0.3)",
-        },
-        pointLabels: {
-          fontColor: "hsl(0, 1%, 39%)",
-          fontFamily:
-            "IBM Plex Mono, SFMono-Regular, Menlo, Consolas, monospace",
-          fontSize: 12,
         },
       },
       elements: {
-        line: {
-          borderJoinStyle: "round",
-        },
+        line: { borderJoinStyle: "round" },
       },
     },
   };
 
   const encodedConfig = encodeURIComponent(JSON.stringify(config));
 
-  return `${QUICKCHART_BASE_URL}?c=${encodedConfig}&v=2&w=600&h=500`;
+  return `${QUICKCHART_BASE_URL}?c=${encodedConfig}&w=600&h=500&bkg=white`;
 }
 
 function computeAverageScore(model: ModelSummary): number {
@@ -297,38 +263,28 @@ function buildAverageChartUrl(
   const labels = models.map((model) => model.id);
   const averages = models.map((model) => Number(model.final.toFixed(3)));
 
-  const baseBackgroundColors = [
-    "rgba(31, 30, 29, 0.94)",
-    "rgba(188, 187, 187, 0.9)",
-    "rgba(248, 250, 199, 0.85)",
-    "rgba(100, 98, 98, 0.9)",
+  const baseColors = [
+    "rgba(31,30,29,0.94)",
+    "rgba(188,187,187,0.9)",
+    "rgba(248,250,199,0.85)",
+    "rgba(100,98,98,0.9)",
   ];
-  const baseHoverColors = [
-    "rgba(31, 30, 29, 1)",
-    "rgba(188, 187, 187, 1)",
-    "rgba(248, 250, 199, 1)",
-    "rgba(100, 98, 98, 1)",
-  ];
-  const baseBorderColors = [
-    "rgba(31, 30, 29, 1)",
-    "rgba(143, 139, 139, 1)",
-    "rgba(188, 187, 187, 1)",
-    "rgba(100, 98, 98, 1)",
+  const borderColors = [
+    "rgba(31,30,29,1)",
+    "rgba(143,139,139,1)",
+    "rgba(188,187,187,1)",
+    "rgba(100,98,98,1)",
   ];
 
   const backgroundColor = models.map(
-    (_, index) => baseBackgroundColors[index % baseBackgroundColors.length],
-  );
-  const hoverBackgroundColor = models.map(
-    (_, index) => baseHoverColors[index % baseHoverColors.length],
+    (_, index) => baseColors[index % baseColors.length],
   );
   const borderColor = models.map(
-    (_, index) => baseBorderColors[index % baseBorderColors.length],
+    (_, index) => borderColors[index % borderColors.length],
   );
 
   const config = {
     type: "bar",
-    backgroundColor: "#FDFBF9",
     data: {
       labels,
       datasets: [
@@ -336,32 +292,19 @@ function buildAverageChartUrl(
           label: "Average Score",
           data: averages,
           backgroundColor,
-          hoverBackgroundColor,
           borderColor,
           borderWidth: 1,
           borderRadius: 6,
-          barPercentage: 0.5,
-          categoryPercentage: 0.6,
-          maxBarThickness: 48,
         },
       ],
     },
     options: {
-      maintainAspectRatio: false,
-      layout: {
-        padding: { top: 32, right: 36, bottom: 28, left: 36 },
-      },
-      title: {
-        display: true,
-        text: `Average Performance by Model (${evalName})`,
-        fontFamily: "IBM Plex Mono, SFMono-Regular, Menlo, Consolas, monospace",
-        fontColor: "hsl(0, 5%, 12%)",
-        fontSize: 18,
-        fontStyle: "normal",
-        padding: 24,
-      },
-      legend: {
-        display: false,
+      plugins: {
+        legend: { display: false },
+        title: {
+          display: true,
+          text: `Average Performance by Model (${evalName})`,
+        },
       },
       scales: {
         yAxes: [
@@ -370,72 +313,21 @@ function buildAverageChartUrl(
               beginAtZero: true,
               min: 0,
               max: 1,
-              stepSize: 0.2,
-              fontColor: "hsl(0, 1%, 39%)",
-              fontFamily:
-                "IBM Plex Mono, SFMono-Regular, Menlo, Consolas, monospace",
-              padding: 6,
-            },
-            gridLines: {
-              color: "rgba(176, 176, 176, 0.35)",
-              zeroLineColor: "rgba(143, 139, 139, 0.55)",
-              drawTicks: false,
-            },
-            scaleLabel: {
-              display: true,
-              labelString: "Average Score",
-              fontColor: "hsl(0, 5%, 12%)",
-              fontFamily:
-                "IBM Plex Mono, SFMono-Regular, Menlo, Consolas, monospace",
-              fontStyle: "600",
             },
           },
         ],
         xAxes: [
           {
-            ticks: {
-              autoSkip: false,
-              fontColor: "hsl(0, 5%, 12%)",
-              fontFamily:
-                "IBM Plex Mono, SFMono-Regular, Menlo, Consolas, monospace",
-              maxRotation: 0,
-              minRotation: 0,
-              padding: 12,
-            },
-            gridLines: {
-              display: false,
-              drawBorder: false,
-            },
+            ticks: { autoSkip: false },
           },
         ],
-      },
-      tooltips: {
-        backgroundColor: "rgba(31, 28, 28, 0.92)",
-        titleFontFamily:
-          "IBM Plex Mono, SFMono-Regular, Menlo, Consolas, monospace",
-        titleFontColor: "#FDFBF9",
-        bodyFontFamily:
-          "IBM Plex Mono, SFMono-Regular, Menlo, Consolas, monospace",
-        bodyFontColor: "#FDFBF9",
-        borderColor: "rgba(143, 139, 139, 0.4)",
-        borderWidth: 1,
-        xPadding: 14,
-        yPadding: 12,
-        caretSize: 6,
-        caretPadding: 8,
-      },
-      plugins: {
-        datalabels: { display: false },
-      },
-      elements: {
-        rectangle: { borderSkipped: "bottom" },
       },
     },
   };
 
   const encodedConfig = encodeURIComponent(JSON.stringify(config));
 
-  return `${QUICKCHART_BASE_URL}?c=${encodedConfig}&v=2&w=700&h=400`;
+  return `${QUICKCHART_BASE_URL}?c=${encodedConfig}&w=700&h=400&bkg=white`;
 }
 
 function buildPayload(evalSummaries: EvalSummary[]) {
