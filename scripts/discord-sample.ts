@@ -30,7 +30,7 @@ type EvalSummary = {
   models: ModelSummary[];
 };
 
-const RADAR_CHART_BASE_URL = "https://image-charts.com/chart";
+const QUICKCHART_BASE_URL = "https://quickchart.io/chart";
 const colorHex = "0c0c0e";
 const embedColor = parseInt(colorHex, 16);
 
@@ -193,53 +193,276 @@ function buildRadarChartUrl(
     return undefined;
   }
 
-  const values = model.rows.map((row) => row.average);
   const labels = model.rows.map((row) => row.name);
+  const values = model.rows.map((row) => Number(row.average.toFixed(3)));
 
-  // close the radar polygon by repeating the first value/label
-  values.push(values[0]);
-  labels.push(labels[0]);
+  if (labels.length > 0) {
+    labels.push(labels[0]);
+    values.push(values[0]);
+  }
 
-  const params = new URLSearchParams({
-    chs: "600x500",
-    cht: "r",
-    chd: `t:${values.map((value) => value.toFixed(3)).join(",")}`,
-    chl: labels.join("|"),
-    chco: "1F1E1E,F8FAC780",
-    chf: "bg,s,FDFCFC|c,lg,45,FDFCFC00,0.0,FAFCE930,1.0",
-    chtt: `${evalName} • ${model.id}`,
-    chts: "1F1E1E,18",
-    chxt: "r",
-    chxr: "0,0,1,0.2",
-    chxs: "0,646262,12,0,l",
-    chm: "N*f2*,1F1E1E,0,-1,12",
-  });
+  const config = {
+    type: "radar",
+    backgroundColor: "#FDFBF9",
+    data: {
+      labels,
+      datasets: [
+        {
+          label: model.id,
+          data: values,
+          backgroundColor: "rgba(188, 187, 187, 0.3)",
+          borderColor: "#1F1E1E",
+          borderWidth: 2,
+          pointBackgroundColor: "rgba(31, 30, 29, 0.9)",
+          pointBorderColor: "#FDFBF9",
+          pointHoverRadius: 5,
+          lineTension: 0.1,
+        },
+      ],
+    },
+    options: {
+      maintainAspectRatio: false,
+      layout: {
+        padding: { top: 24, right: 32, bottom: 16, left: 32 },
+      },
+      plugins: {
+        legend: { display: false },
+        title: {
+          display: true,
+          text: `${evalName} • ${model.id}`,
+          color: "hsl(0, 5%, 12%)",
+          font: {
+            size: 18,
+            family: "IBM Plex Mono, SFMono-Regular, Menlo, Consolas, monospace",
+            weight: "500",
+          },
+        },
+        datalabels: false,
+      },
+      scale: {
+        ticks: {
+          beginAtZero: true,
+          min: 0,
+          max: 1,
+          stepSize: 0.2,
+          showLabelBackdrop: false,
+          fontColor: "hsl(0, 1%, 39%)",
+          fontFamily:
+            "IBM Plex Mono, SFMono-Regular, Menlo, Consolas, monospace",
+        },
+        gridLines: {
+          color: "rgba(176, 176, 176, 0.35)",
+        },
+        angleLines: {
+          color: "rgba(143, 139, 139, 0.3)",
+        },
+        pointLabels: {
+          fontColor: "hsl(0, 1%, 39%)",
+          fontFamily:
+            "IBM Plex Mono, SFMono-Regular, Menlo, Consolas, monospace",
+          fontSize: 12,
+        },
+      },
+      elements: {
+        line: {
+          borderJoinStyle: "round",
+        },
+      },
+    },
+  };
 
-  return `${RADAR_CHART_BASE_URL}?${params.toString()}`;
+  const encodedConfig = encodeURIComponent(JSON.stringify(config));
+
+  return `${QUICKCHART_BASE_URL}?c=${encodedConfig}&v=2&w=600&h=500`;
+}
+
+function computeAverageScore(model: ModelSummary): number {
+  if (model.rows.length === 0) {
+    return 0;
+  }
+
+  const total = model.rows.reduce((sum, score) => sum + score.average, 0);
+
+  return total / model.rows.length;
+}
+
+function buildAverageChartUrl(
+  evalName: string,
+  models: ModelSummary[],
+): string | undefined {
+  if (models.length === 0) {
+    return undefined;
+  }
+
+  const labels = models.map((model) => model.id);
+  const averages = models.map((model) => Number(model.final.toFixed(3)));
+
+  const baseBackgroundColors = [
+    "rgba(31, 30, 29, 0.94)",
+    "rgba(188, 187, 187, 0.9)",
+    "rgba(248, 250, 199, 0.85)",
+    "rgba(100, 98, 98, 0.9)",
+  ];
+  const baseHoverColors = [
+    "rgba(31, 30, 29, 1)",
+    "rgba(188, 187, 187, 1)",
+    "rgba(248, 250, 199, 1)",
+    "rgba(100, 98, 98, 1)",
+  ];
+  const baseBorderColors = [
+    "rgba(31, 30, 29, 1)",
+    "rgba(143, 139, 139, 1)",
+    "rgba(188, 187, 187, 1)",
+    "rgba(100, 98, 98, 1)",
+  ];
+
+  const backgroundColor = models.map(
+    (_, index) => baseBackgroundColors[index % baseBackgroundColors.length],
+  );
+  const hoverBackgroundColor = models.map(
+    (_, index) => baseHoverColors[index % baseHoverColors.length],
+  );
+  const borderColor = models.map(
+    (_, index) => baseBorderColors[index % baseBorderColors.length],
+  );
+
+  const config = {
+    type: "bar",
+    backgroundColor: "#FDFBF9",
+    data: {
+      labels,
+      datasets: [
+        {
+          label: "Average Score",
+          data: averages,
+          backgroundColor,
+          hoverBackgroundColor,
+          borderColor,
+          borderWidth: 1,
+          borderRadius: 6,
+          barPercentage: 0.5,
+          categoryPercentage: 0.6,
+          maxBarThickness: 48,
+        },
+      ],
+    },
+    options: {
+      maintainAspectRatio: false,
+      layout: {
+        padding: { top: 32, right: 36, bottom: 28, left: 36 },
+      },
+      title: {
+        display: true,
+        text: `Average Performance by Model (${evalName})`,
+        fontFamily: "IBM Plex Mono, SFMono-Regular, Menlo, Consolas, monospace",
+        fontColor: "hsl(0, 5%, 12%)",
+        fontSize: 18,
+        fontStyle: "normal",
+        padding: 24,
+      },
+      legend: {
+        display: false,
+      },
+      scales: {
+        yAxes: [
+          {
+            ticks: {
+              beginAtZero: true,
+              min: 0,
+              max: 1,
+              stepSize: 0.2,
+              fontColor: "hsl(0, 1%, 39%)",
+              fontFamily:
+                "IBM Plex Mono, SFMono-Regular, Menlo, Consolas, monospace",
+              padding: 6,
+            },
+            gridLines: {
+              color: "rgba(176, 176, 176, 0.35)",
+              zeroLineColor: "rgba(143, 139, 139, 0.55)",
+              drawTicks: false,
+            },
+            scaleLabel: {
+              display: true,
+              labelString: "Average Score",
+              fontColor: "hsl(0, 5%, 12%)",
+              fontFamily:
+                "IBM Plex Mono, SFMono-Regular, Menlo, Consolas, monospace",
+              fontStyle: "600",
+            },
+          },
+        ],
+        xAxes: [
+          {
+            ticks: {
+              autoSkip: false,
+              fontColor: "hsl(0, 5%, 12%)",
+              fontFamily:
+                "IBM Plex Mono, SFMono-Regular, Menlo, Consolas, monospace",
+              maxRotation: 0,
+              minRotation: 0,
+              padding: 12,
+            },
+            gridLines: {
+              display: false,
+              drawBorder: false,
+            },
+          },
+        ],
+      },
+      tooltips: {
+        backgroundColor: "rgba(31, 28, 28, 0.92)",
+        titleFontFamily:
+          "IBM Plex Mono, SFMono-Regular, Menlo, Consolas, monospace",
+        titleFontColor: "#FDFBF9",
+        bodyFontFamily:
+          "IBM Plex Mono, SFMono-Regular, Menlo, Consolas, monospace",
+        bodyFontColor: "#FDFBF9",
+        borderColor: "rgba(143, 139, 139, 0.4)",
+        borderWidth: 1,
+        xPadding: 14,
+        yPadding: 12,
+        caretSize: 6,
+        caretPadding: 8,
+      },
+      plugins: {
+        datalabels: { display: false },
+      },
+      elements: {
+        rectangle: { borderSkipped: "bottom" },
+      },
+    },
+  };
+
+  const encodedConfig = encodeURIComponent(JSON.stringify(config));
+
+  return `${QUICKCHART_BASE_URL}?c=${encodedConfig}&v=2&w=700&h=400`;
 }
 
 function buildPayload(evalSummaries: EvalSummary[]) {
   const contentLink = resolveContentLink();
   const embeds = evalSummaries.map((summary) => {
     const fields = summary.models.map((model) => {
-      const lines = [
-        `Score: ${model.final.toFixed(3)}`,
-        ...model.rows.map((row) => `${row.name}: ${row.average.toFixed(3)}`),
-      ];
-
+      const finalScore = model.final.toFixed(3);
       const radarUrl = buildRadarChartUrl(model, summary.eval);
 
       return {
-        name: radarUrl ? `[${model.id}](${radarUrl})` : model.id,
-        value: lines.join("\n"),
+        name: model.id,
+        value: radarUrl ? `[${finalScore}](${radarUrl})` : finalScore,
         inline: false,
       };
     });
+
+    const averageChartUrl = buildAverageChartUrl(summary.eval, summary.models);
 
     return {
       title: summary.eval,
       color: embedColor,
       fields,
+      ...(averageChartUrl
+        ? {
+            image: { url: averageChartUrl },
+          }
+        : {}),
     };
   });
 
