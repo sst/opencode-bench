@@ -115,10 +115,23 @@ jobs:
             exit 1
           fi
 
+      - name: Prepare artifact name
+        id: artifact
+        env:
+          BENCHMARK_AGENT: ${{ matrix.agent }}
+          BENCHMARK_MODEL: ${{ matrix.model }}
+          BENCHMARK_EVAL: ${{ matrix.eval }}
+        run: |
+          set -euo pipefail
+          agent="${BENCHMARK_AGENT//\//-}"
+          model="${BENCHMARK_MODEL//\//-}"
+          eval="${BENCHMARK_EVAL//\//-}"
+          echo "name=benchmark-${agent}-${model}-${eval}" >> "$GITHUB_OUTPUT"
+
       - name: Upload benchmark artifact
         uses: actions/upload-artifact@v4
         with:
-          name: benchmark-${{ replace(matrix.agent, '/', '-') }}-${{ replace(matrix.model, '/', '-') }}-${{ replace(matrix.eval, '/', '-') }}
+          name: ${{ steps.artifact.outputs.name }}
           path: benchmark.json
 
   notify:
