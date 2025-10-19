@@ -30,6 +30,11 @@ type EvalSummary = {
   models: ModelSummary[];
 };
 
+type ModelAverage = {
+  id: string;
+  score: number;
+};
+
 const QUICKCHART_BASE_URL = "https://quickchart.io/chart";
 const colorHex = "0c0c0e";
 const embedColor = parseInt(colorHex, 16);
@@ -330,8 +335,105 @@ function buildAverageChartUrl(
   return `${QUICKCHART_BASE_URL}?c=${encodedConfig}&w=700&h=400&bkg=white`;
 }
 
+function buildOverallChartUrl(
+  evalSummaries: EvalSummary[],
+): string | undefined {
+  const aggregates = new Map<string, { total: number; count: number }>();
+
+  evalSummaries.forEach((summary) => {
+    summary.models.forEach((model) => {
+      const entry = aggregates.get(model.id) ?? { total: 0, count: 0 };
+      entry.total += model.final;
+      entry.count += 1;
+      aggregates.set(model.id, entry);
+    });
+  });
+
+  if (aggregates.size === 0) {
+    return undefined;
+  }
+
+  const averages: ModelAverage[] = Array.from(aggregates.entries()).map(
+    ([id, { total, count }]) => ({
+      id,
+      score: Number((total / count).toFixed(3)),
+    }),
+  );
+
+  averages.sort((a, b) => b.score - a.score);
+
+  const baseColors = [
+    "rgba(31,30,29,0.94)",
+    "rgba(188,187,187,0.9)",
+    "rgba(248,250,199,0.85)",
+    "rgba(100,98,98,0.9)",
+  ];
+  const borderColors = [
+    "rgba(31,30,29,1)",
+    "rgba(143,139,139,1)",
+    "rgba(188,187,187,1)",
+    "rgba(100,98,98,1)",
+  ];
+
+  const labels = averages.map((entry) => entry.id);
+  const data = averages.map((entry) => entry.score);
+  const backgroundColor = averages.map(
+    (_, index) => baseColors[index % baseColors.length],
+  );
+  const borderColor = averages.map(
+    (_, index) => borderColors[index % borderColors.length],
+  );
+
+  const config = {
+    type: "bar",
+    data: {
+      labels,
+      datasets: [
+        {
+          label: "Average Score",
+          data,
+          backgroundColor,
+          borderColor,
+          borderWidth: 1,
+          borderRadius: 6,
+        },
+      ],
+    },
+    options: {
+      plugins: {
+        legend: { display: false },
+        title: {
+          display: true,
+          text: "Average Performance by Model (All Evaluations)",
+        },
+      },
+      scales: {
+        yAxes: [
+          {
+            ticks: {
+              beginAtZero: true,
+              min: 0,
+              max: 1,
+            },
+          },
+        ],
+        xAxes: [
+          {
+            ticks: { autoSkip: false },
+          },
+        ],
+      },
+    },
+  };
+
+  const encodedConfig = encodeURIComponent(JSON.stringify(config));
+
+  return `${QUICKCHART_BASE_URL}?c=${encodedConfig}&w=700&h=400&bkg=white`;
+}
+
 function buildPayload(evalSummaries: EvalSummary[]) {
   const contentLink = resolveContentLink();
+  const overallChartUrl = buildOverallChartUrl(evalSummaries);
   const embeds = evalSummaries.map((summary) => {
     const fields = summary.models.map((model) => {
       const finalScore = model.final.toFixed(3);
@@ -358,7 +460,15 @@ function buildPayload(evalSummaries: EvalSummary[]) {
     };
   });
 
-  const content = contentLink ?? undefined;
+  const contentLines: string[] = [];
+  if (contentLink) {
+    contentLines.push(contentLink);
+  }
+  if (overallChartUrl) {
+    contentLines.push(`[Scoreboard](${overallChartUrl})`);
+  }
+
+  const content = contentLines.length > 0 ? contentLines.join("\n") : undefined;
 
   return {
     username: "opencode",
