@@ -3,10 +3,12 @@ name: Publish and Benchmark Preview Packages
 on:
   push:
     branches:
-      - "**"
+      - main
     tags:
       - "!**"
   pull_request:
+    branches:
+      - main
 
 permissions:
   contents: read
@@ -18,6 +20,7 @@ jobs:
       sha: ${{ steps.publish.outputs.sha }}
       urls: ${{ steps.publish.outputs.urls }}
       packages: ${{ steps.publish.outputs.packages }}
+      matrix: ${{ steps.matrix.outputs.matrix }}
 
     steps:
       - name: Checkout repository
@@ -38,11 +41,21 @@ jobs:
         name: Publish preview with pkg.pr.new
         run: bunx pkg-pr-new publish --bun
 
+      - id: matrix
+        name: Build benchmark matrix
+        run: |
+          set -euo pipefail
+          MATRIX_JSON="$(bun run scripts/generate-benchmark-matrix.ts)"
+          printf 'matrix=%s\n' "${MATRIX_JSON}" >> "$GITHUB_OUTPUT"
+
   benchmark:
     runs-on: ubuntu-latest
     needs: publish
     if: needs.publish.result == 'success' && needs.publish.outputs.urls != ''
     environment: production
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.publish.outputs.matrix) }}
 
     steps:
       - name: Checkout repository
@@ -63,11 +76,28 @@ jobs:
         env:
           OPENCODE_API_KEY: ${{ secrets.OPENCODE_API_KEY }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          PACKAGE_URLS: ${{ needs.publish.outputs.urls }}
+          URLS: ${{ needs.publish.outputs.urls }}
+          BENCHMARK_EVAL: ${{ matrix.eval }}
+          BENCHMARK_MODEL: ${{ matrix.model }}
+          BENCHMARK_AGENT: ${{ matrix.agent }}
         run: |
           set -euo pipefail
+          PACKAGE_URL="$(printf '%s\n' "${URLS}" | awk 'NF {print $1; exit}')"
 
-          PACKAGE_URL="${PACKAGE_URLS%% *}"
+          if [ -z "${BENCHMARK_EVAL}" ]; then
+            echo "Matrix entry missing evaluation identifier." >&2
+            exit 1
+          fi
+
+          if [ -z "${BENCHMARK_MODEL}" ]; then
+            echo "Matrix entry missing model identifier." >&2
+            exit 1
+          fi
+
+          if [ -z "${BENCHMARK_AGENT}" ]; then
+            echo "Matrix entry missing agent identifier." >&2
+            exit 1
+          fi
 
           if [ -z "${PACKAGE_URL}" ]; then
             echo "No package URL found in publish outputs." >&2
@@ -76,24 +106,53 @@ jobs:
 
           PACKAGE_SPEC="orvl@${PACKAGE_URL}"
           OUTPUT_FILE="benchmark.json"
-          COMMAND="bunx \"${PACKAGE_SPEC}\" opencode --output \"${OUTPUT_FILE}\""
+          COMMAND="bunx \"${PACKAGE_SPEC}\" \"${BENCHMARK_AGENT}\" --eval \"${BENCHMARK_EVAL}\" --model \"${BENCHMARK_MODEL}\" --output \"${OUTPUT_FILE}\""
 
           echo "Executing: ${COMMAND}"
-          if ! bunx "${PACKAGE_SPEC}" opencode --output "${OUTPUT_FILE}"; then
+          if ! bunx "${PACKAGE_SPEC}" "${BENCHMARK_AGENT}" --eval "${BENCHMARK_EVAL}" --model "${BENCHMARK_MODEL}" --output "${OUTPUT_FILE}"; then
             echo "openreval benchmark failed, dumping OpenCode logs..." >&2
             find /home/runner/.local/share/opencode/log -type f -print -exec cat {} + || true
             exit 1
           fi
 
+      - name: Upload benchmark artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: benchmark-${{ replace(matrix.agent, '/', '-') }}-${{ replace(matrix.model, '/', '-') }}-${{ replace(matrix.eval, '/', '-') }}
+          path: benchmark.json
+
+  notify:
+    runs-on: ubuntu-latest
+    needs: benchmark
+    if: needs.benchmark.result == 'success'
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v1
+        with:
+          bun-version: 1.2.21
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Download benchmark artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: benchmarks
+
+      - name: Merge benchmark exports
+        run: bun run scripts/merge-benchmark-exports.ts benchmarks merged-benchmark.json
+
       - name: Send Discord notification
-        if: success()
         env:
           DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
         run: |
           set -euo pipefail
-          if [ ! -f benchmark.json ]; then
-            echo "benchmark.json not found; skipping Discord notification." >&2
+          if [ ! -f merged-benchmark.json ]; then
+            echo "merged-benchmark.json not found; skipping Discord notification." >&2
             exit 0
           fi
 
-          bun run scripts/discord-sample.ts benchmark.json
+          bun run scripts/discord-sample.ts merged-benchmark.json
