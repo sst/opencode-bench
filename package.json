@@ -26,6 +26,8 @@
     "@ai-sdk/anthropic": "^2.0.26",
     "@ai-sdk/openai": "^2.0.48",
     "@ai-sdk/openai-compatible": "^1.0.21",
+    "@openai/codex-sdk": "^0.47.0",
+    "@opencode-ai/sdk": "^0.15.8",
     "@octokit/request": "^10.0.5",
     "ai": "^5.0.64",
     "yaml": "^2.4.5",

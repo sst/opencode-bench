@@ -73,47 +73,52 @@ jobs:
         run: bun add -g opencode-ai
 
       - name: Run openreval benchmark
+        uses: nick-fields/retry@v2
         env:
           OPENCODE_API_KEY: ${{ secrets.OPENCODE_API_KEY }}
+          CODEX_API_KEY: ${{ secrets.CODEX_API_KEY }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           URLS: ${{ needs.publish.outputs.urls }}
           BENCHMARK_EVAL: ${{ matrix.eval }}
           BENCHMARK_MODEL: ${{ matrix.model }}
           BENCHMARK_AGENT: ${{ matrix.agent }}
-        run: |
-          set -euo pipefail
-          PACKAGE_URL="$(printf '%s\n' "${URLS}" | awk 'NF {print $1; exit}')"
+        with:
+          max_attempts: 3
+          retry_on: error
+          command: |
+            set -euo pipefail
+            PACKAGE_URL="$(printf '%s\n' "${URLS}" | awk 'NF {print $1; exit}')"
 
-          if [ -z "${BENCHMARK_EVAL}" ]; then
-            echo "Matrix entry missing evaluation identifier." >&2
-            exit 1
-          fi
+            if [ -z "${BENCHMARK_EVAL}" ]; then
+              echo "Matrix entry missing evaluation identifier." >&2
+              exit 1
+            fi
 
-          if [ -z "${BENCHMARK_MODEL}" ]; then
-            echo "Matrix entry missing model identifier." >&2
-            exit 1
-          fi
+            if [ -z "${BENCHMARK_MODEL}" ]; then
+              echo "Matrix entry missing model identifier." >&2
+              exit 1
+            fi
 
-          if [ -z "${BENCHMARK_AGENT}" ]; then
-            echo "Matrix entry missing agent identifier." >&2
-            exit 1
-          fi
+            if [ -z "${BENCHMARK_AGENT}" ]; then
+              echo "Matrix entry missing agent identifier." >&2
+              exit 1
+            fi
 
-          if [ -z "${PACKAGE_URL}" ]; then
-            echo "No package URL found in publish outputs." >&2
-            exit 1
-          fi
+            if [ -z "${PACKAGE_URL}" ]; then
+              echo "No package URL found in publish outputs." >&2
+              exit 1
+            fi
 
-          PACKAGE_SPEC="orvl@${PACKAGE_URL}"
-          OUTPUT_FILE="benchmark.json"
-          COMMAND="bunx \"${PACKAGE_SPEC}\" \"${BENCHMARK_AGENT}\" --eval \"${BENCHMARK_EVAL}\" --model \"${BENCHMARK_MODEL}\" --output \"${OUTPUT_FILE}\""
+            PACKAGE_SPEC="orvl@${PACKAGE_URL}"
+            OUTPUT_FILE="benchmark.json"
+            COMMAND="bunx \"${PACKAGE_SPEC}\" \"${BENCHMARK_AGENT}\" --eval \"${BENCHMARK_EVAL}\" --model \"${BENCHMARK_MODEL}\" --output \"${OUTPUT_FILE}\""
 
-          echo "Executing: ${COMMAND}"
-          if ! bunx "${PACKAGE_SPEC}" "${BENCHMARK_AGENT}" --eval "${BENCHMARK_EVAL}" --model "${BENCHMARK_MODEL}" --output "${OUTPUT_FILE}"; then
-            echo "openreval benchmark failed, dumping OpenCode logs..." >&2
-            find /home/runner/.local/share/opencode/log -type f -print -exec cat {} + || true
-            exit 1
-          fi
+            echo "Executing: ${COMMAND}"
+            if ! bunx "${PACKAGE_SPEC}" "${BENCHMARK_AGENT}" --eval "${BENCHMARK_EVAL}" --model "${BENCHMARK_MODEL}" --output "${OUTPUT_FILE}"; then
+              echo "openreval benchmark failed, dumping OpenCode logs..." >&2
+              find /home/runner/.local/share/opencode/log -type f -print -exec cat {} + || true
+              exit 1
+            fi
 
       - name: Prepare artifact name
         id: artifact
