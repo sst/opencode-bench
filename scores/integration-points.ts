@@ -7,7 +7,7 @@ import { createScore, scoreResultSchema } from "~/lib/createScore.js";
 import { fetchComparisonDiff } from "~/lib/github.js";
 import { finalizeAgentChanges } from "~/lib/finalizeAgentChanges.js";
 
-const systemPrompt = `You are evaluating whether an autonomous agent integrated functions in the same places as a reference git commit.
+export const systemPrompt = `You are evaluating whether an autonomous agent integrated functions in the same places as a reference git commit.
 
 **YOUR ROLE**: Check if functions are called from the same locations and in the same way.
 
