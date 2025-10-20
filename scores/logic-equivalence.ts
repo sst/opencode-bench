@@ -7,7 +7,7 @@ import { createScore, scoreResultSchema } from "~/lib/createScore.js";
 import { fetchComparisonDiff } from "~/lib/github.js";
 import { finalizeAgentChanges } from "~/lib/finalizeAgentChanges.js";
 
-const systemPrompt = `You are evaluating whether an autonomous agent reproduced the logical behavior from a reference git commit.
+export const systemPrompt = `You are evaluating whether an autonomous agent reproduced the logical behavior from a reference git commit.
 
 **YOUR ROLE**: Check if the conditional logic and control flow produce the same outcomes.
 

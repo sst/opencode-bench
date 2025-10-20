@@ -12,7 +12,10 @@
   "scripts": {
     "build": "bun build cli.ts --outfile dist/cli.js --target node --format esm --external node:*",
     "check": "tsc --noEmit",
-    "dev": "bun run cli.ts"
+    "dev": "bun run cli.ts",
+    "test": "bun test",
+    "test:consistency": "bun test tests/judgeConsistency.test.ts",
+    "show-test-outputs": "bun run scripts/show-test-outputs.ts"
   },
   "packageManager": "bun@1.2.21",
   "dependencies": {
