@@ -310,7 +310,7 @@ async function main(): Promise<void> {
       summaries: string[];
       exports: EvaluationRunExport[];
     }> => {
-      let cwd: string | undefined;
+      let cwd: string;
 
       try {
         const combinationLabel = `${evalId} ${combination.provider}/${combination.model}`;
@@ -450,7 +450,7 @@ async function main(): Promise<void> {
         process.exitCode = 1;
         throw abortToken;
       } finally {
-        if (cwd) {
+        if (cwd!) {
           cleanupRepository(cwd, evalDefinition);
         }
       }
@@ -561,14 +561,16 @@ async function main(): Promise<void> {
   }
 }
 
-main().catch((error) => {
-  if (error instanceof Error) {
-    console.error(error);
-  } else {
-    console.error(new Error(String(error)));
-  }
-  process.exitCode = 1;
-});
+main()
+  .catch((error) => {
+    if (error instanceof Error) {
+      console.error(error);
+    } else {
+      console.error(new Error(String(error)));
+    }
+    process.exitCode = 1;
+  })
+  .finally(process.exit);
 
 function cleanupRepository(tempDir: string, entry: DatasetEval): void {
   try {

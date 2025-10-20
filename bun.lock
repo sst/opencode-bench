@@ -8,6 +8,8 @@
         "@ai-sdk/openai": "^2.0.48",
         "@ai-sdk/openai-compatible": "^1.0.21",
         "@octokit/request": "^10.0.5",
+        "@openai/codex-sdk": "^0.47.0",
+        "@opencode-ai/sdk": "^0.15.8",
         "ai": "^5.0.64",
         "yaml": "^2.4.5",
         "zod": "^3.23.8",
@@ -41,6 +43,10 @@
     "@octokit/request-error": ["@octokit/request-error@7.0.1", "", { "dependencies": { "@octokit/types": "^15.0.0" } }, "sha512-CZpFwV4+1uBrxu7Cw8E5NCXDWFNf18MSY23TdxCBgjw1tXXHvTrZVsXlW8hgFTOLw8RQR1BBrMvYRtuyaijHMA=="],
 
     "@octokit/types": ["@octokit/types@15.0.0", "", { "dependencies": { "@octokit/openapi-types": "^26.0.0" } }, "sha512-8o6yDfmoGJUIeR9OfYU0/TUJTnMPG2r68+1yEdUeG2Fdqpj8Qetg0ziKIgcBm0RW/j29H41WP37CYCEhp6GoHQ=="],
+
+    "@openai/codex-sdk": ["@openai/codex-sdk@0.47.0", "", {}, "sha512-GFmF0C7wkmX10omICL/5Gm1w+BvZtc41Rwuv7/pVO47ZbSq+9bJqn0XUpwoyrYQavg+BsKSuJAo9CYCn9JhkZA=="],
+
+    "@opencode-ai/sdk": ["@opencode-ai/sdk@0.15.8", "", {}, "sha512-ByVxprn5EQl3voi89em+D0SXtKsy6Pj+JVyUiOPoLPcLc/7IIHPu+C2isM5ePtN0VR0+ztPx7a+m36NDTwoSCA=="],
 
     "@opentelemetry/api": ["@opentelemetry/api@1.9.0", "", {}, "sha512-3giAOQvZiH5F9bMlMiv8+GSPMeqg0dbaeo58/0SlA9sxSqZhnUtxzX9/2FzyhS9sWQf5S0GJE0AKBrFqjpeYcg=="],
 

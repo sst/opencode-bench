@@ -14,15 +14,15 @@ export type AgentCommandSpec =
 
 export type AgentExecutor = (
   model: string,
-  prompt: AgentPrompt
+  prompt: AgentPrompt,
 ) => AgentCommandSpec | Promise<AgentCommandSpec>;
 
 export interface AgentDefinition {
   run: (
     model: string,
     prompt: AgentPrompt,
-    cwd?: string,
-    options?: AgentRunOptions
+    cwd: string,
+    options?: AgentRunOptions,
   ) => Promise<AgentRunResult>;
 }
 
@@ -46,7 +46,7 @@ export function createAgent(executor: AgentExecutor): AgentDefinition {
       await runCommand(normalized, prompt, cwd, options?.logPrefix);
 
       return { command: normalized.display };
-    }
+    },
   };
 }
 
@@ -64,7 +64,7 @@ function normalizeCommandSpec(spec: AgentCommandSpec): NormalizedCommand {
       command: spec,
       args: [],
       shell: true,
-      display: spec
+      display: spec,
     };
   }
 
@@ -74,7 +74,7 @@ function normalizeCommandSpec(spec: AgentCommandSpec): NormalizedCommand {
   args.forEach((arg, index) => {
     assert(
       typeof arg === "string",
-      `Agent argument at position ${index} must be a string.`
+      `Agent argument at position ${index} must be a string.`,
     );
   });
 
@@ -85,7 +85,7 @@ function normalizeCommandSpec(spec: AgentCommandSpec): NormalizedCommand {
     command: spec.command,
     args,
     shell,
-    display
+    display,
   };
 }
 
@@ -95,7 +95,7 @@ function formatForDisplay(command: string, args: string[]): string {
   }
 
   const renderedArgs = args.map((arg) =>
-    /[\s"']/.test(arg) ? JSON.stringify(arg) : arg
+    /[\s"']/.test(arg) ? JSON.stringify(arg) : arg,
   );
 
   return `${command} ${renderedArgs.join(" ")}`;
@@ -104,14 +104,14 @@ function formatForDisplay(command: string, args: string[]): string {
 async function runCommand(
   command: NormalizedCommand,
   prompt: AgentPrompt,
-  cwd: string | undefined,
-  logPrefix: string | undefined
+  cwd: string,
+  logPrefix: string | undefined,
 ): Promise<void> {
   await new Promise<void>((resolve, reject) => {
     const child = spawn(command.command, command.args, {
       cwd,
       shell: command.shell,
-      stdio: ["pipe", "pipe", "pipe"]
+      stdio: ["pipe", "pipe", "pipe"],
     });
 
     child.on("error", (error) => {
@@ -147,7 +147,7 @@ async function runCommand(
 function attachLogging(
   stream: NodeJS.ReadableStream | null,
   destination: NodeJS.WritableStream,
-  prefix: string | undefined
+  prefix: string | undefined,
 ): void {
   if (!stream) {
     return;
