@@ -39,7 +39,3 @@ export interface EvaluationRunExport {
   };
   scores: ScoreResultExport[];
 }
-export interface BenchmarkExport {
-  version: number;
-  runs: EvaluationRunExport[];
-}

@@ -8,8 +8,7 @@
  */
 
 import { readFileSync } from "node:fs";
-
-import type { BenchmarkExport } from "~/types/export.js";
+import type { EvaluationRunExport } from "~/types/export.js";
 
 type ScoreRow = {
   name: string;
@@ -39,129 +38,122 @@ const QUICKCHART_BASE_URL = "https://quickchart.io/chart";
 const colorHex = "0c0c0e";
 const embedColor = parseInt(colorHex, 16);
 
-const sampleExport: BenchmarkExport = {
-  version: 1,
-  runs: [
-    {
-      agent: "opencode",
-      evaluation: {
-        repo: "prismicio-community/course-fizzi-next",
-        from: "e90e3f4e07119d60e8822d4f474f6dfa5afe589f",
-        to: "2760114f2647ebec8f63e0ecc2dc87a8cd4096ac",
-      },
-      model: "opencode/claude-sonnet-4-5",
-      summary: {
-        finalScore: 0.902,
-        baseScore: 0.905,
-        variancePenalty: 0.003,
-      },
-      scores: [
-        {
-          assignment: {
-            name: "api-signature",
-            weight: 0.4,
-            args: undefined,
-          },
-          averageScore: 0.905,
-          normalizedWeight: 0.4,
-          variance: 0.03,
-          judges: [],
-        },
-        {
-          assignment: {
-            name: "logic-equivalence",
-            weight: 0.37,
-            args: undefined,
-          },
-          averageScore: 0.892,
-          normalizedWeight: 0.37,
-          variance: 0.025,
-          judges: [],
-        },
-        {
-          assignment: {
-            name: "checks",
-            weight: 0.23,
-            args: undefined,
-          },
-          averageScore: 0.98,
-          normalizedWeight: 0.23,
-          variance: 0.0,
-          judges: [],
-        },
-      ],
+const sampleExport: EvaluationRunExport[] = [
+  {
+    agent: "opencode",
+    evaluation: {
+      repo: "prismicio-community/course-fizzi-next",
+      from: "e90e3f4e07119d60e8822d4f474f6dfa5afe589f",
+      to: "2760114f2647ebec8f63e0ecc2dc87a8cd4096ac",
     },
-    {
-      agent: "opencode",
-      evaluation: {
-        repo: "prismicio-community/course-fizzi-next",
-        from: "e90e3f4e07119d60e8822d4f474f6dfa5afe589f",
-        to: "2760114f2647ebec8f63e0ecc2dc87a8cd4096ac",
-      },
-      model: "opencode/gpt-5-codex",
-      summary: {
-        finalScore: 0.898,
-        baseScore: 0.903,
-        variancePenalty: 0.004,
-      },
-      scores: [
-        {
-          assignment: {
-            name: "api-signature",
-            weight: 0.4,
-            args: undefined,
-          },
-          averageScore: 0.903,
-          normalizedWeight: 0.4,
-          variance: 0.041,
-          judges: [],
-        },
-        {
-          assignment: {
-            name: "logic-equivalence",
-            weight: 0.37,
-            args: undefined,
-          },
-          averageScore: 0.888,
-          normalizedWeight: 0.37,
-          variance: 0.03,
-          judges: [],
-        },
-        {
-          assignment: {
-            name: "checks",
-            weight: 0.23,
-            args: undefined,
-          },
-          averageScore: 0.967,
-          normalizedWeight: 0.23,
-          variance: 0.0,
-          judges: [],
-        },
-      ],
+    model: "opencode/claude-sonnet-4-5",
+    summary: {
+      finalScore: 0.902,
+      baseScore: 0.905,
+      variancePenalty: 0.003,
     },
-  ],
-};
+    scores: [
+      {
+        assignment: {
+          name: "api-signature",
+          weight: 0.4,
+          args: undefined,
+        },
+        averageScore: 0.905,
+        normalizedWeight: 0.4,
+        variance: 0.03,
+        judges: [],
+      },
+      {
+        assignment: {
+          name: "logic-equivalence",
+          weight: 0.37,
+          args: undefined,
+        },
+        averageScore: 0.892,
+        normalizedWeight: 0.37,
+        variance: 0.025,
+        judges: [],
+      },
+      {
+        assignment: {
+          name: "checks",
+          weight: 0.23,
+          args: undefined,
+        },
+        averageScore: 0.98,
+        normalizedWeight: 0.23,
+        variance: 0.0,
+        judges: [],
+      },
+    ],
+  },
+  {
+    agent: "opencode",
+    evaluation: {
+      repo: "prismicio-community/course-fizzi-next",
+      from: "e90e3f4e07119d60e8822d4f474f6dfa5afe589f",
+      to: "2760114f2647ebec8f63e0ecc2dc87a8cd4096ac",
+    },
+    model: "opencode/gpt-5-codex",
+    summary: {
+      finalScore: 0.898,
+      baseScore: 0.903,
+      variancePenalty: 0.004,
+    },
+    scores: [
+      {
+        assignment: {
+          name: "api-signature",
+          weight: 0.4,
+          args: undefined,
+        },
+        averageScore: 0.903,
+        normalizedWeight: 0.4,
+        variance: 0.041,
+        judges: [],
+      },
+      {
+        assignment: {
+          name: "logic-equivalence",
+          weight: 0.37,
+          args: undefined,
+        },
+        averageScore: 0.888,
+        normalizedWeight: 0.37,
+        variance: 0.03,
+        judges: [],
+      },
+      {
+        assignment: {
+          name: "checks",
+          weight: 0.23,
+          args: undefined,
+        },
+        averageScore: 0.967,
+        normalizedWeight: 0.23,
+        variance: 0.0,
+        judges: [],
+      },
+    ],
+  },
+];
 
-function loadExport(): BenchmarkExport {
+function loadExport(): EvaluationRunExport[] {
   const inputPath = process.argv[2];
   if (!inputPath) {
     return sampleExport;
   }
 
   const raw = readFileSync(inputPath, "utf8");
-  const parsed: BenchmarkExport = JSON.parse(raw);
-  if (parsed.version !== 1) {
-    throw new Error(`Unsupported export version: ${parsed.version}`);
-  }
 
-  return parsed;
+  return JSON.parse(raw);
 }
 
-function toEvalSummaries(exportData: BenchmarkExport): EvalSummary[] {
+function toEvalSummaries(exportData: EvaluationRunExport[]): EvalSummary[] {
   const evalMap = new Map<string, ModelSummary[]>();
 
-  exportData.runs.forEach((run) => {
+  exportData.forEach((run) => {
     const modelIds = Array.isArray(run.model) ? run.model : [run.model];
     const modelRows = run.scores.map((score) => ({
       name: score.assignment.name,

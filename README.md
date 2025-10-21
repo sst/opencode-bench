@@ -1,11 +1,10 @@
 > opencode bench
 ```bash
-orvl opencode # run opencode on all models x evals x scores
-orvl opencode --model opencode/qwen3-coder # filter by model across all evals x scores
-orvl opencode --eval noworneverev/graphrag-visualizer # filter by eval across models x scores
+orvl opencode --model opencode/gpt-5-codex --eval noworneverev/graphrag-visualizer
+orvl opencode --model opencode/claude-sonnet-4-5 --eval prismicio-community/course-fizzi-next --output results.json
 ```
 
-Filters use CLI options like `--model`, `--eval`, and `--score`.
+Both `--model` and `--eval` are required; the CLI now runs a single agent/model/eval pairing at a time.
 
 ## Setup
 ```bash
@@ -16,7 +15,7 @@ bun run build
 During development the CLI can be executed directly with Bun:
 
 ```bash
-bun run dev -- <agent> [--model <model>] [--eval <owner/name>] [--score <score>]
+bun run dev -- <agent> --model <model> --eval <owner/name>
 ```
 
 ## Continuous Releases
