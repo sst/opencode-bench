@@ -4,7 +4,7 @@ orvl opencode --model opencode/gpt-5-codex --eval noworneverev/graphrag-visualiz
 orvl opencode --model opencode/claude-sonnet-4-5 --eval prismicio-community/course-fizzi-next --output results.json
 ```
 
-Both `--model` and `--eval` are required; the CLI now runs a single agent/model/eval pairing at a time.
+Both `--model` and `--eval` are required; the CLI now runs a single agent/model/eval pairing at a time. Each invocation executes three isolated `[episode X/3]` runs (fresh clones) and aggregates the judge scores before exporting results.
 
 ## Setup
 ```bash

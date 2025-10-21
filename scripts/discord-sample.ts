@@ -8,7 +8,7 @@
  */
 
 import { readFileSync } from "node:fs";
-import type { EvaluationRunExport } from "~/types/export.js";
+import type { Episode, EvaluationRunExport } from "~/types/export.js";
 
 type ScoreRow = {
   name: string;
@@ -22,6 +22,7 @@ type ModelSummary = {
   id: string;
   final: number;
   rows: ScoreRow[];
+  episodes: Episode[];
 };
 
 type EvalSummary = {
@@ -38,6 +39,142 @@ const QUICKCHART_BASE_URL = "https://quickchart.io/chart";
 const colorHex = "0c0c0e";
 const embedColor = parseInt(colorHex, 16);
 
+const cloneScores = (
+  scores: EvaluationRunExport["scores"],
+  averageShift: number,
+  varianceShift = 0,
+): EvaluationRunExport["scores"] =>
+  scores.map((score) => {
+    const shiftedAverage = Number(
+      Math.min(1, Math.max(0, score.averageScore + averageShift)).toFixed(3),
+    );
+    const shiftedVariance = Number(
+      Math.max(0, score.variance + varianceShift).toFixed(3),
+    );
+
+    return {
+      assignment: { ...score.assignment },
+      averageScore: shiftedAverage,
+      normalizedWeight: score.normalizedWeight,
+      variance: shiftedVariance,
+      judges: score.judges.map((judge) => ({ ...judge })),
+    };
+  });
+
+const claudeScores: EvaluationRunExport["scores"] = [
+  {
+    assignment: {
+      name: "api-signature",
+      weight: 0.4,
+      args: undefined,
+    },
+    averageScore: 0.905,
+    normalizedWeight: 0.4,
+    variance: 0.03,
+    judges: [],
+  },
+  {
+    assignment: {
+      name: "logic-equivalence",
+      weight: 0.37,
+      args: undefined,
+    },
+    averageScore: 0.892,
+    normalizedWeight: 0.37,
+    variance: 0.025,
+    judges: [],
+  },
+  {
+    assignment: {
+      name: "checks",
+      weight: 0.23,
+      args: undefined,
+    },
+    averageScore: 0.98,
+    normalizedWeight: 0.23,
+    variance: 0.0,
+    judges: [],
+  },
+];
+
+const claudeEpisodes: Episode[] = [
+  {
+    finalScore: 0.909,
+    baseScore: 0.912,
+    variancePenalty: 0.003,
+    scores: cloneScores(claudeScores, 0.002, -0.005),
+  },
+  {
+    finalScore: 0.901,
+    baseScore: 0.905,
+    variancePenalty: 0.004,
+    scores: cloneScores(claudeScores, 0, 0),
+  },
+  {
+    finalScore: 0.896,
+    baseScore: 0.902,
+    variancePenalty: 0.006,
+    scores: cloneScores(claudeScores, -0.002, 0.004),
+  },
+];
+
+const gptScores: EvaluationRunExport["scores"] = [
+  {
+    assignment: {
+      name: "api-signature",
+      weight: 0.4,
+      args: undefined,
+    },
+    averageScore: 0.903,
+    normalizedWeight: 0.4,
+    variance: 0.041,
+    judges: [],
+  },
+  {
+    assignment: {
+      name: "logic-equivalence",
+      weight: 0.37,
+      args: undefined,
+    },
+    averageScore: 0.888,
+    normalizedWeight: 0.37,
+    variance: 0.03,
+    judges: [],
+  },
+  {
+    assignment: {
+      name: "checks",
+      weight: 0.23,
+      args: undefined,
+    },
+    averageScore: 0.967,
+    normalizedWeight: 0.23,
+    variance: 0.0,
+    judges: [],
+  },
+];
+
+const gptEpisodes: Episode[] = [
+  {
+    finalScore: 0.903,
+    baseScore: 0.907,
+    variancePenalty: 0.004,
+    scores: cloneScores(gptScores, 0.003, -0.006),
+  },
+  {
+    finalScore: 0.894,
+    baseScore: 0.898,
+    variancePenalty: 0.004,
+    scores: cloneScores(gptScores, -0.002, 0.002),
+  },
+  {
+    finalScore: 0.892,
+    baseScore: 0.897,
+    variancePenalty: 0.005,
+    scores: cloneScores(gptScores, -0.003, 0.004),
+  },
+];
+
 const sampleExport: EvaluationRunExport[] = [
   {
     agent: "opencode",
@@ -47,46 +184,11 @@ const sampleExport: EvaluationRunExport[] = [
       to: "2760114f2647ebec8f63e0ecc2dc87a8cd4096ac",
     },
     model: "opencode/claude-sonnet-4-5",
-    summary: {
-      finalScore: 0.902,
-      baseScore: 0.905,
-      variancePenalty: 0.003,
-    },
-    scores: [
-      {
-        assignment: {
-          name: "api-signature",
-          weight: 0.4,
-          args: undefined,
-        },
-        averageScore: 0.905,
-        normalizedWeight: 0.4,
-        variance: 0.03,
-        judges: [],
-      },
-      {
-        assignment: {
-          name: "logic-equivalence",
-          weight: 0.37,
-          args: undefined,
-        },
-        averageScore: 0.892,
-        normalizedWeight: 0.37,
-        variance: 0.025,
-        judges: [],
-      },
-      {
-        assignment: {
-          name: "checks",
-          weight: 0.23,
-          args: undefined,
-        },
-        averageScore: 0.98,
-        normalizedWeight: 0.23,
-        variance: 0.0,
-        judges: [],
-      },
-    ],
+    finalScore: 0.902,
+    baseScore: 0.905,
+    variancePenalty: 0.003,
+    scores: claudeScores,
+    episodes: claudeEpisodes,
   },
   {
     agent: "opencode",
@@ -96,46 +198,11 @@ const sampleExport: EvaluationRunExport[] = [
       to: "2760114f2647ebec8f63e0ecc2dc87a8cd4096ac",
     },
     model: "opencode/gpt-5-codex",
-    summary: {
-      finalScore: 0.898,
-      baseScore: 0.903,
-      variancePenalty: 0.004,
-    },
-    scores: [
-      {
-        assignment: {
-          name: "api-signature",
-          weight: 0.4,
-          args: undefined,
-        },
-        averageScore: 0.903,
-        normalizedWeight: 0.4,
-        variance: 0.041,
-        judges: [],
-      },
-      {
-        assignment: {
-          name: "logic-equivalence",
-          weight: 0.37,
-          args: undefined,
-        },
-        averageScore: 0.888,
-        normalizedWeight: 0.37,
-        variance: 0.03,
-        judges: [],
-      },
-      {
-        assignment: {
-          name: "checks",
-          weight: 0.23,
-          args: undefined,
-        },
-        averageScore: 0.967,
-        normalizedWeight: 0.23,
-        variance: 0.0,
-        judges: [],
-      },
-    ],
+    finalScore: 0.898,
+    baseScore: 0.903,
+    variancePenalty: 0.004,
+    scores: gptScores,
+    episodes: gptEpisodes,
   },
 ];
 
@@ -168,8 +235,9 @@ function toEvalSummaries(exportData: EvaluationRunExport[]): EvalSummary[] {
     modelIds.forEach((modelId) => {
       summaries.push({
         id: modelId,
-        final: run.summary.finalScore,
+        final: run.finalScore,
         rows: modelRows,
+        episodes: run.episodes,
       });
     });
 
@@ -430,7 +498,6 @@ function buildPayload(evalSummaries: EvalSummary[]) {
     const fields = summary.models.map((model) => {
       const finalScore = model.final.toFixed(3);
       const radarUrl = buildRadarChartUrl(model, summary.eval);
-
       return {
         name: model.id,
         value: radarUrl ? `[${finalScore}](${radarUrl})` : finalScore,
