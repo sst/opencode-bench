@@ -18,6 +18,7 @@
     "test:consistency:medium": "bun test tests/judgeConsistencyMedium.test.ts",
     "test:consistency:complex": "bun test tests/judgeConsistencyComplex.test.ts",
     "test:consistency:full": "bun test tests/judgeConsistency*.test.ts",
+    "test:compatibility": "bun test tests/judgeCompatibility.test.ts",
     "show-test-outputs": "bun run scripts/show-test-outputs.ts"
   },
   "packageManager": "bun@1.2.21",

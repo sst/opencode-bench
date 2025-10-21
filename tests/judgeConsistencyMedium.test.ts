@@ -4,9 +4,18 @@ import { generateObject } from "ai";
 import { scoreResultSchema, type ScoreResult } from "~/lib/createScore.js";
 import { judges } from "~/judges.js";
 import type { Judge } from "~/lib/judgeTypes.js";
-import { systemPrompt as logicEquivalencePrompt } from "~/scores/logic-equivalence.js";
-import { systemPrompt as apiSignaturePrompt } from "~/scores/api-signature.js";
-import { systemPrompt as integrationPointsPrompt } from "~/scores/integration-points.js";
+import {
+  systemPrompt as logicEquivalencePrompt,
+  createUserPrompt as createLogicEquivalencePrompt,
+} from "~/scores/logic-equivalence.js";
+import {
+  systemPrompt as apiSignaturePrompt,
+  createUserPrompt as createApiSignaturePrompt,
+} from "~/scores/api-signature.js";
+import {
+  systemPrompt as integrationPointsPrompt,
+  createUserPrompt as createIntegrationPointsPrompt,
+} from "~/scores/integration-points.js";
 import type { DiffPair } from "./fixtures/judgeConsistencyFixtures.js";
 import {
   logicEquivalenceMediumFixtures,
@@ -54,11 +63,11 @@ function createDiffComparisonPrompt(
   const { reference, candidate } = diffPair;
 
   if (scoreType === "logic-equivalence") {
-    return `Reference diff:\n${reference}\n\nCandidate diff:\n${candidate}\n\nCompare ONLY the logical behavior (conditions, edge cases, side effects). Ignore code structure and style. Respond with JSON.`;
+    return createLogicEquivalencePrompt(reference, candidate);
   } else if (scoreType === "api-signature") {
-    return `Reference diff:\n${reference}\n\nCandidate diff:\n${candidate}\n\nCompare ONLY the API signatures (function names, parameter order, parameter names). Ignore implementation details. Respond with JSON.`;
+    return createApiSignaturePrompt(reference, candidate);
   } else {
-    return `Reference diff:\n${reference}\n\nCandidate diff:\n${candidate}\n\nCompare ONLY the integration points (imports, function calls, call locations, timing). Ignore implementation details. Respond with JSON.`;
+    return createIntegrationPointsPrompt(reference, candidate);
   }
 }
 
