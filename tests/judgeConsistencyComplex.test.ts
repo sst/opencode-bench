@@ -4,7 +4,10 @@ import { generateObject } from "ai";
 import { scoreResultSchema, type ScoreResult } from "~/lib/createScore.js";
 import { judges } from "~/judges.js";
 import type { Judge } from "~/lib/judgeTypes.js";
-import { systemPrompt as logicEquivalencePrompt } from "~/scores/logic-equivalence.js";
+import {
+  systemPrompt as logicEquivalencePrompt,
+  createUserPrompt as createLogicEquivalencePrompt,
+} from "~/scores/logic-equivalence.js";
 import type { DiffPair } from "./fixtures/judgeConsistencyFixtures.js";
 import {
   logicEquivalenceComplexFixtures,
@@ -48,7 +51,7 @@ function createDiffComparisonPrompt(
   scoreType: "logic-equivalence",
 ): string {
   const { reference, candidate } = diffPair;
-  return `Reference diff:\n${reference}\n\nCandidate diff:\n${candidate}\n\nCompare ONLY the logical behavior (conditions, edge cases, side effects). Ignore code structure and style. Respond with JSON.`;
+  return createLogicEquivalencePrompt(reference, candidate);
 }
 
 async function testConsistency(
