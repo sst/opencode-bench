@@ -48,11 +48,13 @@ jobs:
       - name: Run judge compatibility tests
         env:
           OPENCODE_API_KEY: ${{ secrets.OPENCODE_API_KEY }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: bun test:compatibility
 
       - name: Run basic consistency tests
         env:
           OPENCODE_API_KEY: ${{ secrets.OPENCODE_API_KEY }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: bun test:consistency
 
   test-full:
@@ -75,4 +77,5 @@ jobs:
       - name: Run full consistency test suite
         env:
           OPENCODE_API_KEY: ${{ secrets.OPENCODE_API_KEY }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: bun test:consistency:full
