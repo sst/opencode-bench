@@ -55,4 +55,12 @@
     integration-points:
       weight: 0.22
     test-coverage:
-      weight: 0.22
+      weight: 0.2
+    checks:
+      weight: 0.1
+      args:
+        setup:
+          - npm ci
+        commands:
+          - npm run lint
+          - npm run build
