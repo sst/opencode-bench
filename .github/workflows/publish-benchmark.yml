@@ -85,7 +85,7 @@ jobs:
           BENCHMARK_AGENT: ${{ matrix.agent }}
         with:
           max_attempts: 3
-          timeout_seconds: 15
+          timeout_minutes: 30
           retry_on: error
           command: |
             set -euo pipefail
