@@ -15,22 +15,15 @@ import type { DatasetEval, ScoreAssignment } from "~/lib/dataset.js";
 import { generatePlannerTasks, type PlannerTask } from "~/lib/planner.js";
 import { fetchPlannerCommitDiffs } from "~/lib/github.js";
 import { finalizeAgentChanges } from "~/lib/finalizeAgentChanges.js";
-import type { Judge } from "~/lib/judgeTypes.js";
 import { judges, getJudgeModelId } from "~/judges.js";
 import { aggregateScores } from "~/lib/utils/scoreAggregation.js";
-import type {
-  JudgeScoreResult,
-  ScoreAggregationInput,
-} from "~/lib/utils/scoreAggregation.js";
+import type { ScoreAggregationInput } from "~/lib/utils/scoreAggregation.js";
 import type { BenchmarkExport, EvaluationRunExport } from "~/types/export.js";
 import { withRetries } from "~/lib/utils/retry.js";
 
 type ScoreName = ScoreAssignment["name"];
 
-interface ModelCombination {
-  provider: string;
-  model: string;
-}
+type ModelCombination = string;
 
 type FilterKey = "model" | "eval" | "score";
 type CliFilters = Partial<Record<FilterKey, string>>;
@@ -88,38 +81,10 @@ function resolveModels(
 ): ModelCombination[] {
   const combinations: ModelCombination[] = [];
 
-  let providerFilter: string | undefined;
-  let normalizedModelFilter = modelFilter;
-
-  if (modelFilter && modelFilter.includes("/")) {
-    const [providerPart, modelPart] = modelFilter.split("/", 2);
-    if (providerPart && modelPart) {
-      providerFilter = providerPart;
-      normalizedModelFilter = modelPart;
+  agent.models.forEach((model) => {
+    if (!modelFilter || model === modelFilter) {
+      combinations.push(model);
     }
-  }
-
-  agent.models.forEach((entry) => {
-    const [providerPart, modelPart] = entry.includes("/")
-      ? entry.split("/", 2)
-      : [agent.name, entry];
-
-    if (!providerPart || !modelPart) {
-      return;
-    }
-
-    if (providerFilter && providerPart !== providerFilter) {
-      return;
-    }
-
-    if (normalizedModelFilter && modelPart !== normalizedModelFilter) {
-      return;
-    }
-
-    combinations.push({
-      provider: providerPart,
-      model: modelPart,
-    });
   });
 
   assert(
@@ -304,7 +269,7 @@ async function main(): Promise<void> {
     }
 
     const runCombination = async (
-      combination: ModelCombination,
+      model: string,
     ): Promise<{
       completedRuns: number;
       summaries: string[];
@@ -313,7 +278,7 @@ async function main(): Promise<void> {
       let cwd: string;
 
       try {
-        const combinationLabel = `${evalId} ${combination.provider}/${combination.model}`;
+        const combinationLabel = `${evalId} ${model}`;
         console.log(`[${combinationLabel}] Cloning repository...`);
         const baselineCommit = evalDefinition.from;
         cwd = cloneRepositoryAtCommit(evalDefinition, baselineCommit);
@@ -346,34 +311,28 @@ async function main(): Promise<void> {
         }
 
         let tasksExecuted = 0;
-        const fullModel = `${combination.provider}/${combination.model}`;
 
         for (const task of plannerTasks) {
           const logPrefix = `${combinationLabel} ${task.commit}`;
           await withRetries(
             async () => {
-              await agentRegistration.definition.run(
-                fullModel,
-                task.prompt,
-                cwd,
-                {
-                  onStart: (commandString: string) => {
-                    console.log(`[${logPrefix}] ${commandString.trim()}`);
-                  },
-                  logPrefix,
+              await agentRegistration.definition.run(model, task.prompt, cwd, {
+                onStart: (commandString: string) => {
+                  console.log(`[${logPrefix}] ${commandString.trim()}`);
                 },
-              );
+                logPrefix,
+              });
             },
             {
               retries: 3,
               onRetry(error, attempt, retries) {
                 if (error instanceof Error) {
                   console.error(
-                    `Failed to render command for ${fullModel} (attempt ${attempt}/${retries}): ${error.message}`,
+                    `Failed to render command for ${model} (attempt ${attempt}/${retries}): ${error.message}`,
                   );
                 } else {
                   console.error(
-                    `Failed to render command for ${fullModel} (attempt ${attempt}/${retries})`,
+                    `Failed to render command for ${model} (attempt ${attempt}/${retries})`,
                   );
                 }
 
@@ -404,7 +363,7 @@ async function main(): Promise<void> {
 
         if (!hasChanges) {
           console.log(
-            `No changes detected for ${fullModel} on ${evalId}. Skipping scoring.`,
+            `No changes detected for ${model} on ${evalId}. Skipping scoring.`,
           );
           return { completedRuns: 0, summaries: [], exports: [] };
         }
@@ -414,7 +373,7 @@ async function main(): Promise<void> {
             agentLabel,
             evalDefinition,
             scores,
-            combination,
+            model,
             combinationLabel,
             cwd,
             preparedScores,
@@ -427,10 +386,10 @@ async function main(): Promise<void> {
         } catch (error) {
           if (error instanceof Error) {
             console.error(
-              `Failed to evaluate scores for ${fullModel}: ${error.message}`,
+              `Failed to evaluate scores for ${model}: ${error.message}`,
             );
           } else {
-            console.error("Failed to evaluate scores for", fullModel);
+            console.error("Failed to evaluate scores for", model);
           }
           process.exitCode = 1;
           throw abortToken;
@@ -445,7 +404,7 @@ async function main(): Promise<void> {
         }
 
         console.error(
-          `Failed to prepare combination ${combination.provider}/${combination.model} for ${evalId}: ${error instanceof Error ? error.message : error}`,
+          `Failed to prepare combination ${model} for ${evalId}: ${error instanceof Error ? error.message : error}`,
         );
         process.exitCode = 1;
         throw abortToken;
@@ -622,12 +581,11 @@ async function evaluateScoresForRun(
   agentName: string,
   datasetEval: DatasetEval,
   scores: ScoreAssignment[],
-  combination: ModelCombination,
+  model: string,
   contextLabel: string | undefined,
   cwd: string,
   preparedReferences: Map<string, unknown>,
 ): Promise<{ lines: string[]; exportData: EvaluationRunExport }> {
-  const modelId = `${combination.provider}/${combination.model}`;
   const evalId = getEvalIdentifier(datasetEval);
   const runContext = contextLabel ? `${evalId} [${contextLabel}]` : evalId;
 
@@ -687,7 +645,7 @@ async function evaluateScoresForRun(
   const summary = aggregateScores(Array.from(aggregationInputs.values()));
 
   const lines: string[] = [];
-  lines.push(`\nScore breakdown for ${modelId} on ${runContext}:`);
+  lines.push(`\nScore breakdown for ${model} on ${runContext}:`);
   const formatRawWeight = (value: number): string => {
     if (Number.isInteger(value)) {
       return value.toString();
@@ -745,7 +703,7 @@ async function evaluateScoresForRun(
       from: datasetEval.from,
       to: datasetEval.to,
     },
-    model: modelId,
+    model,
     summary: {
       finalScore: summary.finalScore,
       baseScore: summary.baseScore,
