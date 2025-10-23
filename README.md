@@ -1,4 +1,7 @@
 > opencode bench
+
+A benchmarking framework for evaluating opencode's AI coding agents across real-world GitHub repositories. The framework runs agents against target repositories and scores their outputs using multiple LLM judges, measuring code quality across dimensions like readability, functionality, adherence to best practices, and efficiency.
+
 ```bash
 orvl opencode # run opencode on all models x evals x scores
 orvl opencode --model opencode/qwen3-coder # filter by model across all evals x scores
