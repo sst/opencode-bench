@@ -87,15 +87,23 @@ jobs:
         run: |
           set -euo pipefail
           job_name="Benchmark ${BENCHMARK_AGENT} / ${BENCHMARK_MODEL} / ${BENCHMARK_EVAL}"
-          job_url="$(gh api repos/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}/jobs --paginate --field per_page=100 \
-            | jq -r --arg name "$job_name" 'select(type=="object" and has("jobs")) | .jobs[] | select(.name == $name) | .html_url' \
-            | head -n 1)"
-          if [ -z "${job_url}" ] || [ "${job_url}" = "null" ]; then
-            echo "Failed to determine job URL for ${job_name}" >&2
+          run_url="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+          job_url=""
+          if job_json="$(gh api repos/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}/jobs --paginate --field per_page=100 2>/dev/null)"; then
+            job_url="$(printf '%s\n' "${job_json}" \
+              | jq -r --arg name "$job_name" 'select(type=="object" and has("jobs")) | .jobs[] | select(.name == $name) | .html_url' \
+              | head -n 1)"
           else
-            echo "GITHUB_BENCHMARK_JOB_URL=${job_url}" >> "$GITHUB_ENV"
-            echo "url=${job_url}" >> "$GITHUB_OUTPUT"
+            echo "gh api call failed; falling back to run-level URL." >&2
           fi
+
+          if [ -z "${job_url}" ] || [ "${job_url}" = "null" ]; then
+            echo "Failed to determine job URL for ${job_name}; using run URL instead." >&2
+            job_url="${run_url}"
+          fi
+
+          echo "GITHUB_BENCHMARK_JOB_URL=${job_url}" >> "$GITHUB_ENV"
+          echo "url=${job_url}" >> "$GITHUB_OUTPUT"
 
       - name: Run openreval benchmark
         uses: nick-fields/retry@v2
