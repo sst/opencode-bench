@@ -25,7 +25,7 @@ const opencode = await createOpencode({
     permission: DEFAULT_PERMISSION_CONFIG,
   },
 });
-process.once("beforeExit", opencode.server.close);
+process.once("beforeExit", () => opencode.server.close());
 
 const sessionCache = new Map<string, string>();
 
