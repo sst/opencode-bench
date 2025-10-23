@@ -223,6 +223,10 @@ function toEvalSummaries(exportData: BenchmarkExport): EvalSummary[] {
   }));
 }
 
+/**
+ * Builds a shareable QuickChart radar chart URL for a model’s per-metric scores.
+ * Currently unused in the Discord webhook, but retained for future scorecard embeds.
+ */
 function buildRadarChartUrl(
   model: ModelSummary,
   evalName: string,
@@ -448,13 +452,10 @@ function buildPayloads(evalSummaries: EvalSummary[]): DiscordPayload[] {
   const embeds = evalSummaries.map((summary) => {
     const fields = summary.models.map((model) => {
       const finalScore = model.final.toFixed(3);
-      const radarUrl = buildRadarChartUrl(model, summary.eval);
-
-      const scoreText = radarUrl ? `[${finalScore}](${radarUrl})` : finalScore;
       const decoratedValue =
         model.jobUrl !== undefined
-          ? `${scoreText} [Link](${model.jobUrl})`
-          : scoreText;
+          ? `${finalScore} [Link](${model.jobUrl})`
+          : finalScore;
 
       return {
         name: model.id,
