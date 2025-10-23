@@ -43,3 +43,4 @@ const include = dataset.flatMap((entry) =>
 
 const matrix = JSON.stringify({ include });
 process.stdout.write(matrix);
+process.exit();
