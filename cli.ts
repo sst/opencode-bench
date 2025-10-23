@@ -709,6 +709,7 @@ async function evaluateScoresForRun(
       baseScore: summary.baseScore,
       variancePenalty: summary.variancePenalty,
     },
+    jobUrl: process.env.GITHUB_BENCHMARK_JOB_URL,
     scores: scoreExports,
   };
 
