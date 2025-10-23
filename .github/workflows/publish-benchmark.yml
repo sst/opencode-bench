@@ -48,13 +48,6 @@ jobs:
           set -euo pipefail
           MATRIX_JSON="$(bun run scripts/generate-benchmark-matrix.ts)"
           printf 'matrix=%s\n' "${MATRIX_JSON}" >> "$GITHUB_OUTPUT"
-          # Kill lingering OpenCode dev server on port 4096 to avoid conflicts.
-          if PIDS="$(lsof -ti:4096 2>/dev/null)"; then
-            if [ -n "${PIDS}" ]; then
-              echo "Killing processes using port 4096: ${PIDS}"
-              kill -9 ${PIDS} || true
-            fi
-          fi
 
   benchmark:
     runs-on: ubuntu-latest

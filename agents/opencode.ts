@@ -1,6 +1,8 @@
 import { strict as assert } from "node:assert";
 import process from "node:process";
 
+import detectPort from "detect-port";
+
 import {
   createOpencode,
   type AssistantMessage,
@@ -20,7 +22,10 @@ const DEFAULT_PERMISSION_CONFIG: NonNullable<OpencodeConfig["permission"]> = {
   webfetch: "allow",
 };
 
+const opencodePort = await detectPort(4096);
+
 const opencode = await createOpencode({
+  port: opencodePort,
   config: {
     permission: DEFAULT_PERMISSION_CONFIG,
   },
