@@ -22,8 +22,8 @@ const threadCache = new Map<string, Thread>();
 
 export const models: string[] = ["gpt-5-codex", "gpt-5", "o3", "o4-mini"];
 
-function sessionKey(model: string, cwd: string): string {
-  return `${model}::${cwd}`;
+function sessionKey(cwd: string, model: string): string {
+  return `${cwd}::${model}`;
 }
 
 function formatCommand(command: string, args: string[]): string {
@@ -80,7 +80,7 @@ function logTurnItems(
 }
 
 function getOrCreateThread(model: string, cwd: string): Thread {
-  const key = sessionKey(model, cwd);
+  const key = sessionKey(cwd, model);
   const cached = threadCache.get(key);
   if (cached) {
     return cached;
@@ -104,10 +104,9 @@ const codexAgent: AgentDefinition = {
   ): Promise<AgentRunResult> {
     assert(typeof prompt === "string", "Codex agent requires a prompt string.");
 
-    const [, codexModel = model] = model.split("/", 2);
     const displayCommand = formatCommand("codex-sdk", [
       "--model",
-      codexModel,
+      model,
       "--sandbox",
       DEFAULT_SANDBOX,
       prompt,
@@ -115,8 +114,8 @@ const codexAgent: AgentDefinition = {
 
     options?.onStart?.(displayCommand);
 
-    const key = sessionKey(codexModel, cwd);
-    const thread = getOrCreateThread(codexModel, cwd);
+    const key = sessionKey(model, cwd);
+    const thread = getOrCreateThread(model, cwd);
 
     try {
       const turn = await thread.run(prompt);

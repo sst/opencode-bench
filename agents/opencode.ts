@@ -91,13 +91,6 @@ function logError(value: unknown, options: AgentRunOptions | undefined): void {
   }
 }
 
-function unwrapResult<T>(input: T | { data: T }): T {
-  if (input && typeof input === "object" && "data" in input) {
-    return (input as { data: T }).data;
-  }
-  return input;
-}
-
 function logPromptResult(
   result: { info: AssistantMessage; parts: Part[] },
   options: AgentRunOptions | undefined,
@@ -145,18 +138,18 @@ const opencodeAgent: AgentDefinition = {
 
     let sessionID = sessionCache.get(cacheKey);
     if (!sessionID) {
-      const session = await opencode.client.session.create({
+      const { data: session } = await opencode.client.session.create({
         query: { directory: cwd },
         responseStyle: "data",
         throwOnError: true,
       });
-      sessionID = unwrapResult(session).id;
-      sessionCache.set(cacheKey, sessionID);
+      sessionCache.set(cacheKey, session.id);
     }
 
     try {
-      const promptResponse = await opencode.client.session.prompt({
-        path: { id: sessionID },
+      const [providerID, modelID] = model.split("/");
+      const { data } = await opencode.client.session.prompt({
+        path: { id: sessionID! },
         query: { directory: cwd },
         body: {
           model: {
@@ -169,8 +162,7 @@ const opencodeAgent: AgentDefinition = {
         throwOnError: true,
       });
 
-      const result = unwrapResult(promptResponse);
-      logPromptResult(result, options);
+      logPromptResult(data, options);
     } catch (error) {
       sessionCache.delete(cacheKey);
       logError(
