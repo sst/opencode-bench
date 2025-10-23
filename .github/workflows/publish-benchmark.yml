@@ -12,6 +12,7 @@ on:
 
 permissions:
   contents: read
+  actions: read
 
 jobs:
   publish:
@@ -80,26 +81,21 @@ jobs:
       - name: Determine benchmark job URL
         id: job_url
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           BENCHMARK_AGENT: ${{ matrix.agent }}
           BENCHMARK_MODEL: ${{ matrix.model }}
           BENCHMARK_EVAL: ${{ matrix.eval }}
         run: |
           set -euo pipefail
           job_name="Benchmark ${BENCHMARK_AGENT} / ${BENCHMARK_MODEL} / ${BENCHMARK_EVAL}"
-          run_url="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
-          job_url=""
-          if job_json="$(gh api repos/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}/jobs --paginate --field per_page=100 2>/dev/null)"; then
-            job_url="$(printf '%s\n' "${job_json}" \
-              | jq -r --arg name "$job_name" 'select(type=="object" and has("jobs")) | .jobs[] | select(.name == $name) | .html_url' \
-              | head -n 1)"
-          else
-            echo "gh api call failed; falling back to run-level URL." >&2
-          fi
+          job_json="$(gh api repos/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}/jobs --paginate --field per_page=100)"
+          job_url="$(printf '%s\n' "${job_json}" \
+            | jq -r --arg name "$job_name" 'select(type=="object" and has("jobs")) | .jobs[] | select(.name == $name) | .html_url' \
+            | head -n 1)"
 
           if [ -z "${job_url}" ] || [ "${job_url}" = "null" ]; then
-            echo "Failed to determine job URL for ${job_name}; using run URL instead." >&2
-            job_url="${run_url}"
+            echo "Failed to determine job URL for ${job_name}." >&2
+            exit 1
           fi
 
           echo "GITHUB_BENCHMARK_JOB_URL=${job_url}" >> "$GITHUB_ENV"
