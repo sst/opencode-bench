@@ -50,6 +50,7 @@ jobs:
           printf 'matrix=%s\n' "${MATRIX_JSON}" >> "$GITHUB_OUTPUT"
 
   benchmark:
+    name: Benchmark ${{ matrix.agent }} / ${{ matrix.model }} / ${{ matrix.eval }}
     runs-on: ubuntu-latest
     needs: publish
     if: needs.publish.result == 'success' && needs.publish.outputs.urls != ''
@@ -73,12 +74,33 @@ jobs:
       - name: Install OpenCode CLI
         run: bun add -g opencode-ai @openai/codex-sdk
 
+      - name: Determine benchmark job URL
+        id: job_url
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          BENCHMARK_AGENT: ${{ matrix.agent }}
+          BENCHMARK_MODEL: ${{ matrix.model }}
+          BENCHMARK_EVAL: ${{ matrix.eval }}
+        run: |
+          set -euo pipefail
+          job_name="Benchmark ${BENCHMARK_AGENT} / ${BENCHMARK_MODEL} / ${BENCHMARK_EVAL}"
+          job_url="$(gh api repos/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}/jobs --paginate --field per_page=100 \
+            | jq -r --arg name "$job_name" 'select(type=="object" and has("jobs")) | .jobs[] | select(.name == $name) | .html_url' \
+            | head -n 1)"
+          if [ -z "${job_url}" ] || [ "${job_url}" = "null" ]; then
+            echo "Failed to determine job URL for ${job_name}" >&2
+          else
+            echo "GITHUB_BENCHMARK_JOB_URL=${job_url}" >> "$GITHUB_ENV"
+            echo "url=${job_url}" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Run openreval benchmark
         uses: nick-fields/retry@v2
         env:
           OPENCODE_API_KEY: ${{ secrets.OPENCODE_API_KEY }}
           CODEX_API_KEY: ${{ secrets.CODEX_API_KEY }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_MATRIX_JOB_NAME: Benchmark ${{ matrix.agent }} / ${{ matrix.model }} / ${{ matrix.eval }}
           URLS: ${{ needs.publish.outputs.urls }}
           BENCHMARK_EVAL: ${{ matrix.eval }}
           BENCHMARK_MODEL: ${{ matrix.model }}
