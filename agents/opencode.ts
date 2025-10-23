@@ -148,7 +148,8 @@ const opencodeAgent: AgentDefinition = {
         responseStyle: "data",
         throwOnError: true,
       });
-      sessionCache.set(cacheKey, session.id);
+      sessionID = session.id;
+      sessionCache.set(cacheKey, sessionID);
     }
 
     try {
