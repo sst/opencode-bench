@@ -44,7 +44,7 @@ jobs:
       - id: matrix
         name: Build benchmark matrix
         run: |
-          bun add -g opencode-ai
+          bun add -g opencode-ai @openai/codex-sdk
           set -euo pipefail
           MATRIX_JSON="$(bun run scripts/generate-benchmark-matrix.ts)"
           printf 'matrix=%s\n' "${MATRIX_JSON}" >> "$GITHUB_OUTPUT"
@@ -71,7 +71,7 @@ jobs:
         run: bun install --frozen-lockfile
 
       - name: Install OpenCode CLI
-        run: bun add -g opencode-ai
+        run: bun add -g opencode-ai @openai/codex-sdk
 
       - name: Run openreval benchmark
         uses: nick-fields/retry@v2
