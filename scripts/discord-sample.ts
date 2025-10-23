@@ -454,7 +454,7 @@ function buildPayloads(evalSummaries: EvalSummary[]): DiscordPayload[] {
       const finalScore = model.final.toFixed(3);
       const decoratedValue =
         model.jobUrl !== undefined
-          ? `${finalScore} [Link](${model.jobUrl})`
+          ? `[${finalScore}](${model.jobUrl})`
           : finalScore;
 
       return {
