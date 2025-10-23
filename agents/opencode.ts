@@ -145,7 +145,6 @@ const opencodeAgent: AgentDefinition = {
     if (!sessionID) {
       const { data: session } = await opencode.client.session.create({
         query: { directory: cwd },
-        responseStyle: "data",
         throwOnError: true,
       });
       sessionID = session.id;
@@ -164,7 +163,6 @@ const opencodeAgent: AgentDefinition = {
           },
           parts: [{ type: "text", text: prompt }],
         },
-        responseStyle: "data",
         throwOnError: true,
       });
 
