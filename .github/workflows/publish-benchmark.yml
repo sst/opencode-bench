@@ -44,6 +44,7 @@ jobs:
       - id: matrix
         name: Build benchmark matrix
         run: |
+          bun add -g opencode-ai
           set -euo pipefail
           MATRIX_JSON="$(bun run scripts/generate-benchmark-matrix.ts)"
           printf 'matrix=%s\n' "${MATRIX_JSON}" >> "$GITHUB_OUTPUT"

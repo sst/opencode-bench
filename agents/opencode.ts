@@ -91,16 +91,6 @@ function logError(value: unknown, options: AgentRunOptions | undefined): void {
   }
 }
 
-function parseModel(model: string): { providerID: string; modelID: string } {
-  if (model.includes("/")) {
-    const [providerID, modelID] = model.split("/", 2);
-    assert(providerID && modelID, "Invalid opencode model identifier.");
-    return { providerID, modelID };
-  }
-
-  return { providerID: "opencode", modelID: model };
-}
-
 function unwrapResult<T>(input: T | { data: T }): T {
   if (input && typeof input === "object" && "data" in input) {
     return (input as { data: T }).data;
@@ -127,8 +117,8 @@ function serializeError(error: unknown): Record<string, unknown> {
   return { value: String(error) };
 }
 
-function sessionKey(cwd: string, providerID: string, modelID: string): string {
-  return `${cwd}::${providerID}/${modelID}`;
+function sessionKey(cwd: string, model: string): string {
+  return `${cwd}::${model}`;
 }
 
 const opencodeAgent: AgentDefinition = {
@@ -143,18 +133,15 @@ const opencodeAgent: AgentDefinition = {
       "Opencode agent requires a prompt string.",
     );
 
-    const { providerID, modelID } = parseModel(model);
-    const displayCommand = formatCommand("opencode-sdk", [
-      "--provider",
-      providerID,
+    const displayCommand = formatCommand("opencode", [
       "--model",
-      modelID,
+      model,
       prompt,
     ]);
 
     options?.onStart?.(displayCommand);
 
-    const cacheKey = sessionKey(cwd, providerID, modelID);
+    const cacheKey = sessionKey(cwd, model);
 
     let sessionID = sessionCache.get(cacheKey);
     if (!sessionID) {
