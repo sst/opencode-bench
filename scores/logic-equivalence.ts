@@ -243,13 +243,10 @@ export default createScore({
     finalizeAgentChanges(evaluation, cwd, evaluation.from);
     let candidateDiff: string;
     try {
-      candidateDiff = execSync(
-        `git diff --unified=5 ${evaluation.from} HEAD`,
-        {
-          cwd,
-          encoding: "utf8",
-        },
-      );
+      candidateDiff = execSync(`git diff --unified=5 ${evaluation.from} HEAD`, {
+        cwd,
+        encoding: "utf8",
+      });
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       return {
