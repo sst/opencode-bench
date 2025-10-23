@@ -54,6 +54,9 @@ jobs:
     runs-on: ubuntu-latest
     needs: publish
     if: needs.publish.result == 'success' && needs.publish.outputs.urls != ''
+    permissions:
+      contents: read
+      actions: read
     environment: production
     strategy:
       fail-fast: false
@@ -100,7 +103,7 @@ jobs:
           OPENCODE_API_KEY: ${{ secrets.OPENCODE_API_KEY }}
           CODEX_API_KEY: ${{ secrets.CODEX_API_KEY }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          GITHUB_MATRIX_JOB_NAME: Benchmark ${{ matrix.agent }} / ${{ matrix.model }} / ${{ matrix.eval }}
+          GITHUB_BENCHMARK_JOB_URL: ${{ steps.job_url.outputs.url }}
           URLS: ${{ needs.publish.outputs.urls }}
           BENCHMARK_EVAL: ${{ matrix.eval }}
           BENCHMARK_MODEL: ${{ matrix.model }}
