@@ -32,6 +32,10 @@ const agents: Record<string, AgentRegistration> = {
     "opencode",
     await import("~/agents/opencode.js"),
   ),
+  "claude-code": createAgentRegistration(
+    "claude-code",
+    await import("~/agents/claude-code.js"),
+  ),
 };
 
 export async function getAgent(
