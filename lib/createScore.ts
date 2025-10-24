@@ -6,13 +6,10 @@ import type { DatasetEval } from "~/lib/dataset.js";
 import type { Judge } from "~/lib/judgeTypes.js";
 
 export const scoreResultSchema = z.object({
-  score: z.number().refine(
-    (val) => val === 0 || val === 1,
-    {
-      message: "Score must be binary: 0 (fail) or 1 (pass)"
-    }
-  ),
-  rationale: z.string().min(1)
+  score: z.number().refine((val) => val === 0 || val === 1, {
+    message: "Score must be binary: 0 (fail) or 1 (pass)",
+  }),
+  rationale: z.string().min(1),
 });
 
 export interface ScorePreparationContext<Config = unknown> {

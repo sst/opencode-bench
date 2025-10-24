@@ -10,9 +10,16 @@
     "orvl": "dist/cli.js"
   },
   "scripts": {
-    "build": "bun build cli.ts --outfile dist/cli.js --target node --format esm --external node:*",
+    "build": "bun build cli.ts --outfile dist/cli.js --target node --format esm --external node:* --external @openai/codex-sdk --external @openai/codex-sdk/*",
     "check": "tsc --noEmit",
-    "dev": "bun run cli.ts"
+    "dev": "bun run cli.ts",
+    "test": "bun test",
+    "test:consistency": "bun test tests/judgeConsistency.test.ts",
+    "test:consistency:medium": "bun test tests/judgeConsistencyMedium.test.ts",
+    "test:consistency:complex": "bun test tests/judgeConsistencyComplex.test.ts",
+    "test:consistency:full": "bun test tests/judgeConsistency*.test.ts",
+    "test:compatibility": "bun test tests/judgeCompatibility.test.ts",
+    "show-test-outputs": "bun run scripts/show-test-outputs.ts"
   },
   "packageManager": "bun@1.2.21",
   "dependencies": {
@@ -20,7 +27,10 @@
     "@ai-sdk/openai": "^2.0.48",
     "@ai-sdk/openai-compatible": "^1.0.21",
     "@octokit/request": "^10.0.5",
+    "@openai/codex-sdk": "^0.47.0",
+    "@opencode-ai/sdk": "^0.15.8",
     "ai": "^5.0.64",
+    "detect-port": "^2.1.0",
     "yaml": "^2.4.5",
     "zod": "^3.23.8"
   },

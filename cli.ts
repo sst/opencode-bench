@@ -483,14 +483,16 @@ async function main(): Promise<void> {
   }
 }
 
-main().catch((error) => {
-  if (error instanceof Error) {
-    console.error(error);
-  } else {
-    console.error(new Error(String(error)));
-  }
-  process.exitCode = 1;
-});
+main()
+  .catch((error) => {
+    if (error instanceof Error) {
+      console.error(error);
+    } else {
+      console.error(new Error(String(error)));
+    }
+    process.exitCode = 1;
+  })
+  .finally(process.exit);
 
 function cleanupRepository(tempDir: string, entry: DatasetEval): void {
   try {
@@ -653,6 +655,7 @@ function summarizeAggregation(
       to: datasetEval.to,
     },
     model,
+    jobUrl: process.env.GITHUB_BENCHMARK_JOB_URL,
     finalScore: summary.finalScore,
     baseScore: summary.baseScore,
     variancePenalty: summary.variancePenalty,

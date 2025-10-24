@@ -7,7 +7,7 @@ import { createScore, scoreResultSchema } from "~/lib/createScore.js";
 import { fetchComparisonDiff } from "~/lib/github.js";
 import { finalizeAgentChanges } from "~/lib/finalizeAgentChanges.js";
 
-const systemPrompt = `You are evaluating whether an autonomous agent reproduced the exact API signatures from a reference git commit.
+export const systemPrompt = `You are evaluating whether an autonomous agent reproduced the exact API signatures from a reference git commit.
 
 **YOUR ROLE**: Check if function/method/class signatures match EXACTLY.
 
@@ -139,6 +139,13 @@ This evaluation is STRICT. API signatures must match EXACTLY because:
 
 Return JSON with 'score' (0 or 1) and detailed rationale listing all signature mismatches found.`;
 
+export function createUserPrompt(
+  reference: string,
+  candidateDiff: string,
+): string {
+  return `Reference diff:\n${reference}\n\nCandidate diff:\n${candidateDiff}\n\nCompare ONLY the API signatures (function names, parameter order, parameter names). Ignore implementation details. Respond with JSON.`;
+}
+
 export default createScore({
   prepare: async ({ evaluation }) => {
     try {
@@ -161,13 +168,10 @@ export default createScore({
     finalizeAgentChanges(evaluation, cwd, evaluation.from);
     let candidateDiff: string;
     try {
-      candidateDiff = execSync(
-        `git diff --unified=5 ${evaluation.from} HEAD`,
-        {
-          cwd,
-          encoding: "utf8",
-        },
-      );
+      candidateDiff = execSync(`git diff --unified=5 ${evaluation.from} HEAD`, {
+        cwd,
+        encoding: "utf8",
+      });
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       return {
@@ -191,7 +195,7 @@ export default createScore({
         schema: scoreResultSchema,
         system: systemPrompt,
         temperature: 0,
-        prompt: `Reference diff:\n${reference}\n\nCandidate diff:\n${candidateDiff}\n\nCompare ONLY the API signatures (function names, parameter order, parameter names). Ignore implementation details. Respond with JSON.`,
+        prompt: createUserPrompt(reference, candidateDiff),
       });
 
       return object;

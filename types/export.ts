@@ -39,6 +39,7 @@ export interface EvaluationRunExport {
   agent: string;
   evaluation: EvaluationMetadataExport;
   model: string;
+  jobUrl?: string;
   finalScore: number;
   baseScore: number;
   variancePenalty: number;

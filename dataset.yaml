@@ -19,7 +19,6 @@
         commands:
           - npm run lint
           - npm exec prettier -- --check .
-
 - repo: DataDog/datadog-lambda-python
   from: 93d4a07fa61a4d4d2feec08e722505a9e0cc8657
   to: d7763789f262b2da228f8210509e302e6e510d0a
@@ -55,4 +54,12 @@
     integration-points:
       weight: 0.22
     test-coverage:
-      weight: 0.22
+      weight: 0.2
+    checks:
+      weight: 0.1
+      args:
+        setup:
+          - npm ci
+        commands:
+          - npm run lint
+          - npm run build

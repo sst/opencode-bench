@@ -7,7 +7,7 @@ import { createScore, scoreResultSchema } from "~/lib/createScore.js";
 import { fetchComparisonDiff } from "~/lib/github.js";
 import { finalizeAgentChanges } from "~/lib/finalizeAgentChanges.js";
 
-const systemPrompt = `You are evaluating whether an autonomous agent reproduced the logical behavior from a reference git commit.
+export const systemPrompt = `You are evaluating whether an autonomous agent reproduced the logical behavior from a reference git commit.
 
 **YOUR ROLE**: Check if the conditional logic and control flow produce the same outcomes.
 
@@ -214,6 +214,13 @@ if failures is not None and isinstance(failures, list) {
 
 Return JSON with 'score' (0 or 1) and detailed rationale explaining any logic differences found.`;
 
+export function createUserPrompt(
+  reference: string,
+  candidateDiff: string,
+): string {
+  return `Reference diff:\n${reference}\n\nCandidate diff:\n${candidateDiff}\n\nCompare ONLY the logical behavior (conditions, edge cases, side effects). Ignore code structure and style. Respond with JSON.`;
+}
+
 export default createScore({
   prepare: async ({ evaluation }) => {
     try {
@@ -236,13 +243,10 @@ export default createScore({
     finalizeAgentChanges(evaluation, cwd, evaluation.from);
     let candidateDiff: string;
     try {
-      candidateDiff = execSync(
-        `git diff --unified=5 ${evaluation.from} HEAD`,
-        {
-          cwd,
-          encoding: "utf8",
-        },
-      );
+      candidateDiff = execSync(`git diff --unified=5 ${evaluation.from} HEAD`, {
+        cwd,
+        encoding: "utf8",
+      });
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       return {
@@ -266,7 +270,7 @@ export default createScore({
         schema: scoreResultSchema,
         system: systemPrompt,
         temperature: 0,
-        prompt: `Reference diff:\n${reference}\n\nCandidate diff:\n${candidateDiff}\n\nCompare ONLY the logical behavior (conditions, edge cases, side effects). Ignore code structure and style. Respond with JSON.`,
+        prompt: createUserPrompt(reference, candidateDiff),
       });
 
       return object;
