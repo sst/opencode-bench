@@ -45,7 +45,7 @@ jobs:
       - id: matrix
         name: Build benchmark matrix
         run: |
-          bun add -g opencode-ai @openai/codex-sdk
+          bun add -g opencode-ai@dev @openai/codex-sdk
           set -euo pipefail
           MATRIX_JSON="$(bun run scripts/generate-benchmark-matrix.ts)"
           printf 'matrix=%s\n' "${MATRIX_JSON}" >> "$GITHUB_OUTPUT"
@@ -76,7 +76,7 @@ jobs:
         run: bun install --frozen-lockfile
 
       - name: Install OpenCode CLI
-        run: bun add -g opencode-ai @openai/codex-sdk
+        run: bun add -g opencode-ai@dev @openai/codex-sdk
 
       - name: Determine benchmark job URL
         id: job_url
