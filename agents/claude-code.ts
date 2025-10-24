@@ -9,12 +9,18 @@ import type {
   AgentRunResult,
 } from "~/lib/createAgent.js";
 
+const sessionCache = new Map<string, string>();
+
 export const models: string[] = [
   "claude-sonnet-4-5",
   // "claude-sonnet-4",
   // "claude-opus-4-1",
   // "claude-3-5-haiku",
 ];
+
+function sessionKey(cwd: string, model: string): string {
+  return `${cwd}::${model}`;
+}
 
 function formatCommand(command: string, args: string[]): string {
   if (args.length === 0) {
@@ -97,22 +103,29 @@ const claudeCodeAgent: AgentDefinition = {
 
     options?.onStart?.(displayCommand);
 
+    const cacheKey = sessionKey(cwd, model);
+    const existingSessionID = sessionCache.get(cacheKey);
+
     try {
       const result = query({
         prompt,
         options: {
           model,
           cwd,
-          // Allow all tools by default, similar to other agents
-          allowedTools: ["Read", "Write", "Edit", "Grep", "Glob", "Bash"],
+          // Resume existing session if available
+          ...(existingSessionID ? { resume: existingSessionID } : {}),
         },
       });
 
       // Stream and log messages
       for await (const message of result) {
+        // Extract and cache session ID from messages
+        sessionCache.set(cacheKey, message.session_id);
         logJson(message, options);
       }
     } catch (error) {
+      // Clear session cache on error, like other agents do
+      sessionCache.delete(cacheKey);
       logError(
         {
           error: "claude_agent_sdk_failed",
