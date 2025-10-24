@@ -123,6 +123,7 @@ jobs:
         env:
           OPENCODE_API_KEY: ${{ secrets.OPENCODE_API_KEY }}
           CODEX_API_KEY: ${{ secrets.CODEX_API_KEY }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GITHUB_BENCHMARK_JOB_URL: ${{ steps.job_url.outputs.url }}
           URLS: ${{ needs.publish.outputs.urls }}
@@ -131,7 +132,7 @@ jobs:
           BENCHMARK_AGENT: ${{ matrix.agent }}
         with:
           max_attempts: 3
-          timeout_minutes: 30
+          timeout_minutes: 90
           retry_on: error
           command: |
             set -euo pipefail
