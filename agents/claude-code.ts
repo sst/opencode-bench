@@ -114,6 +114,7 @@ const claudeCodeAgent: AgentDefinition = {
           cwd,
           // Resume existing session if available
           ...(existingSessionID ? { resume: existingSessionID } : {}),
+          allowedTools: ["Read", "Write", "Edit", "Grep", "Glob", "Bash"],
         },
       });
 
