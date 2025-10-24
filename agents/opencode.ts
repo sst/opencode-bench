@@ -110,7 +110,11 @@ function serializeError(error: unknown): Record<string, unknown> {
       name: error.name,
       message: error.message,
       stack: error.stack,
+      cause: error.cause ? serializeError(error.cause) : undefined,
     };
+  }
+  if (typeof error === "object" && error !== null) {
+    return { ...error };
   }
   return { value: String(error) };
 }
