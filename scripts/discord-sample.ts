@@ -662,6 +662,10 @@ async function main(): Promise<void> {
   try {
     for (const [index, payload] of payloads.entries()) {
       await sendWebhook(webhookUrl, payload, index + 1, payloads.length);
+      // Add delay between messages to ensure proper ordering in Discord
+      if (index < payloads.length - 1) {
+        await new Promise((resolve) => setTimeout(resolve, 1000));
+      }
     }
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);

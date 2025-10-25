@@ -37,9 +37,9 @@ const mergedRuns: EvaluationRunExport[] = [];
 
 for (const filePath of jsonFiles) {
   const raw = readFileSync(filePath, "utf8");
-  const parsed: EvaluationRunExport[] = JSON.parse(raw);
+  const parsed: EvaluationRunExport = JSON.parse(raw);
 
-  mergedRuns.push(...parsed);
+  mergedRuns.push(parsed);
 }
 
 writeFileSync(outputPath, JSON.stringify(mergedRuns, null, 2));
