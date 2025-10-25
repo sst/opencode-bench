@@ -35,6 +35,14 @@ export interface EvaluationMetadataExport {
   to: DatasetEval["to"];
 }
 
+export interface TokenUsage {
+  input: number;
+  output: number;
+  reasoning: number;
+  cacheRead: number;
+  cacheWrite: number;
+}
+
 export interface EvaluationRunExport {
   agent: string;
   evaluation: EvaluationMetadataExport;
@@ -45,4 +53,7 @@ export interface EvaluationRunExport {
   variancePenalty: number;
   scores: ScoreResultExport[];
   episodes: Episode[];
+  tokenUsage?: TokenUsage;
+  totalCost?: number;
+  logSummary?: string;
 }

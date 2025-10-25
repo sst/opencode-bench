@@ -28,11 +28,14 @@ export interface AgentDefinition {
 
 export interface AgentRunResult {
   command: string;
+  sessionID?: string;
+  logs?: string[];
 }
 
 export interface AgentRunOptions {
   onStart?: (command: string) => void;
   logPrefix?: string;
+  captureLogs?: boolean;
 }
 
 export function createAgent(executor: AgentExecutor): AgentDefinition {

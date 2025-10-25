@@ -7,6 +7,9 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { tmpdir } from "node:os";
 
+import { createOpencode } from "@opencode-ai/sdk";
+import detectPort from "detect-port";
+
 import { getAgent, listAgents } from "~/agents/index.js";
 import type { AgentRegistration } from "~/agents/index.js";
 import { listScores, scores as scoreRegistry } from "~/scores/index.js";
@@ -22,7 +25,11 @@ import type {
   AggregationSummary,
   ScoreAggregationInput,
 } from "~/lib/utils/scoreAggregation.js";
-import type { Episode, EvaluationRunExport } from "~/types/export.js";
+import type {
+  Episode,
+  EvaluationRunExport,
+  TokenUsage,
+} from "~/types/export.js";
 import { withRetries } from "~/lib/utils/retry.js";
 
 type ModelCombination = string;
@@ -34,6 +41,153 @@ interface ParsedCliOptions {
 }
 
 const EPISODES = 3;
+
+// Initialize opencode client for fetching session data
+let opencodeClientInstance: Awaited<ReturnType<typeof createOpencode>> | null =
+  null;
+
+async function getOpencodeClient() {
+  if (!opencodeClientInstance) {
+    const port = await detectPort(4097); // Use different port to avoid conflicts
+    opencodeClientInstance = await createOpencode({
+      port,
+      config: {
+        permission: {
+          edit: "allow",
+          bash: "allow",
+          webfetch: "allow",
+        },
+      },
+    });
+  }
+  return opencodeClientInstance;
+}
+
+async function fetchSessionTokensAndCost(sessionID: string): Promise<{
+  tokens: TokenUsage;
+  cost: number;
+}> {
+  try {
+    const opencode = await getOpencodeClient();
+    const { data } = await opencode.client.session.messages({
+      path: { id: sessionID },
+      throwOnError: true,
+    });
+
+    let totalCost = 0;
+    const tokens: TokenUsage = {
+      input: 0,
+      output: 0,
+      reasoning: 0,
+      cacheRead: 0,
+      cacheWrite: 0,
+    };
+
+    for (const message of data) {
+      if (message.info.role === "assistant") {
+        totalCost += message.info.cost;
+        tokens.input += message.info.tokens.input;
+        tokens.output += message.info.tokens.output;
+        tokens.reasoning += message.info.tokens.reasoning;
+        tokens.cacheRead += message.info.tokens.cache.read;
+        tokens.cacheWrite += message.info.tokens.cache.write;
+      }
+    }
+
+    return { tokens, cost: totalCost };
+  } catch (error) {
+    console.error(`Failed to fetch session data for ${sessionID}:`, error);
+    return {
+      tokens: {
+        input: 0,
+        output: 0,
+        reasoning: 0,
+        cacheRead: 0,
+        cacheWrite: 0,
+      },
+      cost: 0,
+    };
+  }
+}
+
+function generateLogSummary(allLogs: string[]): string {
+  const toolCalls: Record<string, number> = {};
+  const modifiedFiles = new Set<string>();
+  const readFiles = new Set<string>();
+  let errorCount = 0;
+  let totalMessages = 0;
+
+  for (const log of allLogs) {
+    totalMessages++;
+
+    // Check for errors
+    if (log.includes("ERROR:")) {
+      errorCount++;
+    }
+
+    // Try to parse as JSON to extract Part information
+    try {
+      const parsed = JSON.parse(log.replace("ERROR: ", ""));
+
+      // Extract tool usage from ToolPart objects
+      if (parsed?.type === "tool" && typeof parsed.tool === "string") {
+        const toolName = parsed.tool;
+        toolCalls[toolName] = (toolCalls[toolName] || 0) + 1;
+      }
+
+      // Extract file modifications from PatchPart objects
+      if (parsed?.type === "patch" && Array.isArray(parsed.files)) {
+        parsed.files.forEach((file: string) => {
+          if (typeof file === "string") {
+            modifiedFiles.add(file);
+          }
+        });
+      }
+
+      // Extract file reads from FilePart objects
+      if (parsed?.type === "file" && typeof parsed.path === "string") {
+        readFiles.add(parsed.path);
+      }
+    } catch {
+      // Not JSON or doesn't match expected format, skip
+    }
+  }
+
+  // Build summary parts
+  const parts: string[] = [];
+
+  // Add modified files summary
+  if (modifiedFiles.size > 0) {
+    const fileList = Array.from(modifiedFiles).sort();
+    if (fileList.length <= 5) {
+      parts.push(`Modified files: ${fileList.join(", ")}`);
+    } else {
+      parts.push(`Modified ${fileList.length} files (${fileList.slice(0, 3).join(", ")}, ...)`);
+    }
+  }
+
+  // Add tool usage summary
+  if (Object.keys(toolCalls).length > 0) {
+    const toolSummary = Object.entries(toolCalls)
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([tool, count]) => `${tool}(${count})`)
+      .join(", ");
+    parts.push(`Tools: ${toolSummary}`);
+  }
+
+  // Add file reads summary (optional, only if significant)
+  if (readFiles.size > 10) {
+    parts.push(`Read ${readFiles.size} files`);
+  }
+
+  // Add basic stats
+  parts.push(`${totalMessages} messages`);
+  if (errorCount > 0) {
+    parts.push(`${errorCount} errors`);
+  }
+
+  return parts.length > 0 ? parts.join(", ") : "No activity detected";
+}
 
 async function printHelp(): Promise<void> {
   console.log(
@@ -247,6 +401,10 @@ async function main(): Promise<void> {
         summary: AggregationSummary;
         scoreExports: EvaluationRunExport["scores"];
         summaryLine: string;
+        sessionIDs: string[];
+        logs: string[];
+        tokens?: TokenUsage;
+        cost?: number;
       }
 
       const runEpisode = async (
@@ -291,6 +449,8 @@ async function main(): Promise<void> {
           }
 
           let tasksExecuted = 0;
+          const episodeSessionIDs: string[] = [];
+          const episodeLogs: string[] = [];
 
           for (const task of plannerTasks) {
             const logPrefix = `${prefix} ${task.commit}`;
@@ -298,7 +458,7 @@ async function main(): Promise<void> {
             try {
               await withRetries(
                 async () => {
-                  await agentRegistration.definition.run(
+                  const result = await agentRegistration.definition.run(
                     model,
                     task.prompt,
                     cwd!,
@@ -307,8 +467,16 @@ async function main(): Promise<void> {
                         console.log(`${logPrefix} ${commandString.trim()}`);
                       },
                       logPrefix,
+                      captureLogs: true,
                     },
                   );
+
+                  if (result.sessionID) {
+                    episodeSessionIDs.push(result.sessionID);
+                  }
+                  if (result.logs) {
+                    episodeLogs.push(...result.logs);
+                  }
                 },
                 {
                   retries: 3,
@@ -373,6 +541,36 @@ async function main(): Promise<void> {
             summary,
           );
 
+          // Fetch token and cost data from sessions
+          let episodeTokens: TokenUsage | undefined;
+          let episodeCost: number | undefined;
+          if (episodeSessionIDs.length > 0 && agentLabel === "opencode") {
+            // Only fetch for opencode agent since it uses sessions
+            const uniqueSessionIDs = Array.from(new Set(episodeSessionIDs));
+            const tokenDataPromises = uniqueSessionIDs.map((sessionID) =>
+              fetchSessionTokensAndCost(sessionID),
+            );
+            const tokenDataResults = await Promise.all(tokenDataPromises);
+
+            episodeTokens = {
+              input: 0,
+              output: 0,
+              reasoning: 0,
+              cacheRead: 0,
+              cacheWrite: 0,
+            };
+            episodeCost = 0;
+
+            for (const result of tokenDataResults) {
+              episodeTokens.input += result.tokens.input;
+              episodeTokens.output += result.tokens.output;
+              episodeTokens.reasoning += result.tokens.reasoning;
+              episodeTokens.cacheRead += result.tokens.cacheRead;
+              episodeTokens.cacheWrite += result.tokens.cacheWrite;
+              episodeCost += result.cost;
+            }
+          }
+
           console.log(
             `${prefix} Episode completed with final score ${summary.finalScore.toFixed(3)} (base ${summary.baseScore.toFixed(3)} - variance penalty ${summary.variancePenalty.toFixed(3)})`,
           );
@@ -383,6 +581,10 @@ async function main(): Promise<void> {
             summary,
             scoreExports: episodeScoreExports,
             summaryLine: `${episodeTag} Episode final score ${summary.finalScore.toFixed(3)}.`,
+            sessionIDs: episodeSessionIDs,
+            logs: episodeLogs,
+            tokens: episodeTokens,
+            cost: episodeCost,
           };
         } finally {
           if (cwd) {
@@ -400,6 +602,9 @@ async function main(): Promise<void> {
       const aggregatedInputs = new Map<string, ScoreAggregationInput>();
       const episodeSummaries: string[] = [];
       const episodeExports: Episode[] = [];
+      const allLogs: string[] = [];
+      let totalTokens: TokenUsage | undefined;
+      let totalCost: number | undefined;
 
       for (const result of episodeResults) {
         mergeAggregationInputs(aggregatedInputs, result.aggregation);
@@ -410,7 +615,41 @@ async function main(): Promise<void> {
           variancePenalty: result.summary.variancePenalty,
           scores: result.scoreExports,
         });
+
+        // Aggregate logs
+        if (result.logs && result.logs.length > 0) {
+          allLogs.push(...result.logs);
+        }
+
+        // Aggregate tokens and costs
+        if (result.tokens) {
+          if (!totalTokens) {
+            totalTokens = {
+              input: 0,
+              output: 0,
+              reasoning: 0,
+              cacheRead: 0,
+              cacheWrite: 0,
+            };
+          }
+          totalTokens.input += result.tokens.input;
+          totalTokens.output += result.tokens.output;
+          totalTokens.reasoning += result.tokens.reasoning;
+          totalTokens.cacheRead += result.tokens.cacheRead;
+          totalTokens.cacheWrite += result.tokens.cacheWrite;
+        }
+
+        if (result.cost !== undefined) {
+          if (totalCost === undefined) {
+            totalCost = 0;
+          }
+          totalCost += result.cost;
+        }
       }
+
+      // Generate log summary
+      const logSummary =
+        allLogs.length > 0 ? generateLogSummary(allLogs) : undefined;
 
       const { lines, exportData } = summarizeAggregation(
         agentLabel,
@@ -419,6 +658,9 @@ async function main(): Promise<void> {
         combinationLabel,
         aggregatedInputs,
         episodeExports,
+        totalTokens,
+        totalCost,
+        logSummary,
       );
 
       return {
@@ -612,6 +854,9 @@ function summarizeAggregation(
   contextLabel: string | undefined,
   aggregationInputs: Map<string, ScoreAggregationInput>,
   episodes: Episode[],
+  totalTokens?: TokenUsage,
+  totalCost?: number,
+  logSummary?: string,
 ): { lines: string[]; exportData: EvaluationRunExport } {
   const evalId = datasetEval.repo;
   const runContext = contextLabel ? `${evalId} [${contextLabel}]` : evalId;
@@ -661,6 +906,9 @@ function summarizeAggregation(
     variancePenalty: summary.variancePenalty,
     scores: scoreExports,
     episodes,
+    tokenUsage: totalTokens,
+    totalCost,
+    logSummary,
   };
 
   return { lines, exportData };

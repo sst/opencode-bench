@@ -70,38 +70,61 @@ function writeLog(
   }
 }
 
-function logJson(value: unknown, options: AgentRunOptions | undefined): void {
+function logJson(
+  value: unknown,
+  options: AgentRunOptions | undefined,
+  logs?: string[],
+): void {
   try {
-    writeLog(process.stdout, JSON.stringify(value), options?.logPrefix);
+    const message = JSON.stringify(value);
+    writeLog(process.stdout, message, options?.logPrefix);
+    if (options?.captureLogs && logs) {
+      logs.push(message);
+    }
   } catch (error) {
     const reason = error instanceof Error ? error.message : String(error);
-    writeLog(
-      process.stdout,
-      JSON.stringify({ error: "serialization_failed", reason }),
-      options?.logPrefix,
-    );
+    const errorMessage = JSON.stringify({
+      error: "serialization_failed",
+      reason,
+    });
+    writeLog(process.stdout, errorMessage, options?.logPrefix);
+    if (options?.captureLogs && logs) {
+      logs.push(errorMessage);
+    }
   }
 }
 
-function logError(value: unknown, options: AgentRunOptions | undefined): void {
+function logError(
+  value: unknown,
+  options: AgentRunOptions | undefined,
+  logs?: string[],
+): void {
   try {
-    writeLog(process.stderr, JSON.stringify(value), options?.logPrefix);
+    const message = JSON.stringify(value);
+    writeLog(process.stderr, message, options?.logPrefix);
+    if (options?.captureLogs && logs) {
+      logs.push(`ERROR: ${message}`);
+    }
   } catch (error) {
     const reason = error instanceof Error ? error.message : String(error);
-    writeLog(
-      process.stderr,
-      JSON.stringify({ error: "serialization_failed", reason }),
-      options?.logPrefix,
-    );
+    const errorMessage = JSON.stringify({
+      error: "serialization_failed",
+      reason,
+    });
+    writeLog(process.stderr, errorMessage, options?.logPrefix);
+    if (options?.captureLogs && logs) {
+      logs.push(`ERROR: ${errorMessage}`);
+    }
   }
 }
 
 function logPromptResult(
   result: { info: AssistantMessage; parts: Part[] },
   options: AgentRunOptions | undefined,
+  logs?: string[],
 ): void {
-  logJson({ info: result.info }, options);
-  result.parts.forEach((part) => logJson(part, options));
+  logJson({ info: result.info }, options, logs);
+  result.parts.forEach((part) => logJson(part, options, logs));
 }
 
 function serializeError(error: unknown): Record<string, unknown> {
@@ -144,6 +167,7 @@ const opencodeAgent: AgentDefinition = {
     options?.onStart?.(displayCommand);
 
     const cacheKey = sessionKey(cwd, model);
+    const logs: string[] = options?.captureLogs ? [] : undefined as any;
 
     let sessionID = sessionCache.get(cacheKey);
     if (!sessionID) {
@@ -170,7 +194,7 @@ const opencodeAgent: AgentDefinition = {
         throwOnError: true,
       });
 
-      logPromptResult(data, options);
+      logPromptResult(data, options, logs);
     } catch (error) {
       sessionCache.delete(cacheKey);
       logError(
@@ -179,11 +203,12 @@ const opencodeAgent: AgentDefinition = {
           details: serializeError(error),
         },
         options,
+        logs,
       );
       throw error;
     }
 
-    return { command: displayCommand };
+    return { command: displayCommand, sessionID, logs };
   },
 };
 
