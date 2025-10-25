@@ -22,6 +22,13 @@ export interface ScoreResultExport {
   judges: JudgeResultExport[];
 }
 
+export interface Episode {
+  finalScore: number;
+  baseScore: number;
+  variancePenalty: number;
+  scores: ScoreResultExport[];
+}
+
 export interface EvaluationMetadataExport {
   repo: DatasetEval["repo"];
   from: DatasetEval["from"];
@@ -33,14 +40,9 @@ export interface EvaluationRunExport {
   evaluation: EvaluationMetadataExport;
   model: string;
   jobUrl?: string;
-  summary: {
-    finalScore: number;
-    baseScore: number;
-    variancePenalty: number;
-  };
+  finalScore: number;
+  baseScore: number;
+  variancePenalty: number;
   scores: ScoreResultExport[];
-}
-export interface BenchmarkExport {
-  version: number;
-  runs: EvaluationRunExport[];
+  episodes: Episode[];
 }

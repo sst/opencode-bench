@@ -3,12 +3,11 @@
 A benchmarking framework for evaluating opencode's AI coding agents across real-world GitHub repositories. The framework runs agents against target repositories and scores their outputs using multiple LLM judges, measuring code quality across dimensions like readability, functionality, adherence to best practices, and efficiency.
 
 ```bash
-orvl opencode # run opencode on all models x evals x scores
-orvl opencode --model opencode/qwen3-coder # filter by model across all evals x scores
-orvl opencode --eval noworneverev/graphrag-visualizer # filter by eval across models x scores
+orvl opencode --model opencode/gpt-5-codex --eval noworneverev/graphrag-visualizer
+orvl opencode --model opencode/claude-sonnet-4-5 --eval prismicio-community/course-fizzi-next --output results.json
 ```
 
-Filters use CLI options like `--model`, `--eval`, and `--score`.
+Both `--model` and `--eval` are required; the CLI now runs a single agent/model/eval pairing at a time. Each invocation executes three isolated `[episode X/3]` runs (fresh clones) and aggregates the judge scores before exporting results.
 
 ## Setup
 ```bash
@@ -19,7 +18,7 @@ bun run build
 During development the CLI can be executed directly with Bun:
 
 ```bash
-bun run dev -- <agent> [--model <model>] [--eval <owner/name>] [--score <score>]
+bun run dev -- <agent> --model <model> --eval <owner/name>
 ```
 
 ## Continuous Releases

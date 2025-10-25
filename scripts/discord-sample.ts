@@ -8,8 +8,7 @@
  */
 
 import { readFileSync } from "node:fs";
-
-import type { BenchmarkExport } from "~/types/export.js";
+import type { Episode, EvaluationRunExport } from "~/types/export.js";
 
 type ScoreRow = {
   name: string;
@@ -26,6 +25,7 @@ type ModelSummary = {
   final: number;
   jobUrl?: string;
   rows: ScoreRow[];
+  episodes: Episode[];
 };
 
 type EvalSummary = {
@@ -62,133 +62,192 @@ type DiscordPayload = {
   embeds?: DiscordEmbed[];
 };
 
-const sampleExport: BenchmarkExport = {
-  version: 1,
-  runs: [
-    {
-      agent: "opencode",
-      evaluation: {
-        repo: "prismicio-community/course-fizzi-next",
-        from: "e90e3f4e07119d60e8822d4f474f6dfa5afe589f",
-        to: "2760114f2647ebec8f63e0ecc2dc87a8cd4096ac",
-      },
-      model: "opencode/claude-sonnet-4-5",
-      jobUrl:
-        "https://github.com/sst/opencode-bench/actions/runs/1234567890/job/111",
-      summary: {
-        finalScore: 0.902,
-        baseScore: 0.905,
-        variancePenalty: 0.003,
-      },
-      scores: [
-        {
-          assignment: {
-            name: "api-signature",
-            weight: 0.4,
-            args: undefined,
-          },
-          averageScore: 0.905,
-          normalizedWeight: 0.4,
-          variance: 0.03,
-          judges: [],
-        },
-        {
-          assignment: {
-            name: "logic-equivalence",
-            weight: 0.37,
-            args: undefined,
-          },
-          averageScore: 0.892,
-          normalizedWeight: 0.37,
-          variance: 0.025,
-          judges: [],
-        },
-        {
-          assignment: {
-            name: "checks",
-            weight: 0.23,
-            args: undefined,
-          },
-          averageScore: 0.98,
-          normalizedWeight: 0.23,
-          variance: 0.0,
-          judges: [],
-        },
-      ],
-    },
-    {
-      agent: "opencode",
-      evaluation: {
-        repo: "prismicio-community/course-fizzi-next",
-        from: "e90e3f4e07119d60e8822d4f474f6dfa5afe589f",
-        to: "2760114f2647ebec8f63e0ecc2dc87a8cd4096ac",
-      },
-      model: "opencode/gpt-5-codex",
-      jobUrl:
-        "https://github.com/sst/opencode-bench/actions/runs/1234567890/job/222",
-      summary: {
-        finalScore: 0.898,
-        baseScore: 0.903,
-        variancePenalty: 0.004,
-      },
-      scores: [
-        {
-          assignment: {
-            name: "api-signature",
-            weight: 0.4,
-            args: undefined,
-          },
-          averageScore: 0.903,
-          normalizedWeight: 0.4,
-          variance: 0.041,
-          judges: [],
-        },
-        {
-          assignment: {
-            name: "logic-equivalence",
-            weight: 0.37,
-            args: undefined,
-          },
-          averageScore: 0.888,
-          normalizedWeight: 0.37,
-          variance: 0.03,
-          judges: [],
-        },
-        {
-          assignment: {
-            name: "checks",
-            weight: 0.23,
-            args: undefined,
-          },
-          averageScore: 0.967,
-          normalizedWeight: 0.23,
-          variance: 0.0,
-          judges: [],
-        },
-      ],
-    },
-  ],
-};
+const cloneScores = (
+  scores: EvaluationRunExport["scores"],
+  averageShift: number,
+  varianceShift = 0,
+): EvaluationRunExport["scores"] =>
+  scores.map((score) => {
+    const shiftedAverage = Number(
+      Math.min(1, Math.max(0, score.averageScore + averageShift)).toFixed(3),
+    );
+    const shiftedVariance = Number(
+      Math.max(0, score.variance + varianceShift).toFixed(3),
+    );
 
-function loadExport(): BenchmarkExport {
+    return {
+      assignment: { ...score.assignment },
+      averageScore: shiftedAverage,
+      normalizedWeight: score.normalizedWeight,
+      variance: shiftedVariance,
+      judges: score.judges.map((judge) => ({ ...judge })),
+    };
+  });
+
+const claudeScores: EvaluationRunExport["scores"] = [
+  {
+    assignment: {
+      name: "api-signature",
+      weight: 0.4,
+      args: undefined,
+    },
+    averageScore: 0.905,
+    normalizedWeight: 0.4,
+    variance: 0.03,
+    judges: [],
+  },
+  {
+    assignment: {
+      name: "logic-equivalence",
+      weight: 0.37,
+      args: undefined,
+    },
+    averageScore: 0.892,
+    normalizedWeight: 0.37,
+    variance: 0.025,
+    judges: [],
+  },
+  {
+    assignment: {
+      name: "checks",
+      weight: 0.23,
+      args: undefined,
+    },
+    averageScore: 0.98,
+    normalizedWeight: 0.23,
+    variance: 0.0,
+    judges: [],
+  },
+];
+
+const claudeEpisodes: Episode[] = [
+  {
+    finalScore: 0.909,
+    baseScore: 0.912,
+    variancePenalty: 0.003,
+    scores: cloneScores(claudeScores, 0.002, -0.005),
+  },
+  {
+    finalScore: 0.901,
+    baseScore: 0.905,
+    variancePenalty: 0.004,
+    scores: cloneScores(claudeScores, 0, 0),
+  },
+  {
+    finalScore: 0.896,
+    baseScore: 0.902,
+    variancePenalty: 0.006,
+    scores: cloneScores(claudeScores, -0.002, 0.004),
+  },
+];
+
+const gptScores: EvaluationRunExport["scores"] = [
+  {
+    assignment: {
+      name: "api-signature",
+      weight: 0.4,
+      args: undefined,
+    },
+    averageScore: 0.903,
+    normalizedWeight: 0.4,
+    variance: 0.041,
+    judges: [],
+  },
+  {
+    assignment: {
+      name: "logic-equivalence",
+      weight: 0.37,
+      args: undefined,
+    },
+    averageScore: 0.888,
+    normalizedWeight: 0.37,
+    variance: 0.03,
+    judges: [],
+  },
+  {
+    assignment: {
+      name: "checks",
+      weight: 0.23,
+      args: undefined,
+    },
+    averageScore: 0.967,
+    normalizedWeight: 0.23,
+    variance: 0.0,
+    judges: [],
+  },
+];
+
+const gptEpisodes: Episode[] = [
+  {
+    finalScore: 0.903,
+    baseScore: 0.907,
+    variancePenalty: 0.004,
+    scores: cloneScores(gptScores, 0.003, -0.006),
+  },
+  {
+    finalScore: 0.894,
+    baseScore: 0.898,
+    variancePenalty: 0.004,
+    scores: cloneScores(gptScores, -0.002, 0.002),
+  },
+  {
+    finalScore: 0.892,
+    baseScore: 0.897,
+    variancePenalty: 0.005,
+    scores: cloneScores(gptScores, -0.003, 0.004),
+  },
+];
+
+const sampleExport: EvaluationRunExport[] = [
+  {
+    agent: "opencode",
+    evaluation: {
+      repo: "prismicio-community/course-fizzi-next",
+      from: "e90e3f4e07119d60e8822d4f474f6dfa5afe589f",
+      to: "2760114f2647ebec8f63e0ecc2dc87a8cd4096ac",
+    },
+    model: "opencode/claude-sonnet-4-5",
+    jobUrl:
+      "https://github.com/sst/opencode-bench/actions/runs/1234567890/job/111",
+    finalScore: 0.902,
+    baseScore: 0.905,
+    variancePenalty: 0.003,
+    scores: claudeScores,
+    episodes: claudeEpisodes,
+  },
+  {
+    agent: "opencode",
+    evaluation: {
+      repo: "prismicio-community/course-fizzi-next",
+      from: "e90e3f4e07119d60e8822d4f474f6dfa5afe589f",
+      to: "2760114f2647ebec8f63e0ecc2dc87a8cd4096ac",
+    },
+    model: "opencode/gpt-5-codex",
+    jobUrl:
+      "https://github.com/sst/opencode-bench/actions/runs/1234567890/job/222",
+    finalScore: 0.898,
+    baseScore: 0.903,
+    variancePenalty: 0.004,
+    scores: gptScores,
+    episodes: gptEpisodes,
+  },
+];
+
+function loadExport(): EvaluationRunExport[] {
   const inputPath = process.argv[2];
   if (!inputPath) {
     return sampleExport;
   }
 
   const raw = readFileSync(inputPath, "utf8");
-  const parsed: BenchmarkExport = JSON.parse(raw);
-  if (parsed.version !== 1) {
-    throw new Error(`Unsupported export version: ${parsed.version}`);
-  }
 
-  return parsed;
+  return JSON.parse(raw);
 }
 
-function toEvalSummaries(exportData: BenchmarkExport): EvalSummary[] {
+function toEvalSummaries(exportData: EvaluationRunExport[]): EvalSummary[] {
   const evalMap = new Map<string, ModelSummary[]>();
 
-  exportData.runs.forEach((run) => {
+  exportData.forEach((run) => {
     const modelIds = Array.isArray(run.model) ? run.model : [run.model];
     const modelRows = run.scores.map((score) => ({
       name: score.assignment.name,
@@ -208,9 +267,10 @@ function toEvalSummaries(exportData: BenchmarkExport): EvalSummary[] {
         id: prefixedId,
         rawModelId: modelId,
         agentId: agentName.length > 0 ? agentName : run.agent,
-        final: run.summary.finalScore,
+        final: run.finalScore,
         jobUrl: run.jobUrl,
         rows: modelRows,
+        episodes: run.episodes,
       });
     });
 
@@ -602,6 +662,10 @@ async function main(): Promise<void> {
   try {
     for (const [index, payload] of payloads.entries()) {
       await sendWebhook(webhookUrl, payload, index + 1, payloads.length);
+      // Add delay between messages to ensure proper ordering in Discord
+      if (index < payloads.length - 1) {
+        await new Promise((resolve) => setTimeout(resolve, 1000));
+      }
     }
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);

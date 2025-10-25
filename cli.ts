@@ -17,34 +17,40 @@ import { fetchPlannerCommitDiffs } from "~/lib/github.js";
 import { finalizeAgentChanges } from "~/lib/finalizeAgentChanges.js";
 import { judges, getJudgeModelId } from "~/judges.js";
 import { aggregateScores } from "~/lib/utils/scoreAggregation.js";
-import type { ScoreAggregationInput } from "~/lib/utils/scoreAggregation.js";
-import type { BenchmarkExport, EvaluationRunExport } from "~/types/export.js";
+import type { Judge } from "~/lib/judgeTypes.js";
+import type {
+  AggregationSummary,
+  ScoreAggregationInput,
+} from "~/lib/utils/scoreAggregation.js";
+import type { Episode, EvaluationRunExport } from "~/types/export.js";
 import { withRetries } from "~/lib/utils/retry.js";
-
-type ScoreName = ScoreAssignment["name"];
 
 type ModelCombination = string;
 
-type FilterKey = "model" | "eval" | "score";
-type CliFilters = Partial<Record<FilterKey, string>>;
-const VALID_OPTION_KEYS: FilterKey[] = ["model", "eval", "score"];
-
 interface ParsedCliOptions {
-  filters: CliFilters;
+  model: string;
+  eval: string;
   outputPath?: string;
 }
 
+const EPISODES = 3;
+
 async function printHelp(): Promise<void> {
   console.log(
-    "Usage: orvl <agent> [--model <model>] [--eval <owner/name>] [--score <score>] [--output <file>]",
+    "Usage: orvl <agent> --model <model> --eval <owner/name> [--output <file>]",
   );
   console.log("");
   console.log("Examples:");
-  console.log("  orvl opencode");
-  console.log("  orvl opencode --model qwen3-coder");
-  console.log("  orvl opencode --eval noworneverev/graphrag-visualizer");
+  console.log(
+    "  orvl opencode --model opencode/gpt-5-codex --eval noworneverev/graphrag-visualizer",
+  );
+  console.log(
+    "  orvl opencode --model opencode/claude-sonnet-4-5 --eval prismicio-community/course-fizzi-next",
+  );
   console.log();
-  console.log("  orvl opencode --output results.json");
+  console.log(
+    "  orvl opencode --model opencode/gpt-5-codex --eval prismicio-community/course-fizzi-next --output results.json",
+  );
   console.log("");
   const agents = await listAgents();
   console.log(
@@ -55,57 +61,24 @@ async function printHelp(): Promise<void> {
   console.log("Available evals:", listEvalIdentifiers().join(", "));
 }
 
-function getEvalIdentifier(entry: DatasetEval): string {
-  return entry.repo;
-}
-
 function listEvalIdentifiers(): string[] {
-  return Array.from(
-    new Set(dataset.map((entry) => getEvalIdentifier(entry))),
-  ).sort((a, b) => a.localeCompare(b));
-}
-
-function validateScoreFilter(name: string | undefined): ScoreName | undefined {
-  if (!name) {
-    return undefined;
-  }
-
-  assert(scoreRegistry[name as ScoreName], `Unknown score: ${name}`);
-
-  return name as ScoreName;
-}
-
-function resolveModels(
-  agent: AgentRegistration,
-  modelFilter: string | undefined,
-): ModelCombination[] {
-  const combinations: ModelCombination[] = [];
-
-  agent.models.forEach((model) => {
-    if (!modelFilter || model === modelFilter) {
-      combinations.push(model);
-    }
-  });
-
-  assert(
-    !modelFilter || combinations.length > 0,
-    `Model ${modelFilter} is not registered for agent ${agent.name}.`,
+  return Array.from(new Set(dataset.map((entry) => entry.repo))).sort((a, b) =>
+    a.localeCompare(b),
   );
-
-  return combinations;
 }
 
 function parseOptions(tokens: string[]): ParsedCliOptions {
-  const filters: CliFilters = {};
+  let model: string | undefined;
+  let evalId: string | undefined;
   let outputPath: string | undefined;
-  const allowed = new Set<string>([...VALID_OPTION_KEYS, "output"]);
+  const allowed = new Set<string>(["model", "eval", "output"]);
 
   let index = 0;
   while (index < tokens.length) {
     const token = tokens[index];
     assert(
       token.startsWith("--"),
-      `Unexpected argument "${token}". Use --model/--eval/--score options.`,
+      `Unexpected argument "${token}". Use --model/--eval options.`,
     );
 
     const option = token.slice(2);
@@ -126,24 +99,42 @@ function parseOptions(tokens: string[]): ParsedCliOptions {
 
     assert(value, `Option "--${rawKey}" cannot be empty.`);
 
-    if (rawKey === "output") {
-      assert(
-        outputPath === undefined,
-        'Option "--output" specified multiple times.',
-      );
-      outputPath = value;
-    } else {
-      const key = rawKey as FilterKey;
-      assert(
-        filters[key] === undefined,
-        `Option "--${key}" specified multiple times.`,
-      );
-      filters[key] = value;
+    switch (rawKey) {
+      case "output":
+        assert(
+          outputPath === undefined,
+          'Option "--output" specified multiple times.',
+        );
+        outputPath = value;
+        break;
+      case "model":
+        assert(
+          model === undefined,
+          'Option "--model" specified multiple times.',
+        );
+        model = value;
+        break;
+      case "eval":
+        assert(
+          evalId === undefined,
+          'Option "--eval" specified multiple times.',
+        );
+        evalId = value;
+        break;
+      default:
+        assert(false, `Unknown option "--${rawKey}".`);
     }
     index += 1;
   }
 
-  return { filters, outputPath };
+  assert(model, 'Required option "--model" is missing.');
+  assert(evalId, 'Required option "--eval" is missing.');
+
+  return {
+    model: model!,
+    eval: evalId!,
+    outputPath,
+  };
 }
 
 function isHelpRequest(arg: string | undefined): boolean {
@@ -161,12 +152,9 @@ async function main(): Promise<void> {
     return;
   }
 
-  let filters: CliFilters;
-  let outputPath: string | undefined;
+  let options: ParsedCliOptions;
   try {
-    const parsed = parseOptions(args.slice(1));
-    filters = parsed.filters;
-    outputPath = parsed.outputPath;
+    options = parseOptions(args.slice(1));
   } catch (error) {
     if (error instanceof Error) {
       console.error(error.message);
@@ -174,6 +162,8 @@ async function main(): Promise<void> {
     process.exitCode = 1;
     return;
   }
+
+  const { model: modelFilter, eval: evalFilter, outputPath } = options;
 
   const agent = await getAgent(agentName);
   if (!agent) {
@@ -183,61 +173,38 @@ async function main(): Promise<void> {
     return;
   }
 
-  let modelCombinations: ModelCombination[];
-  try {
-    modelCombinations = resolveModels(agent, filters.model);
-  } catch (error) {
-    if (error instanceof Error) {
-      console.error(error.message);
-    }
-    process.exitCode = 1;
-    return;
-  }
+  const model = agent.models.find((entry) => entry === modelFilter);
 
-  let scoreFilterName: ScoreName | undefined;
-  try {
-    scoreFilterName = validateScoreFilter(filters.score);
-  } catch (error) {
-    if (error instanceof Error) {
-      console.error(error.message);
-    }
-    process.exitCode = 1;
-    return;
-  }
+  assert(
+    model,
+    `Model ${modelFilter} is not registered for agent ${agent.name}.`,
+  );
 
-  const evalFilter = normalizeEvalFilter(filters.eval);
-  const selectedEvals = evalFilter
-    ? dataset.filter((entry) => getEvalIdentifier(entry) === evalFilter)
-    : dataset;
+  const evalDefinition = dataset.find((entry) => entry.repo === evalFilter);
 
-  if (evalFilter && selectedEvals.length === 0) {
-    console.error(`Eval ${evalFilter} was not found.`);
+  if (!evalDefinition) {
+    console.error(`Eval ${evalFilter ?? evalFilter} was not found.`);
     process.exitCode = 1;
     return;
   }
 
   const processEvaluation = async (
     evalDefinition: DatasetEval,
-    scoreFilter: ScoreName | undefined,
-    combinations: ModelCombination[],
     agentRegistration: AgentRegistration,
     agentLabel: string,
   ): Promise<{
-    runCount: number;
-    exports: EvaluationRunExport[];
-    attemptedScore: boolean;
+    summaries: string[];
+    exportData?: EvaluationRunExport;
   }> => {
-    const availableScores = evalDefinition.scores;
-    const scores: ScoreAssignment[] = scoreFilter
-      ? availableScores.filter((assignment) => assignment.name === scoreFilter)
-      : availableScores;
-
+    const scores: ScoreAssignment[] = evalDefinition.scores;
     if (scores.length === 0) {
-      return { runCount: 0, exports: [], attemptedScore: false };
+      const message = `Evaluation ${evalDefinition.repo} has no score assignments configured.`;
+      console.error(message);
+      process.exitCode = 1;
+      assert(false, message);
     }
 
-    const abortToken = { __abortEval: true } as const;
-    const evalId = getEvalIdentifier(evalDefinition);
+    const evalId = evalDefinition.repo;
 
     let plannerTasks: PlannerTask[] = [];
 
@@ -265,258 +232,254 @@ async function main(): Promise<void> {
         console.error("Failed to prepare evaluation", evalId);
       }
       process.exitCode = 1;
-      throw new Error("evaluation preparation failed");
+      assert(false, "evaluation preparation failed");
     }
 
-    const runCombination = async (
-      model: string,
-    ): Promise<{
-      completedRuns: number;
+    const executeCombination = async (): Promise<{
       summaries: string[];
-      exports: EvaluationRunExport[];
+      exportData?: EvaluationRunExport;
     }> => {
-      let cwd: string;
+      const combinationLabel = `${evalId} ${model}`;
 
-      try {
-        const combinationLabel = `${evalId} ${model}`;
-        console.log(`[${combinationLabel}] Cloning repository...`);
+      interface EpisodeResult {
+        index: number;
+        aggregation: Map<string, ScoreAggregationInput>;
+        summary: AggregationSummary;
+        scoreExports: EvaluationRunExport["scores"];
+        summaryLine: string;
+      }
+
+      const runEpisode = async (
+        episodeIndex: number,
+      ): Promise<EpisodeResult> => {
+        const episodeTag = `[episode ${episodeIndex}/${EPISODES}]`;
         const baselineCommit = evalDefinition.from;
-        cwd = cloneRepositoryAtCommit(evalDefinition, baselineCommit);
-        const preparedScores = new Map<string, unknown>();
+        const prefix = `${episodeTag} [${combinationLabel}]`;
+        let cwd: string | undefined;
 
-        for (const assignment of scores) {
-          const scoreDefinition = scoreRegistry[assignment.name];
-
-          if (!scoreDefinition) {
-            console.error(`Score ${assignment.name} is not registered.`);
-            continue;
-          }
-
-          try {
-            const prepared = await scoreDefinition.prepare({
-              evaluation: evalDefinition,
-              cwd,
-              config: assignment.args,
-            });
-            preparedScores.set(assignment.name, prepared);
-          } catch (error) {
-            const message =
-              error instanceof Error ? error.message : String(error);
-            console.error(
-              `Failed to prepare score ${assignment.name} for ${combinationLabel}: ${message}`,
-            );
-            process.exitCode = 1;
-            throw abortToken;
-          }
-        }
-
-        let tasksExecuted = 0;
-
-        for (const task of plannerTasks) {
-          const logPrefix = `${combinationLabel} ${task.commit}`;
-          await withRetries(
-            async () => {
-              await agentRegistration.definition.run(model, task.prompt, cwd, {
-                onStart: (commandString: string) => {
-                  console.log(`[${logPrefix}] ${commandString.trim()}`);
-                },
-                logPrefix,
-              });
-            },
-            {
-              retries: 3,
-              onRetry(error, attempt, retries) {
-                if (error instanceof Error) {
-                  console.error(
-                    `Failed to render command for ${model} (attempt ${attempt}/${retries}): ${error.message}`,
-                  );
-                } else {
-                  console.error(
-                    `Failed to render command for ${model} (attempt ${attempt}/${retries})`,
-                  );
-                }
-
-                if (attempt < retries) {
-                  console.log(
-                    `[${logPrefix}] Retrying agent run (attempt ${attempt + 1}/${retries})...`,
-                  );
-                }
-              },
-            },
-          ).catch((error) => {
-            process.exitCode = 1;
-            throw error === abortToken ? error : abortToken;
-          });
-
-          tasksExecuted += 1;
-        }
-
-        if (tasksExecuted === 0) {
-          return { completedRuns: 0, summaries: [], exports: [] };
-        }
-
-        const hasChanges = finalizeAgentChanges(
-          evalDefinition,
-          cwd,
-          baselineCommit,
-        );
-
-        if (!hasChanges) {
-          console.log(
-            `No changes detected for ${model} on ${evalId}. Skipping scoring.`,
-          );
-          return { completedRuns: 0, summaries: [], exports: [] };
-        }
+        const fail = (message: string): never => {
+          const formatted = `${prefix} ${message}`;
+          console.error(formatted);
+          process.exitCode = 1;
+          throw new Error(formatted);
+        };
 
         try {
-          const evaluationResult = await evaluateScoresForRun(
-            agentLabel,
+          console.log(`${prefix} Cloning repository...`);
+          cwd = cloneRepositoryAtCommit(evalDefinition, baselineCommit);
+
+          const preparedScores = new Map<string, unknown>();
+          for (const assignment of scores) {
+            const scoreDefinition = scoreRegistry[assignment.name];
+
+            if (!scoreDefinition) {
+              fail(`Score ${assignment.name} is not registered.`);
+            }
+
+            try {
+              const prepared = await scoreDefinition.prepare({
+                evaluation: evalDefinition,
+                cwd,
+                config: assignment.args,
+              });
+              preparedScores.set(assignment.name, prepared);
+            } catch (error) {
+              const message =
+                error instanceof Error ? error.message : String(error);
+              fail(`Failed to prepare score ${assignment.name}: ${message}`);
+            }
+          }
+
+          let tasksExecuted = 0;
+
+          for (const task of plannerTasks) {
+            const logPrefix = `${prefix} ${task.commit}`;
+
+            try {
+              await withRetries(
+                async () => {
+                  await agentRegistration.definition.run(
+                    model,
+                    task.prompt,
+                    cwd!,
+                    {
+                      onStart: (commandString: string) => {
+                        console.log(`${logPrefix} ${commandString.trim()}`);
+                      },
+                      logPrefix,
+                    },
+                  );
+                },
+                {
+                  retries: 3,
+                  onRetry(error, attempt, retries) {
+                    const baseMessage =
+                      error instanceof Error ? error.message : String(error);
+                    console.error(
+                      `${logPrefix} Failed to render command for ${model} (attempt ${attempt}/${retries}): ${baseMessage}`,
+                    );
+
+                    if (attempt < retries) {
+                      console.log(
+                        `${logPrefix} Retrying agent run (attempt ${attempt + 1}/${retries})...`,
+                      );
+                    }
+                  },
+                },
+              );
+            } catch (error) {
+              const message =
+                error instanceof Error ? error.message : String(error);
+              fail(
+                `Agent run failed for planner task ${task.commit}: ${message}`,
+              );
+            }
+
+            tasksExecuted += 1;
+          }
+
+          if (tasksExecuted === 0) {
+            fail("No planner tasks have been executed.");
+          }
+
+          const hasChanges = finalizeAgentChanges(
+            evalDefinition,
+            cwd,
+            baselineCommit,
+          );
+
+          if (!hasChanges) {
+            fail("No changes detected for this episode.");
+          }
+
+          const episodeAggregation = await collectAggregationInputsForRun(
             evalDefinition,
             scores,
             model,
-            combinationLabel,
             cwd,
             preparedScores,
           );
-          return {
-            completedRuns: 1,
-            summaries: evaluationResult.lines,
-            exports: [evaluationResult.exportData],
-          };
-        } catch (error) {
-          if (error instanceof Error) {
-            console.error(
-              `Failed to evaluate scores for ${model}: ${error.message}`,
-            );
-          } else {
-            console.error("Failed to evaluate scores for", model);
+
+          if (episodeAggregation.size === 0) {
+            fail("No score results were produced for this episode.");
           }
-          process.exitCode = 1;
-          throw abortToken;
+
+          const summary = aggregateScores(
+            Array.from(episodeAggregation.values()),
+          );
+
+          const episodeScoreExports = buildScoreExportsFromAggregation(
+            episodeAggregation,
+            summary,
+          );
+
+          console.log(
+            `${prefix} Episode completed with final score ${summary.finalScore.toFixed(3)} (base ${summary.baseScore.toFixed(3)} - variance penalty ${summary.variancePenalty.toFixed(3)})`,
+          );
+
+          return {
+            index: episodeIndex,
+            aggregation: episodeAggregation,
+            summary,
+            scoreExports: episodeScoreExports,
+            summaryLine: `${episodeTag} Episode final score ${summary.finalScore.toFixed(3)}.`,
+          };
+        } finally {
+          if (cwd) {
+            cleanupRepository(cwd, evalDefinition);
+          }
         }
-      } catch (error) {
-        if (
-          typeof error === "object" &&
-          error !== null &&
-          "__abortEval" in error
-        ) {
-          throw error;
-        }
-
-        console.error(
-          `Failed to prepare combination ${model} for ${evalId}: ${error instanceof Error ? error.message : error}`,
-        );
-        process.exitCode = 1;
-        throw abortToken;
-      } finally {
-        if (cwd!) {
-          cleanupRepository(cwd, evalDefinition);
-        }
-      }
-    };
-
-    try {
-      const results = await Promise.all(
-        combinations.map((combination) => runCombination(combination)),
-      );
-
-      const completed = results.reduce(
-        (total, value) => total + value.completedRuns,
-        0,
-      );
-
-      results.forEach((result) => {
-        result.summaries.forEach((line) => {
-          console.log(line);
-        });
-      });
-
-      const exports = results.flatMap((result) => result.exports);
-
-      return { runCount: completed, exports, attemptedScore: true };
-    } catch (error) {
-      if (
-        typeof error === "object" &&
-        error !== null &&
-        "__abortEval" in error
-      ) {
-        throw new Error("evaluation aborted");
-      }
-
-      console.error(
-        `Failed to complete evaluation ${evalId}: ${error instanceof Error ? error.message : error}`,
-      );
-      process.exitCode = 1;
-      throw new Error("evaluation failed");
-    }
-  };
-
-  let evaluationResults: Array<{
-    runCount: number;
-    exports: EvaluationRunExport[];
-    attemptedScore: boolean;
-  }>;
-  try {
-    evaluationResults = await Promise.all(
-      selectedEvals.map((evalDefinition) =>
-        processEvaluation(
-          evalDefinition,
-          scoreFilterName,
-          modelCombinations,
-          agent,
-          agentName,
-        ),
-      ),
-    );
-  } catch {
-    return;
-  }
-
-  const runCount = evaluationResults.reduce(
-    (total, result) => total + result.runCount,
-    0,
-  );
-
-  const runExports = evaluationResults.flatMap((result) => result.exports);
-
-  if (
-    scoreFilterName &&
-    !evaluationResults.some((result) => result.attemptedScore)
-  ) {
-    console.error(
-      `Score ${scoreFilterName} is not available for the selected evaluations.`,
-    );
-    process.exitCode = 1;
-    return;
-  }
-
-  if (runCount === 0) {
-    console.error("No runs matched the provided filters.");
-    process.exitCode = 1;
-  }
-
-  if (outputPath) {
-    try {
-      const directory = dirname(outputPath);
-      if (directory && directory !== ".") {
-        mkdirSync(directory, { recursive: true });
-      }
-
-      const exportPayload: BenchmarkExport = {
-        version: 1,
-        runs: runExports,
       };
 
-      writeFileSync(outputPath, JSON.stringify(exportPayload, null, 2));
-    } catch (error) {
-      const message =
-        error instanceof Error
-          ? error.message
-          : "Unknown error writing output.";
-      console.error(`Failed to write export to ${outputPath}: ${message}`);
-      process.exitCode = 1;
-      return;
+      const episodeResults = await Promise.all(
+        Array.from({ length: EPISODES }, (_, offset) => runEpisode(offset + 1)),
+      );
+
+      episodeResults.sort((a, b) => a.index - b.index);
+
+      const aggregatedInputs = new Map<string, ScoreAggregationInput>();
+      const episodeSummaries: string[] = [];
+      const episodeExports: Episode[] = [];
+
+      for (const result of episodeResults) {
+        mergeAggregationInputs(aggregatedInputs, result.aggregation);
+        episodeSummaries.push(result.summaryLine);
+        episodeExports.push({
+          finalScore: result.summary.finalScore,
+          baseScore: result.summary.baseScore,
+          variancePenalty: result.summary.variancePenalty,
+          scores: result.scoreExports,
+        });
+      }
+
+      const { lines, exportData } = summarizeAggregation(
+        agentLabel,
+        evalDefinition,
+        model,
+        combinationLabel,
+        aggregatedInputs,
+        episodeExports,
+      );
+
+      return {
+        summaries: [...episodeSummaries, ...lines],
+        exportData,
+      };
+    };
+
+    return await executeCombination();
+  };
+
+  try {
+    const evaluationResult = await processEvaluation(
+      evalDefinition,
+      agent,
+      agentName,
+    );
+
+    evaluationResult.summaries.forEach((line) => {
+      console.log(line);
+    });
+
+    if (evaluationResult.exportData) {
+      const { episodes, finalScore, baseScore, variancePenalty } =
+        evaluationResult.exportData;
+      if (episodes.length > 0) {
+        console.log("[debug] Episode recap:");
+        episodes.forEach((episode, index) => {
+          console.log(
+            `[debug]   Episode ${index + 1}: final ${episode.finalScore.toFixed(3)} (base ${episode.baseScore.toFixed(3)} - penalty ${episode.variancePenalty.toFixed(3)})`,
+          );
+        });
+      }
+      console.log(
+        `[debug] Aggregate final: ${finalScore.toFixed(3)} (base ${baseScore.toFixed(3)} - penalty ${variancePenalty.toFixed(3)})`,
+      );
     }
+
+    if (outputPath) {
+      try {
+        const directory = dirname(outputPath);
+        if (directory && directory !== ".") {
+          mkdirSync(directory, { recursive: true });
+        }
+
+        writeFileSync(
+          outputPath,
+          JSON.stringify(evaluationResult.exportData, null, 2),
+        );
+      } catch (error) {
+        const message =
+          error instanceof Error
+            ? error.message
+            : "Unknown error writing output.";
+        console.error(`Failed to write export to ${outputPath}: ${message}`);
+        process.exitCode = 1;
+        return;
+      }
+    }
+  } catch {
+    return;
   }
 }
 
@@ -577,18 +540,13 @@ function cloneRepositoryAtCommit(
   }
 }
 
-async function evaluateScoresForRun(
-  agentName: string,
+async function collectAggregationInputsForRun(
   datasetEval: DatasetEval,
   scores: ScoreAssignment[],
-  model: string,
-  contextLabel: string | undefined,
+  model: ModelCombination,
   cwd: string,
   preparedReferences: Map<string, unknown>,
-): Promise<{ lines: string[]; exportData: EvaluationRunExport }> {
-  const evalId = getEvalIdentifier(datasetEval);
-  const runContext = contextLabel ? `${evalId} [${contextLabel}]` : evalId;
-
+): Promise<Map<string, ScoreAggregationInput>> {
   const aggregationInputs = new Map<string, ScoreAggregationInput>();
 
   for (const judge of judges) {
@@ -596,13 +554,15 @@ async function evaluateScoresForRun(
       const scoreDefinition = scoreRegistry[assignment.name];
 
       if (!scoreDefinition) {
-        console.error(`Score ${assignment.name} is not registered.`);
+        console.error(
+          `Score ${assignment.name} is not registered (model ${model}).`,
+        );
         continue;
       }
 
       if (!preparedReferences.has(assignment.name)) {
         console.error(
-          `Score ${assignment.name} did not provide prepared references.`,
+          `Score ${assignment.name} did not provide prepared references for model ${model}.`,
         );
         continue;
       }
@@ -642,6 +602,20 @@ async function evaluateScoresForRun(
     }
   }
 
+  return aggregationInputs;
+}
+
+function summarizeAggregation(
+  agentName: string,
+  datasetEval: DatasetEval,
+  model: ModelCombination,
+  contextLabel: string | undefined,
+  aggregationInputs: Map<string, ScoreAggregationInput>,
+  episodes: Episode[],
+): { lines: string[]; exportData: EvaluationRunExport } {
+  const evalId = datasetEval.repo;
+  const runContext = contextLabel ? `${evalId} [${contextLabel}]` : evalId;
+
   const summary = aggregateScores(Array.from(aggregationInputs.values()));
 
   const lines: string[] = [];
@@ -671,30 +645,7 @@ async function evaluateScoresForRun(
     `  Final aggregate score: ${summary.finalScore.toFixed(3)} (base ${summary.baseScore.toFixed(3)} - penalty ${summary.variancePenalty.toFixed(3)})\n`,
   );
 
-  const scoreExports: EvaluationRunExport["scores"] = summary.perScore.map(
-    (entry) => {
-      const raw = aggregationInputs.get(entry.assignment.name);
-      const judges =
-        raw?.judgeResults.map((result) => ({
-          name: result.judge.name,
-          model: getJudgeModelId(result.judge.name),
-          score: result.score,
-          rationale: result.rationale,
-        })) ?? [];
-
-      return {
-        assignment: {
-          name: entry.assignment.name,
-          weight: entry.assignment.weight,
-          args: entry.assignment.args,
-        },
-        averageScore: entry.averageScore,
-        normalizedWeight: entry.normalizedWeight,
-        variance: entry.variance,
-        judges,
-      };
-    },
-  );
+  const scoreExports = buildScoreExportsFromEpisodes(episodes);
 
   const exportData: EvaluationRunExport = {
     agent: agentName,
@@ -704,16 +655,90 @@ async function evaluateScoresForRun(
       to: datasetEval.to,
     },
     model,
-    summary: {
-      finalScore: summary.finalScore,
-      baseScore: summary.baseScore,
-      variancePenalty: summary.variancePenalty,
-    },
     jobUrl: process.env.GITHUB_BENCHMARK_JOB_URL,
+    finalScore: summary.finalScore,
+    baseScore: summary.baseScore,
+    variancePenalty: summary.variancePenalty,
     scores: scoreExports,
+    episodes,
   };
 
   return { lines, exportData };
+}
+
+function mergeAggregationInputs(
+  target: Map<string, ScoreAggregationInput>,
+  source: Map<string, ScoreAggregationInput>,
+): void {
+  for (const input of source.values()) {
+    const entry = ensureAggregationEntry(target, input.assignment);
+    entry.judgeResults.push(...input.judgeResults);
+  }
+}
+
+function buildScoreExportsFromAggregation(
+  aggregationInputs: Map<string, ScoreAggregationInput>,
+  summary: AggregationSummary,
+): EvaluationRunExport["scores"] {
+  return summary.perScore.map((entry) => {
+    const raw = aggregationInputs.get(entry.assignment.name);
+    const judges =
+      raw?.judgeResults.map((result) => ({
+        name: result.judge.name,
+        model: getJudgeModelId(result.judge.name),
+        score: result.score,
+        rationale: result.rationale,
+      })) ?? [];
+
+    return {
+      assignment: {
+        name: entry.assignment.name,
+        weight: entry.assignment.weight,
+        args: entry.assignment.args,
+      },
+      averageScore: entry.averageScore,
+      normalizedWeight: entry.normalizedWeight,
+      variance: entry.variance,
+      judges,
+    };
+  });
+}
+
+function buildScoreExportsFromEpisodes(
+  episodes: Episode[],
+): EvaluationRunExport["scores"] {
+  if (episodes.length === 0) {
+    return [];
+  }
+
+  const aggregationInputs = new Map<string, ScoreAggregationInput>();
+
+  episodes.forEach((episode) => {
+    episode.scores.forEach((score) => {
+      const assignment: ScoreAssignment = {
+        name: score.assignment.name,
+        weight: score.assignment.weight,
+        args: score.assignment.args,
+      };
+      const entry = ensureAggregationEntry(aggregationInputs, assignment);
+
+      score.judges.forEach((judgeResult) => {
+        const judge: Judge = {
+          name: judgeResult.name as Judge["name"],
+          model: judgeResult.model,
+        };
+
+        entry.judgeResults.push({
+          judge,
+          score: judgeResult.score,
+          rationale: judgeResult.rationale,
+        });
+      });
+    });
+  });
+
+  const summary = aggregateScores(Array.from(aggregationInputs.values()));
+  return buildScoreExportsFromAggregation(aggregationInputs, summary);
 }
 
 function ensureAggregationEntry(
@@ -729,17 +754,4 @@ function ensureAggregationEntry(
 
   // Non-null assertion safe because we just set it if missing.
   return map.get(assignment.name)!;
-}
-
-function normalizeEvalFilter(value: string | undefined): string | undefined {
-  if (!value) {
-    return value;
-  }
-
-  const suffix = "/benchmark";
-  if (value.endsWith(suffix)) {
-    return value.slice(0, -suffix.length);
-  }
-
-  return value;
 }

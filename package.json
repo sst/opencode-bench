@@ -10,7 +10,7 @@
     "orvl": "dist/cli.js"
   },
   "scripts": {
-    "build": "bun build cli.ts --outfile dist/cli.js --target node --format esm --external node:* --external @openai/codex-sdk --external @openai/codex-sdk/* --external @anthropic-ai/claude-agent-sdk --external @anthropic-ai/claude-agent-sdk/*",
+    "build": "bun build cli.ts --outfile dist/cli.js --target node --format esm --external node:* --external @openai/codex-sdk --external @openai/codex-sdk/* --external @opencode-ai/sdk --external @opencode-ai/sdk/* --external @anthropic-ai/claude-agent-sdk --external @anthropic-ai/claude-agent-sdk/*",
     "check": "tsc --noEmit",
     "dev": "bun run cli.ts",
     "test": "bun test",
