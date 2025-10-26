@@ -9,6 +9,7 @@
 
 import { readFileSync } from "node:fs";
 import type { Episode, EvaluationRunExport } from "~/types/export.js";
+import { buildRadarChartUrl, buildBarChartUrl } from "~/lib/charts.js";
 
 type ScoreRow = {
   name: string;
@@ -38,7 +39,6 @@ type ModelAverage = {
   score: number;
 };
 
-const QUICKCHART_BASE_URL = "https://quickchart.io/chart";
 const colorHex = "0c0c0e";
 const embedColor = parseInt(colorHex, 16);
 
@@ -284,10 +284,10 @@ function toEvalSummaries(exportData: EvaluationRunExport[]): EvalSummary[] {
 }
 
 /**
- * Builds a shareable QuickChart radar chart URL for a model’s per-metric scores.
+ * Builds a shareable QuickChart radar chart URL for a model's per-metric scores.
  * Currently unused in the Discord webhook, but retained for future scorecard embeds.
  */
-function buildRadarChartUrl(
+function buildModelRadarChartUrl(
   model: ModelSummary,
   evalName: string,
 ): string | undefined {
@@ -295,53 +295,15 @@ function buildRadarChartUrl(
     return undefined;
   }
 
-  const labels = model.rows.map((row) => row.name);
-  const values = model.rows.map((row) => Number(row.average.toFixed(3)));
-
-  if (labels.length > 0) {
-    labels.push(labels[0]);
-    values.push(values[0]);
-  }
-
-  const config = {
-    type: "radar",
-    data: {
-      labels,
-      datasets: [
-        {
-          label: model.id,
-          data: values,
-          backgroundColor: "rgba(188,187,187,0.3)",
-          borderColor: "#1F1E1E",
-          borderWidth: 2,
-        },
-      ],
+  return buildRadarChartUrl(
+    {
+      labels: model.rows.map((row) => row.name),
+      values: model.rows.map((row) => Number(row.average.toFixed(3))),
+      title: `${evalName} • ${model.id}`,
+      datasetLabel: model.id,
     },
-    options: {
-      plugins: {
-        legend: { display: false },
-        title: {
-          display: true,
-          text: `${evalName} • ${model.id}`,
-        },
-      },
-      scale: {
-        ticks: {
-          beginAtZero: true,
-          min: 0,
-          max: 1,
-          stepSize: 0.2,
-        },
-      },
-      elements: {
-        line: { borderJoinStyle: "round" },
-      },
-    },
-  };
-
-  const encodedConfig = encodeURIComponent(JSON.stringify(config));
-
-  return `${QUICKCHART_BASE_URL}?c=${encodedConfig}&w=600&h=500&bkg=white`;
+    { includeBackground: true, backgroundColor: "white" },
+  );
 }
 
 function computeAverageScore(model: ModelSummary): number {
@@ -369,59 +331,14 @@ function buildAverageChartUrl(
     }))
     .sort((a, b) => b.score - a.score);
 
-  const labels = sorted.map((entry) => entry.id);
-  const averages = sorted.map((entry) => entry.score);
-
-  const fillColor = "rgba(31,30,29,0.94)";
-  const strokeColor = "rgba(31,30,29,1)";
-  const backgroundColor = Array(sorted.length).fill(fillColor);
-  const borderColor = Array(sorted.length).fill(strokeColor);
-
-  const config = {
-    type: "bar",
-    data: {
-      labels,
-      datasets: [
-        {
-          label: "Average Score",
-          data: averages,
-          backgroundColor,
-          borderColor,
-          borderWidth: 1,
-          borderRadius: 6,
-        },
-      ],
+  return buildBarChartUrl(
+    {
+      labels: sorted.map((entry) => entry.id),
+      values: sorted.map((entry) => entry.score),
+      title: `Average Performance by Model (${evalName})`,
     },
-    options: {
-      plugins: {
-        legend: { display: false },
-        title: {
-          display: true,
-          text: `Average Performance by Model (${evalName})`,
-        },
-      },
-      scales: {
-        yAxes: [
-          {
-            ticks: {
-              beginAtZero: true,
-              min: 0,
-              max: 1,
-            },
-          },
-        ],
-        xAxes: [
-          {
-            ticks: { autoSkip: false },
-          },
-        ],
-      },
-    },
-  };
-
-  const encodedConfig = encodeURIComponent(JSON.stringify(config));
-
-  return `${QUICKCHART_BASE_URL}?c=${encodedConfig}&w=700&h=400&bkg=white`;
+    { backgroundColor: "white" },
+  );
 }
 
 function buildOverallChartUrl(
@@ -451,58 +368,14 @@ function buildOverallChartUrl(
 
   averages.sort((a, b) => b.score - a.score);
 
-  const labels = averages.map((entry) => entry.id);
-  const data = averages.map((entry) => entry.score);
-  const fillColor = "rgba(31,30,29,0.94)";
-  const strokeColor = "rgba(31,30,29,1)";
-  const backgroundColor = Array(data.length).fill(fillColor);
-  const borderColor = Array(data.length).fill(strokeColor);
-
-  const config = {
-    type: "bar",
-    data: {
-      labels,
-      datasets: [
-        {
-          label: "Average Score",
-          data,
-          backgroundColor,
-          borderColor,
-          borderWidth: 1,
-          borderRadius: 6,
-        },
-      ],
+  return buildBarChartUrl(
+    {
+      labels: averages.map((entry) => entry.id),
+      values: averages.map((entry) => entry.score),
+      title: "Average Performance by Model (All Evaluations)",
     },
-    options: {
-      plugins: {
-        legend: { display: false },
-        title: {
-          display: true,
-          text: "Average Performance by Model (All Evaluations)",
-        },
-      },
-      scales: {
-        yAxes: [
-          {
-            ticks: {
-              beginAtZero: true,
-              min: 0,
-              max: 1,
-            },
-          },
-        ],
-        xAxes: [
-          {
-            ticks: { autoSkip: false },
-          },
-        ],
-      },
-    },
-  };
-
-  const encodedConfig = encodeURIComponent(JSON.stringify(config));
-
-  return `${QUICKCHART_BASE_URL}?c=${encodedConfig}&w=700&h=400&bkg=white`;
+    { backgroundColor: "white" },
+  );
 }
 
 function buildPayloads(evalSummaries: EvalSummary[]): DiscordPayload[] {

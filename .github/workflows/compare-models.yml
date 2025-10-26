@@ -1,0 +1,80 @@
+name: Compare Models
+
+on:
+  workflow_dispatch:
+    inputs:
+      # OpenCode agent models
+      opencode_opencode_gpt_5_codex:
+        description: 'opencode:opencode/gpt-5-codex'
+        type: boolean
+        default: false
+      opencode_opencode_claude_sonnet_4_5:
+        description: 'opencode:opencode/claude-sonnet-4-5'
+        type: boolean
+        default: false
+      # Codex agent models
+      codex_gpt_5_codex:
+        description: 'codex:gpt-5-codex'
+        type: boolean
+        default: false
+      codex_gpt_5:
+        description: 'codex:gpt-5'
+        type: boolean
+        default: false
+      # Claude Code agent models
+      claude_code_claude_sonnet_4_5:
+        description: 'claude-code:claude-sonnet-4-5'
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    outputs:
+      sha: ${{ steps.publish.outputs.sha }}
+      urls: ${{ steps.publish.outputs.urls }}
+      packages: ${{ steps.publish.outputs.packages }}
+      matrix: ${{ steps.build-matrix.outputs.matrix }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v1
+        with:
+          bun-version: 1.2.21
+
+      - name: Install dependencies
+        run: bun install
+
+      - name: Build
+        run: bun run build
+
+      - id: publish
+        name: Publish preview with pkg.pr.new
+        run: bunx pkg-pr-new publish --bun
+
+      - id: build-matrix
+        name: Build matrix from selected models
+        env:
+          WORKFLOW_INPUTS: ${{ toJSON(inputs) }}
+        run: |
+          set -euo pipefail
+
+          # Pass all inputs to the script
+          MATRIX_JSON=$(echo "$WORKFLOW_INPUTS" | bun run scripts/build-workflow-matrix.ts)
+          echo "matrix=${MATRIX_JSON}" >> "$GITHUB_OUTPUT"
+
+  run-benchmarks:
+    needs: publish
+    if: needs.publish.result == 'success' && needs.publish.outputs.urls != ''
+    uses: ./.github/workflows/benchmark-reusable.yml
+    with:
+      matrix: ${{ needs.publish.outputs.matrix }}
+      package_urls: ${{ needs.publish.outputs.urls }}
+    secrets: inherit
