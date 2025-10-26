@@ -113,13 +113,10 @@ async function fetchSessionTokensAndCost(sessionID: string): Promise<{
 function generateLogSummary(allLogs: string[]): string {
   const toolCalls: Record<string, number> = {};
   const modifiedFiles = new Set<string>();
-  const readFiles = new Set<string>();
+  const narrativeTexts: string[] = [];
   let errorCount = 0;
-  let totalMessages = 0;
 
   for (const log of allLogs) {
-    totalMessages++;
-
     // Check for errors
     if (log.includes("ERROR:")) {
       errorCount++;
@@ -128,6 +125,15 @@ function generateLogSummary(allLogs: string[]): string {
     // Try to parse as JSON to extract Part information
     try {
       const parsed = JSON.parse(log.replace("ERROR: ", ""));
+
+      // Extract narrative from TextPart objects
+      if (parsed?.type === "text" && typeof parsed.text === "string") {
+        // Filter out very short or empty text
+        const text = parsed.text.trim();
+        if (text.length > 10) {
+          narrativeTexts.push(text);
+        }
+      }
 
       // Extract tool usage from ToolPart objects
       if (parsed?.type === "tool" && typeof parsed.tool === "string") {
@@ -143,50 +149,73 @@ function generateLogSummary(allLogs: string[]): string {
           }
         });
       }
-
-      // Extract file reads from FilePart objects
-      if (parsed?.type === "file" && typeof parsed.path === "string") {
-        readFiles.add(parsed.path);
-      }
     } catch {
       // Not JSON or doesn't match expected format, skip
     }
   }
 
-  // Build summary parts
-  const parts: string[] = [];
+  // Build narrative summary
+  const summaryParts: string[] = [];
 
-  // Add modified files summary
+  // Add narrative if we have text
+  if (narrativeTexts.length > 0) {
+    // Create a condensed narrative by taking key sentences
+    const opening = narrativeTexts[0]; // First statement (approach)
+    const keySteps: string[] = [];
+
+    // Extract key action statements (sentences with "implement", "add", "create", "edit", etc.)
+    const actionWords = /\b(implement|add|create|edit|modif|updat|fix|test|verif|check|read|writ|run)\w*/i;
+    for (const text of narrativeTexts.slice(1)) {
+      if (actionWords.test(text) && keySteps.length < 3) {
+        keySteps.push(text);
+      }
+    }
+
+    // Combine into narrative
+    let narrative = opening;
+    if (keySteps.length > 0) {
+      narrative += " " + keySteps.join(" ");
+    }
+
+    // Truncate if extremely long (keep generous limit for detailed summaries)
+    if (narrative.length > 10000) {
+      narrative = narrative.substring(0, 9997) + "...";
+    }
+
+    summaryParts.push(narrative);
+  }
+
+  // Add metadata summary
+  const metadata: string[] = [];
+
   if (modifiedFiles.size > 0) {
     const fileList = Array.from(modifiedFiles).sort();
-    if (fileList.length <= 5) {
-      parts.push(`Modified files: ${fileList.join(", ")}`);
+    if (fileList.length <= 3) {
+      metadata.push(`Modified: ${fileList.join(", ")}`);
     } else {
-      parts.push(`Modified ${fileList.length} files (${fileList.slice(0, 3).join(", ")}, ...)`);
+      metadata.push(`Modified ${fileList.length} files`);
     }
   }
 
-  // Add tool usage summary
   if (Object.keys(toolCalls).length > 0) {
     const toolSummary = Object.entries(toolCalls)
       .sort(([a], [b]) => a.localeCompare(b))
       .map(([tool, count]) => `${tool}(${count})`)
       .join(", ");
-    parts.push(`Tools: ${toolSummary}`);
+    metadata.push(`Tools: ${toolSummary}`);
   }
 
-  // Add file reads summary (optional, only if significant)
-  if (readFiles.size > 10) {
-    parts.push(`Read ${readFiles.size} files`);
+  if (metadata.length > 0) {
+    summaryParts.push(`[${metadata.join("; ")}]`);
   }
 
-  // Add basic stats
-  parts.push(`${totalMessages} messages`);
   if (errorCount > 0) {
-    parts.push(`${errorCount} errors`);
+    summaryParts.push(`⚠️ ${errorCount} errors`);
   }
 
-  return parts.length > 0 ? parts.join(", ") : "No activity detected";
+  return summaryParts.length > 0
+    ? summaryParts.join(" ")
+    : "No activity detected";
 }
 
 async function printHelp(): Promise<void> {
