@@ -30,7 +30,8 @@ import type {
   EvaluationRunExport,
   TokenUsage,
 } from "~/types/export.js";
-import { withRetries } from "~/lib/utils/retry.js";
+import { withRetries, withTimeout } from "~/lib/utils/retry.js";
+import { buildRadarChartUrl } from "~/lib/charts.js";
 
 type ModelCombination = string;
 
@@ -41,6 +42,7 @@ interface ParsedCliOptions {
 }
 
 const EPISODES = 3;
+const EPISODE_TIMEOUT_MS = 30 * 60 * 1000; // 30 minutes per episode
 
 // Initialize opencode client for fetching session data
 let opencodeClientInstance: Awaited<ReturnType<typeof createOpencode>> | null =
@@ -452,6 +454,7 @@ async function main(): Promise<void> {
         };
 
         try {
+          console.log(`${prefix} Starting episode (timeout: ${EPISODE_TIMEOUT_MS / 1000 / 60} min)...`);
           console.log(`${prefix} Cloning repository...`);
           cwd = cloneRepositoryAtCommit(evalDefinition, baselineCommit);
 
@@ -622,9 +625,38 @@ async function main(): Promise<void> {
         }
       };
 
-      const episodeResults = await Promise.all(
-        Array.from({ length: EPISODES }, (_, offset) => runEpisode(offset + 1)),
+      const episodeSettledResults = await Promise.allSettled(
+        Array.from({ length: EPISODES }, (_, offset) =>
+          withTimeout(() => runEpisode(offset + 1), {
+            timeoutMs: EPISODE_TIMEOUT_MS,
+            timeoutMessage: `Episode ${offset + 1} timed out after ${EPISODE_TIMEOUT_MS / 1000 / 60} minutes`,
+          }),
+        ),
       );
+
+      const episodeResults: EpisodeResult[] = [];
+      const episodeFailures: string[] = [];
+
+      for (const [idx, settled] of episodeSettledResults.entries()) {
+        if (settled.status === "fulfilled") {
+          episodeResults.push(settled.value);
+        } else {
+          const errorMessage =
+            settled.reason instanceof Error
+              ? settled.reason.message
+              : String(settled.reason);
+          episodeFailures.push(
+            `Episode ${idx + 1} failed: ${errorMessage}`,
+          );
+          console.error(`[episode ${idx + 1}/${EPISODES}] ${errorMessage}`);
+        }
+      }
+
+      if (episodeResults.length < EPISODES) {
+        throw new Error(
+          `Expected ${EPISODES} episodes to complete, but only ${episodeResults.length} succeeded:\n${episodeFailures.join("\n")}`,
+        );
+      }
 
       episodeResults.sort((a, b) => a.index - b.index);
 
@@ -726,6 +758,17 @@ async function main(): Promise<void> {
       console.log(
         `[debug] Aggregate final: ${finalScore.toFixed(3)} (base ${baseScore.toFixed(3)} - penalty ${variancePenalty.toFixed(3)})`,
       );
+
+      // Generate and log radar chart URL
+      const chartUrl = buildRadarChartUrl({
+        labels: evaluationResult.exportData.scores.map((s) => s.assignment.name),
+        values: evaluationResult.exportData.scores.map((s) =>
+          Number(s.averageScore.toFixed(3)),
+        ),
+        title: `${evalDefinition.repo} • ${evaluationResult.exportData.model}`,
+        datasetLabel: evaluationResult.exportData.model,
+      });
+      console.log(`\nRadar Chart: ${chartUrl}\n`);
     }
 
     if (outputPath) {

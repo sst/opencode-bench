@@ -11,6 +11,7 @@
   },
   "scripts": {
     "build": "bun build cli.ts --outfile dist/cli.js --target node --format esm --external node:* --external @openai/codex-sdk --external @openai/codex-sdk/* --external @opencode-ai/sdk --external @opencode-ai/sdk/* --external @anthropic-ai/claude-agent-sdk --external @anthropic-ai/claude-agent-sdk/*",
+    "postbuild": "test \"$CI\" != \"true\" && bun run scripts/sync-workflow-inputs.ts || true",
     "check": "tsc --noEmit",
     "dev": "bun run cli.ts",
     "test": "bun test",

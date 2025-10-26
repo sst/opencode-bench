@@ -1,19 +1,26 @@
-name: Publish and Benchmark Preview Packages
-
+name: Compare Models
 on:
-  push:
-    branches:
-      - main
-    tags:
-      - "!**"
-  pull_request:
-    branches:
-      - main
-
+  workflow_dispatch:
+    inputs:
+      codex_gpt_5_codex:
+        description: codex:gpt-5-codex
+        type: boolean
+        default: false
+      opencode_opencode_gpt_5_codex:
+        description: opencode:opencode/gpt-5-codex
+        type: boolean
+        default: false
+      opencode_opencode_claude_sonnet_4_5:
+        description: opencode:opencode/claude-sonnet-4-5
+        type: boolean
+        default: false
+      claude_code_claude_sonnet_4_5:
+        description: claude-code:claude-sonnet-4-5
+        type: boolean
+        default: false
 permissions:
   contents: read
   actions: read
-
 jobs:
   publish:
     runs-on: ubuntu-latest
@@ -21,35 +28,31 @@ jobs:
       sha: ${{ steps.publish.outputs.sha }}
       urls: ${{ steps.publish.outputs.urls }}
       packages: ${{ steps.publish.outputs.packages }}
-      matrix: ${{ steps.matrix.outputs.matrix }}
-
+      matrix: ${{ steps.build-matrix.outputs.matrix }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
-
       - name: Setup Bun
         uses: oven-sh/setup-bun@v1
         with:
           bun-version: 1.2.21
-
       - name: Install dependencies
         run: bun install
-
       - name: Build
         run: bun run build
-
       - id: publish
         name: Publish preview with pkg.pr.new
         run: bunx pkg-pr-new publish --bun
-
-      - id: matrix
-        name: Build benchmark matrix
+      - id: build-matrix
+        name: Build matrix from selected models
+        env:
+          WORKFLOW_INPUTS: ${{ toJSON(inputs) }}
         run: |
-          bun add -g opencode-ai@dev @openai/codex-sdk
           set -euo pipefail
-          MATRIX_JSON="$(bun run scripts/generate-benchmark-matrix.ts)"
-          printf 'matrix=%s\n' "${MATRIX_JSON}" >> "$GITHUB_OUTPUT"
 
+          # Pass all inputs to the script
+          MATRIX_JSON=$(echo "$WORKFLOW_INPUTS" | bun run scripts/build-workflow-matrix.ts)
+          echo "matrix=${MATRIX_JSON}" >> "$GITHUB_OUTPUT"
   run-benchmarks:
     needs: publish
     if: needs.publish.result == 'success' && needs.publish.outputs.urls != ''

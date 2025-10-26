@@ -25,3 +25,22 @@ export async function withRetries<T>(fn: Retryable<T>, options: RetryOptions): P
 
   throw lastError instanceof Error ? lastError : new Error(String(lastError));
 }
+
+export interface TimeoutOptions {
+  timeoutMs: number;
+  timeoutMessage?: string;
+}
+
+export async function withTimeout<T>(
+  fn: () => Promise<T>,
+  options: TimeoutOptions,
+): Promise<T> {
+  const { timeoutMs, timeoutMessage = `Operation timed out after ${timeoutMs}ms` } = options;
+
+  return Promise.race([
+    fn(),
+    new Promise<T>((_, reject) => {
+      setTimeout(() => reject(new Error(timeoutMessage)), timeoutMs);
+    }),
+  ]);
+}
