@@ -17,6 +17,7 @@
 
 import { readFileSync } from "node:fs";
 import YAML from "yaml";
+import { listAgents } from "~/agents/index.js";
 
 interface WorkflowInputs {
   [key: string]: string | boolean;
@@ -32,17 +33,27 @@ interface DatasetEntry {
   repo: string;
 }
 
-// Mapping from input ID pattern to agent:model
-const INPUT_MAPPINGS = [
-  // OpenCode agent
-  { pattern: /^opencode_opencode_gpt_5_codex$/, agent: "opencode", model: "opencode/gpt-5-codex" },
-  { pattern: /^opencode_opencode_claude_sonnet_4_5$/, agent: "opencode", model: "opencode/claude-sonnet-4-5" },
-  // Codex agent
-  { pattern: /^codex_gpt_5_codex$/, agent: "codex", model: "gpt-5-codex" },
-  { pattern: /^codex_gpt_5$/, agent: "codex", model: "gpt-5" },
-  // Claude Code agent
-  { pattern: /^claude_code_claude_sonnet_4_5$/, agent: "claude-code", model: "claude-sonnet-4-5" },
-];
+// Convert agent:model to workflow input ID
+function toInputId(agent: string, model: string): string {
+  return `${agent}_${model}`
+    .replace(/\//g, "_")
+    .replace(/-/g, "_");
+}
+
+// Build mapping from input IDs to agent:model combinations
+async function buildInputMapping(): Promise<Map<string, { agent: string; model: string }>> {
+  const agents = await listAgents();
+  const mapping = new Map<string, { agent: string; model: string }>();
+
+  for (const agent of agents) {
+    for (const model of agent.models) {
+      const inputId = toInputId(agent.name, model);
+      mapping.set(inputId, { agent: agent.name, model });
+    }
+  }
+
+  return mapping;
+}
 
 function loadDataset(): DatasetEntry[] {
   const raw = readFileSync(new URL("../dataset.yaml", import.meta.url), "utf8");
@@ -67,6 +78,9 @@ async function main(): Promise<void> {
   // Load all evals from dataset
   const dataset = loadDataset();
 
+  // Build input ID to agent:model mapping dynamically
+  const inputMapping = await buildInputMapping();
+
   // Collect selected agent:model combinations
   const selectedCombinations: Array<{ agent: string; model: string }> = [];
 
@@ -76,13 +90,10 @@ async function main(): Promise<void> {
       continue;
     }
 
-    // Find matching agent:model combination
-    const mapping = INPUT_MAPPINGS.find((m) => m.pattern.test(key));
-    if (mapping) {
-      selectedCombinations.push({
-        agent: mapping.agent,
-        model: mapping.model,
-      });
+    // Look up agent:model combination from mapping
+    const combination = inputMapping.get(key);
+    if (combination) {
+      selectedCombinations.push(combination);
     }
   }
 
