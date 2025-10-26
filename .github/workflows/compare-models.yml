@@ -14,6 +14,10 @@ on:
         description: opencode:opencode/claude-sonnet-4-5
         type: boolean
         default: false
+      opencode_opencode_big_pickle:
+        description: opencode:opencode/big-pickle
+        type: boolean
+        default: false
       claude_code_claude_sonnet_4_5:
         description: claude-code:claude-sonnet-4-5
         type: boolean
