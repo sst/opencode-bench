@@ -17,7 +17,6 @@
 
 import { readFileSync } from "node:fs";
 import YAML from "yaml";
-import { listAgents } from "~/agents/index.js";
 
 interface WorkflowInputs {
   [key: string]: string | boolean;
@@ -33,22 +32,38 @@ interface DatasetEntry {
   repo: string;
 }
 
-// Convert agent:model to workflow input ID
-function toInputId(agent: string, model: string): string {
-  return `${agent}_${model}`
-    .replace(/\//g, "_")
-    .replace(/-/g, "_");
+interface WorkflowInputDefinition {
+  description: string;
+  type: string;
+  default: boolean;
 }
 
-// Build mapping from input IDs to agent:model combinations
-async function buildInputMapping(): Promise<Map<string, { agent: string; model: string }>> {
-  const agents = await listAgents();
+// Build mapping from input IDs to agent:model combinations by reading workflow file
+function buildInputMapping(): Map<string, { agent: string; model: string }> {
+  const workflowPath = new URL(
+    "../.github/workflows/compare-models.yml",
+    import.meta.url,
+  );
+  const workflowContent = readFileSync(workflowPath, "utf8");
+  const workflow = YAML.parse(workflowContent);
+
+  const inputs = workflow?.on?.workflow_dispatch?.inputs as Record<
+    string,
+    WorkflowInputDefinition
+  >;
+  if (!inputs) {
+    throw new Error("No workflow_dispatch inputs found in workflow file");
+  }
+
   const mapping = new Map<string, { agent: string; model: string }>();
 
-  for (const agent of agents) {
-    for (const model of agent.models) {
-      const inputId = toInputId(agent.name, model);
-      mapping.set(inputId, { agent: agent.name, model });
+  for (const [inputId, inputDef] of Object.entries(inputs)) {
+    // Parse description which is in format "agent:model"
+    const description = inputDef.description;
+    const parts = description.split(":");
+    if (parts.length === 2) {
+      const [agent, model] = parts;
+      mapping.set(inputId, { agent, model });
     }
   }
 
@@ -79,7 +94,7 @@ async function main(): Promise<void> {
   const dataset = loadDataset();
 
   // Build input ID to agent:model mapping dynamically
-  const inputMapping = await buildInputMapping();
+  const inputMapping = buildInputMapping();
 
   // Collect selected agent:model combinations
   const selectedCombinations: Array<{ agent: string; model: string }> = [];
