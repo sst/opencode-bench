@@ -2,12 +2,10 @@ name: Compare Models
 on:
   workflow_dispatch:
     inputs:
-      # Codex agent models
       codex_gpt_5_codex:
         description: codex:gpt-5-codex
         type: boolean
         default: false
-      # Opencode agent models
       opencode_opencode_gpt_5_codex:
         description: opencode:opencode/gpt-5-codex
         type: boolean
@@ -16,7 +14,6 @@ on:
         description: opencode:opencode/claude-sonnet-4-5
         type: boolean
         default: false
-      __comment_claude-code: Claude-code agent models
       claude_code_claude_sonnet_4_5:
         description: claude-code:claude-sonnet-4-5
         type: boolean

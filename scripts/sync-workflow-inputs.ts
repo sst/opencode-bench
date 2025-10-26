@@ -56,49 +56,25 @@ async function main(): Promise<void> {
   }
 
   // Build new inputs
-  const newInputs: WorkflowInputs = {};
+  const inputs: WorkflowInputs = {};
 
-  // Group by agent for organization
-  const byAgent = new Map<string, string[]>();
   for (const { agent, model } of combinations) {
-    if (!byAgent.has(agent)) {
-      byAgent.set(agent, []);
-    }
-    byAgent.get(agent)!.push(model);
-  }
-
-  // Build inputs with comments
-  const inputsWithComments: any = {};
-
-  for (const [agent, models] of byAgent.entries()) {
-    // Add comment for agent group
-    const agentKey = `__comment_${agent}`;
-    inputsWithComments[agentKey] = `${agent.charAt(0).toUpperCase() + agent.slice(1)} agent models`;
-
-    for (const model of models) {
-      const inputId = toInputId(agent, model);
-      inputsWithComments[inputId] = {
-        description: toDescription(agent, model),
-        type: "boolean",
-        default: false,
-      };
-    }
+    const inputId = toInputId(agent, model);
+    inputs[inputId] = {
+      description: toDescription(agent, model),
+      type: "boolean",
+      default: false,
+    };
   }
 
   // Update the workflow
-  workflow.on.workflow_dispatch.inputs = inputsWithComments;
+  workflow.on.workflow_dispatch.inputs = inputs;
 
   // Convert back to YAML with proper formatting
-  let yamlOutput = YAML.stringify(workflow, {
+  const yamlOutput = YAML.stringify(workflow, {
     indent: 2,
     lineWidth: 0,
   });
-
-  // Replace comment placeholders with actual YAML comments
-  yamlOutput = yamlOutput.replace(
-    /__comment_(\w+):\s*["']?([^"'\n]+)["']?\n/g,
-    "# $2\n",
-  );
 
   // Write back to file
   writeFileSync(workflowPath, yamlOutput, "utf8");
