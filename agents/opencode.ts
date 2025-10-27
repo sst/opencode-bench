@@ -38,6 +38,7 @@ export const models: string[] = [
   // "opencode/gpt-5",
   "opencode/gpt-5-codex",
   "opencode/claude-sonnet-4-5",
+  "opencode/big-pickle",
   // "opencode/claude-sonnet-4",
   // "opencode/claude-3-5-haiku",
   // "opencode/claude-opus-4-1",
@@ -123,8 +124,19 @@ function logPromptResult(
   options: AgentRunOptions | undefined,
   logs?: string[],
 ): void {
-  logJson({ info: result.info }, options, logs);
-  result.parts.forEach((part) => logJson(part, options, logs));
+  logJson({ info: result.info }, options);
+  if (Array.isArray(result.parts)) {
+    result.parts.forEach((part) => logJson(part, options));
+  } else {
+    logError(
+      {
+        error: "invalid_parts_array",
+        message: `Expected 'parts' to be an array, but got ${typeof result.parts}`,
+        receivedResponse: result,
+      },
+      options,
+    );
+  }
 }
 
 function serializeError(error: unknown): Record<string, unknown> {
