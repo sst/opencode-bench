@@ -102,7 +102,18 @@ function logPromptResult(
   options: AgentRunOptions | undefined,
 ): void {
   logJson({ info: result.info }, options);
-  result.parts.forEach((part) => logJson(part, options));
+  if (Array.isArray(result.parts)) {
+    result.parts.forEach((part) => logJson(part, options));
+  } else {
+    logError(
+      {
+        error: "invalid_parts_array",
+        message: `Expected 'parts' to be an array, but got ${typeof result.parts}`,
+        receivedResponse: result,
+      },
+      options,
+    );
+  }
 }
 
 function serializeError(error: unknown): Record<string, unknown> {
