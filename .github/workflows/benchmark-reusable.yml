@@ -181,6 +181,27 @@ jobs:
         with:
           path: benchmarks
 
+      - name: Generate Judges Summaries per Evaluation
+        env:
+          OPENCODE_API_KEY: ${{ secrets.OPENCODE_API_KEY }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: |
+          set -euo pipefail
+          echo "═══════════════════════════════════════════════════════"
+          echo "JUDGE CONSISTENCY ANALYSIS PER EVALUATION"
+          echo "═══════════════════════════════════════════════════════"
+
+          # Find all benchmark JSON files
+          for benchmark_file in benchmarks/*/*.json; do
+            if [ -f "$benchmark_file" ]; then
+              echo ""
+              echo "Analyzing: $benchmark_file"
+              echo "───────────────────────────────────────────────────────"
+              bun run scripts/judges-summary.ts "$benchmark_file" --ai-summary || true
+              echo ""
+            fi
+          done
+
       - name: Merge benchmark exports
         run: bun run scripts/merge-benchmark-exports.ts benchmarks merged-benchmark.json
 
