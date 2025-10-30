@@ -1,6 +1,6 @@
-- repo: prismicio-community/course-fizzi-next
-  from: 15037446358508e153e765da49f8f5defa7fbbf6
-  to: 2760114f2647ebec8f63e0ecc2dc87a8cd4096ac
+- repo: "prismicio-community/course-fizzi-next"
+  from: "15037446358508e153e765da49f8f5defa7fbbf6"
+  to: "2760114f2647ebec8f63e0ecc2dc87a8cd4096ac"
   issues: []
   scores:
     api-signature:
@@ -15,13 +15,14 @@
       weight: 0.1
       args:
         setup:
-          - npm ci
+          - "npm ci"
         commands:
-          - npm run lint
-          - npm exec prettier -- --check .
-- repo: DataDog/datadog-lambda-python
-  from: 93d4a07fa61a4d4d2feec08e722505a9e0cc8657
-  to: d7763789f262b2da228f8210509e302e6e510d0a
+          - "npm run lint"
+          - "npm exec prettier -- --check ."
+  prompt: "Update the project to provide a streamlined content setup experience for users who want to skip the tutorial. Replace the old migration script with a new automated content setup script that handles authentication, fetches documents from a source repository, and copies them to the user's repository. Update the README to include clear instructions for launching the site without going through the tutorial, including steps to clone the code, select the locale, run the setup script, publish the migration release, and configure the slice simulator URL. Change the package name from \"nextjs-starter-prismic-minimal\" to \"fizzi\" in package.json and package-lock.json. Add a new npm script called \"set-up-content\" that runs the setup script via npx tsx. The new setup script should automatically handle login if needed (by opening a browser session), fetch all documents from a source repository matching the package name, create a migration that copies those documents with human-readable release names derived from document UIDs or types, and print a URL to the migration release for publishing. Remove the old migrate.ts file and the documents directory entirely since content will now be pulled from the source repository dynamically. Ensure the script provides clear console output at each step to guide the user through the process."
+- repo: "DataDog/datadog-lambda-python"
+  from: "93d4a07fa61a4d4d2feec08e722505a9e0cc8657"
+  to: "d7763789f262b2da228f8210509e302e6e510d0a"
   issues: []
   scores:
     api-signature:
@@ -36,15 +37,15 @@
       weight: 0.1
       args:
         setup:
-          - python3 -m venv .venv
-          - ./.venv/bin/python -m pip install ".[dev]"
+          - "python3 -m venv .venv"
+          - "./.venv/bin/python -m pip install \".[dev]\""
         commands:
-          - ./.venv/bin/pytest -vv
-          - ./.venv/bin/flake8 datadog_lambda/
-
-- repo: AlaminPu1007/algorithm-visualizer
-  from: ca409519ec96a83ec8d6c2ba30f2487f8d601719
-  to: 21845e972dd8e2378cbcd16accc5ae8cdd37acb2
+          - "./.venv/bin/pytest -vv"
+          - "./.venv/bin/flake8 datadog_lambda/"
+  prompt: "Add a metric to track Lambda batch item failures. When Lambda functions return a response containing batch item failures (the batchItemFailures field), emit a count of how many items failed as an enhanced metric. This should only happen when enhanced metrics are enabled and the response structure is valid. The metric should be submitted automatically after each Lambda invocation by integrating it into the wrapper's post-execution hook. Follow existing codebase patterns for function signatures, metric submission, and integration points. Include comprehensive test coverage for various scenarios including responses with failures, empty failures, missing fields, non-dict responses, invalid field types, disabled enhanced metrics, and integration with the wrapper."
+- repo: "AlaminPu1007/algorithm-visualizer"
+  from: "ca409519ec96a83ec8d6c2ba30f2487f8d601719"
+  to: "21845e972dd8e2378cbcd16accc5ae8cdd37acb2"
   issues: []
   scores:
     api-signature:
@@ -59,7 +60,8 @@
       weight: 0.1
       args:
         setup:
-          - npm ci
+          - "npm ci"
         commands:
-          - npm run lint
-          - npm run build
+          - "npm run lint"
+          - "npm run build"
+  prompt: "Ship version 1.6.0 with Floyd Warshall algorithm support and UI refinements. Update the version number in package.json to 1.6.0 and add a corresponding changelog entry documenting the Floyd Warshall algorithm implementation, loading state management during algorithm execution, and error handling for development mode. In the README, update the shortest path finding section to list Bellman-Ford, Floyd Warshall, and Dijkstra's algorithms (with backticks for formatting), and clean up extra blank lines between feature sections. Add Floyd Warshall to the projects data schema as a new entry in the appropriate algorithm list. Refactor the PathFind component layout: change the default button type from 'shortest-path' to 'unique-path', reorganize the control panel to right-align and adjust responsive breakpoints from 410px to 600px where appropriate, reorder the algorithm type dropdown options so Unique Path and No of island appear before Shortest Path, and make the container positioning relative with the ShortestPath status plate absolutely positioned. Update the ShortestPath, UniquePath, and NoOfIslands components to remove their individual container divs and replace them with fragments or empty tags, allowing the parent PathFind component to manage layout. Ensure all changes maintain existing functionality and follow the codebase's component structure patterns."
