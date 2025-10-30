@@ -208,33 +208,54 @@ async function main(): Promise<void> {
 
     const evalId = evalDefinition.repo;
 
-    let plannerTasks: PlannerTask[] = [];
+    let evaluationPrompt: string;
 
-    try {
-      console.log(`[${evalId} planner] Fetching commit diffs from GitHub...`);
-      const commitDiffs = await fetchPlannerCommitDiffs(evalDefinition);
-
-      assert(
-        commitDiffs.length > 0,
-        `No commits found between ${evalDefinition.from} and ${evalDefinition.to} for ${evalDefinition.repo}.`,
+    // Check if a pre-generated prompt exists
+    if (evalDefinition.prompt) {
+      console.log(`[${evalId}] Using pre-generated prompt from dataset.yaml`);
+      evaluationPrompt = evalDefinition.prompt;
+    } else {
+      console.warn(
+        `[${evalId}] WARNING: No pre-generated prompt found. Falling back to dynamic generation.`,
+      );
+      console.warn(
+        `[${evalId}] Run 'bun run scripts/generate-prompts.ts --repo ${evalDefinition.repo}' to generate stable prompts.`,
       );
 
-      plannerTasks = await generatePlannerTasks(evalDefinition, commitDiffs);
+      try {
+        console.log(`[${evalId} planner] Fetching commit diffs from GitHub...`);
+        const commitDiffs = await fetchPlannerCommitDiffs(evalDefinition);
 
-      assert(
-        plannerTasks.length > 0,
-        `Planner produced no tasks for ${evalDefinition.repo} (${evalDefinition.from}..${evalDefinition.to}).`,
-      );
-    } catch (error) {
-      if (error instanceof Error) {
-        console.error(
-          `Failed to prepare evaluation ${evalId}: ${error.message}`,
+        assert(
+          commitDiffs.length > 0,
+          `No commits found between ${evalDefinition.from} and ${evalDefinition.to} for ${evalDefinition.repo}.`,
         );
-      } else {
-        console.error("Failed to prepare evaluation", evalId);
+
+        const plannerTasks = await generatePlannerTasks(
+          evalDefinition,
+          commitDiffs,
+        );
+
+        assert(
+          plannerTasks.length > 0,
+          `Planner produced no tasks for ${evalDefinition.repo} (${evalDefinition.from}..${evalDefinition.to}).`,
+        );
+
+        // Combine all task prompts into a single prompt (fallback behavior)
+        evaluationPrompt = plannerTasks
+          .map((task, idx) => `${idx + 1}. ${task.prompt}`)
+          .join("\n\n");
+      } catch (error) {
+        if (error instanceof Error) {
+          console.error(
+            `Failed to prepare evaluation ${evalId}: ${error.message}`,
+          );
+        } else {
+          console.error("Failed to prepare evaluation", evalId);
+        }
+        process.exitCode = 1;
+        assert(false, "evaluation preparation failed");
       }
-      process.exitCode = 1;
-      assert(false, "evaluation preparation failed");
     }
 
     const executeCombination = async (): Promise<{
@@ -293,56 +314,43 @@ async function main(): Promise<void> {
             }
           }
 
-          let tasksExecuted = 0;
-
-          for (const task of plannerTasks) {
-            const logPrefix = `${prefix} ${task.commit}`;
-
-            try {
-              await withRetries(
-                async () => {
-                  await agentRegistration.definition.run(
-                    model,
-                    task.prompt,
-                    cwd!,
-                    {
-                      onStart: (commandString: string) => {
-                        console.log(`${logPrefix} ${commandString.trim()}`);
-                      },
-                      logPrefix,
+          // Run the agent once with the evaluation prompt
+          try {
+            await withRetries(
+              async () => {
+                await agentRegistration.definition.run(
+                  model,
+                  evaluationPrompt,
+                  cwd!,
+                  {
+                    onStart: (commandString: string) => {
+                      console.log(`${prefix} ${commandString.trim()}`);
                     },
-                  );
-                },
-                {
-                  retries: 3,
-                  onRetry(error, attempt, retries) {
-                    const baseMessage =
-                      error instanceof Error ? error.message : String(error);
-                    console.error(
-                      `${logPrefix} Failed to render command for ${model} (attempt ${attempt}/${retries}): ${baseMessage}`,
-                    );
-
-                    if (attempt < retries) {
-                      console.log(
-                        `${logPrefix} Retrying agent run (attempt ${attempt + 1}/${retries})...`,
-                      );
-                    }
+                    logPrefix: prefix,
                   },
+                );
+              },
+              {
+                retries: 3,
+                onRetry(error, attempt, retries) {
+                  const baseMessage =
+                    error instanceof Error ? error.message : String(error);
+                  console.error(
+                    `${prefix} Failed to render command for ${model} (attempt ${attempt}/${retries}): ${baseMessage}`,
+                  );
+
+                  if (attempt < retries) {
+                    console.log(
+                      `${prefix} Retrying agent run (attempt ${attempt + 1}/${retries})...`,
+                    );
+                  }
                 },
-              );
-            } catch (error) {
-              const message =
-                error instanceof Error ? error.message : String(error);
-              fail(
-                `Agent run failed for planner task ${task.commit}: ${message}`,
-              );
-            }
-
-            tasksExecuted += 1;
-          }
-
-          if (tasksExecuted === 0) {
-            fail("No planner tasks have been executed.");
+              },
+            );
+          } catch (error) {
+            const message =
+              error instanceof Error ? error.message : String(error);
+            fail(`Agent run failed: ${message}`);
           }
 
           const hasChanges = finalizeAgentChanges(

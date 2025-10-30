@@ -128,3 +128,41 @@ export async function generatePlannerTasks(
 
   return tasks;
 }
+
+const singlePromptSchema = z.object({
+  prompt: z.string().min(1),
+});
+
+export async function generateSinglePrompt(
+  entry: DatasetEval,
+  fullDiff: string,
+): Promise<string> {
+  const truncatedDiff =
+    fullDiff.length > 50_000
+      ? `${fullDiff.slice(0, 50_000)}\n... [truncated]`
+      : fullDiff;
+
+  try {
+    const result = await generateObject({
+      model: getZenLanguageModel(plannerModelId),
+      schema: singlePromptSchema,
+      system: buildSystemPrompt(),
+      temperature: 0,
+      prompt: `Repository: ${entry.repo}
+Base commit: ${entry.from}
+Target commit: ${entry.to}
+
+Complete diff showing all changes:
+${truncatedDiff}
+
+Generate a single comprehensive prompt that describes all changes needed to transform the codebase from the base commit to the target commit. Return the JSON object with the prompt.`,
+    });
+
+    return sanitizePlannerPrompt(result.object.prompt);
+  } catch (error) {
+    const formatted =
+      error instanceof Error ? error : new Error(String(error));
+    formatted.message = `Planner failed to generate prompt for ${entry.repo}: ${formatted.message}`;
+    throw formatted;
+  }
+}
