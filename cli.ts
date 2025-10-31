@@ -345,13 +345,12 @@ async function main(): Promise<void> {
                       console.log(
                         `${logPrefix} Retrying agent run (attempt ${attempt + 1}/${retries})...`,
                       );
-                      usage.input = 0;
-                      usage.output = 0;
                     }
                   },
                 },
               );
 
+              // Only accumulate usage from the successful result
               usage.input += result.usage.input;
               usage.output += result.usage.output;
 
