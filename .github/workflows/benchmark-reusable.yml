@@ -140,6 +140,18 @@ jobs:
               exit 1
             fi
 
+      - name: Log benchmark summary
+        if: always()
+        run: |
+          set -euo pipefail
+          if [ -f benchmark.json ]; then
+            echo "=== Benchmark Summary ==="
+            jq -r '.summary // "No summary available"' benchmark.json
+            echo "========================"
+          else
+            echo "benchmark.json not found, skipping summary log"
+          fi
+
       - name: Prepare artifact name
         id: artifact
         env:

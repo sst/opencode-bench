@@ -73,33 +73,36 @@ function writeLog(
 
 function logJson(value: unknown, options: AgentRunOptions | undefined): void {
   try {
-    writeLog(process.stdout, JSON.stringify(value), options?.logPrefix);
+    const message = JSON.stringify(value);
+    writeLog(process.stdout, message, options?.logPrefix);
   } catch (error) {
     const reason = error instanceof Error ? error.message : String(error);
-    writeLog(
-      process.stdout,
-      JSON.stringify({ error: "serialization_failed", reason }),
-      options?.logPrefix,
-    );
+    const errorMessage = JSON.stringify({
+      error: "serialization_failed",
+      reason,
+    });
+    writeLog(process.stdout, errorMessage, options?.logPrefix);
   }
 }
 
 function logError(value: unknown, options: AgentRunOptions | undefined): void {
   try {
-    writeLog(process.stderr, JSON.stringify(value), options?.logPrefix);
+    const message = JSON.stringify(value);
+    writeLog(process.stderr, message, options?.logPrefix);
   } catch (error) {
     const reason = error instanceof Error ? error.message : String(error);
-    writeLog(
-      process.stderr,
-      JSON.stringify({ error: "serialization_failed", reason }),
-      options?.logPrefix,
-    );
+    const errorMessage = JSON.stringify({
+      error: "serialization_failed",
+      reason,
+    });
+    writeLog(process.stderr, errorMessage, options?.logPrefix);
   }
 }
 
 function logPromptResult(
   result: { info: AssistantMessage; parts: Part[] },
   options: AgentRunOptions | undefined,
+  logs?: string[],
 ): void {
   logJson({ info: result.info }, options);
   if (Array.isArray(result.parts)) {
@@ -167,6 +170,11 @@ const opencodeAgent: AgentDefinition = {
       sessionCache.set(cacheKey, sessionID);
     }
 
+    const actions: string[] = [];
+    const usage = {
+      input: 0,
+      output: 0,
+    };
     try {
       const [providerID, modelID] = model.split("/");
       const { data } = await opencode.client.session.prompt({
@@ -182,6 +190,14 @@ const opencodeAgent: AgentDefinition = {
         throwOnError: true,
       });
 
+      usage.input = data.info.tokens.input;
+      usage.output = data.info.tokens.output;
+
+      actions.push(JSON.stringify(data.info));
+      if (Array.isArray(data.parts)) {
+        data.parts.forEach((part) => actions.push(JSON.stringify(part)));
+      }
+
       logPromptResult(data, options);
     } catch (error) {
       sessionCache.delete(cacheKey);
@@ -195,7 +211,7 @@ const opencodeAgent: AgentDefinition = {
       throw error;
     }
 
-    return { command: displayCommand };
+    return { command: displayCommand, actions, usage };
   },
 };
 
