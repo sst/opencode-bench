@@ -71,17 +71,10 @@ function writeLog(
   }
 }
 
-function logJson(
-  value: unknown,
-  options: AgentRunOptions | undefined,
-  logs?: string[],
-): void {
+function logJson(value: unknown, options: AgentRunOptions | undefined): void {
   try {
     const message = JSON.stringify(value);
     writeLog(process.stdout, message, options?.logPrefix);
-    if (options?.captureLogs && logs) {
-      logs.push(message);
-    }
   } catch (error) {
     const reason = error instanceof Error ? error.message : String(error);
     const errorMessage = JSON.stringify({
@@ -89,23 +82,13 @@ function logJson(
       reason,
     });
     writeLog(process.stdout, errorMessage, options?.logPrefix);
-    if (options?.captureLogs && logs) {
-      logs.push(errorMessage);
-    }
   }
 }
 
-function logError(
-  value: unknown,
-  options: AgentRunOptions | undefined,
-  logs?: string[],
-): void {
+function logError(value: unknown, options: AgentRunOptions | undefined): void {
   try {
     const message = JSON.stringify(value);
     writeLog(process.stderr, message, options?.logPrefix);
-    if (options?.captureLogs && logs) {
-      logs.push(`ERROR: ${message}`);
-    }
   } catch (error) {
     const reason = error instanceof Error ? error.message : String(error);
     const errorMessage = JSON.stringify({
@@ -113,9 +96,6 @@ function logError(
       reason,
     });
     writeLog(process.stderr, errorMessage, options?.logPrefix);
-    if (options?.captureLogs && logs) {
-      logs.push(`ERROR: ${errorMessage}`);
-    }
   }
 }
 
@@ -179,7 +159,6 @@ const opencodeAgent: AgentDefinition = {
     options?.onStart?.(displayCommand);
 
     const cacheKey = sessionKey(cwd, model);
-    const logs: string[] = options?.captureLogs ? [] : undefined as any;
 
     let sessionID = sessionCache.get(cacheKey);
     if (!sessionID) {
@@ -191,6 +170,10 @@ const opencodeAgent: AgentDefinition = {
       sessionCache.set(cacheKey, sessionID);
     }
 
+    const usage = {
+      input: 0,
+      output: 0,
+    };
     try {
       const [providerID, modelID] = model.split("/");
       const { data } = await opencode.client.session.prompt({
@@ -206,7 +189,10 @@ const opencodeAgent: AgentDefinition = {
         throwOnError: true,
       });
 
-      logPromptResult(data, options, logs);
+      usage.input = data.info.tokens.input;
+      usage.output = data.info.tokens.output;
+
+      logPromptResult(data, options);
     } catch (error) {
       sessionCache.delete(cacheKey);
       logError(
@@ -215,12 +201,11 @@ const opencodeAgent: AgentDefinition = {
           details: serializeError(error),
         },
         options,
-        logs,
       );
       throw error;
     }
 
-    return { command: displayCommand, sessionID, logs };
+    return { command: displayCommand, usage };
   },
 };
 

@@ -106,6 +106,11 @@ const claudeCodeAgent: AgentDefinition = {
     const cacheKey = sessionKey(cwd, model);
     const existingSessionID = sessionCache.get(cacheKey);
 
+    const usage = {
+      input: 0,
+      output: 0,
+    };
+
     try {
       const result = query({
         prompt,
@@ -122,6 +127,13 @@ const claudeCodeAgent: AgentDefinition = {
       for await (const message of result) {
         // Extract and cache session ID from messages
         sessionCache.set(cacheKey, message.session_id);
+
+        // Accumulate token usage if available
+        if (message.usage) {
+          usage.input += message.usage.input_tokens || 0;
+          usage.output += message.usage.output_tokens || 0;
+        }
+
         logJson(message, options);
       }
     } catch (error) {
@@ -137,7 +149,7 @@ const claudeCodeAgent: AgentDefinition = {
       throw error;
     }
 
-    return { command: displayCommand };
+    return { command: displayCommand, usage };
   },
 };
 

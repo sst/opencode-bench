@@ -19,7 +19,10 @@ import { generatePlannerTasks, type PlannerTask } from "~/lib/planner.js";
 import { fetchPlannerCommitDiffs } from "~/lib/github.js";
 import { finalizeAgentChanges } from "~/lib/finalizeAgentChanges.js";
 import { judges, getJudgeModelId } from "~/judges.js";
-import { aggregateScores } from "~/lib/utils/scoreAggregation.js";
+import {
+  aggregateScores,
+  averageJudgeScore,
+} from "~/lib/utils/scoreAggregation.js";
 import type { Judge } from "~/lib/judgeTypes.js";
 import type {
   AggregationSummary,
@@ -29,6 +32,7 @@ import type {
   Episode,
   EvaluationRunExport,
   TokenUsage,
+  Usage,
 } from "~/types/export.js";
 import { withRetries, withTimeout } from "~/lib/utils/retry.js";
 import { buildRadarChartUrl } from "~/lib/charts.js";
@@ -43,182 +47,6 @@ interface ParsedCliOptions {
 
 const EPISODES = 3;
 const EPISODE_TIMEOUT_MS = 30 * 60 * 1000; // 30 minutes per episode
-
-// Initialize opencode client for fetching session data
-let opencodeClientInstance: Awaited<ReturnType<typeof createOpencode>> | null =
-  null;
-
-async function getOpencodeClient() {
-  if (!opencodeClientInstance) {
-    const port = await detectPort(4097); // Use different port to avoid conflicts
-    opencodeClientInstance = await createOpencode({
-      port,
-      config: {
-        permission: {
-          edit: "allow",
-          bash: "allow",
-          webfetch: "allow",
-        },
-      },
-    });
-  }
-  return opencodeClientInstance;
-}
-
-async function fetchSessionTokensAndCost(sessionID: string): Promise<{
-  tokens: TokenUsage;
-  cost: number;
-}> {
-  try {
-    const opencode = await getOpencodeClient();
-    const { data } = await opencode.client.session.messages({
-      path: { id: sessionID },
-      throwOnError: true,
-    });
-
-    let totalCost = 0;
-    const tokens: TokenUsage = {
-      input: 0,
-      output: 0,
-      reasoning: 0,
-      cacheRead: 0,
-      cacheWrite: 0,
-    };
-
-    for (const message of data) {
-      if (message.info.role === "assistant") {
-        totalCost += message.info.cost;
-        tokens.input += message.info.tokens.input;
-        tokens.output += message.info.tokens.output;
-        tokens.reasoning += message.info.tokens.reasoning;
-        tokens.cacheRead += message.info.tokens.cache.read;
-        tokens.cacheWrite += message.info.tokens.cache.write;
-      }
-    }
-
-    return { tokens, cost: totalCost };
-  } catch (error) {
-    console.error(`Failed to fetch session data for ${sessionID}:`, error);
-    return {
-      tokens: {
-        input: 0,
-        output: 0,
-        reasoning: 0,
-        cacheRead: 0,
-        cacheWrite: 0,
-      },
-      cost: 0,
-    };
-  }
-}
-
-function generateLogSummary(allLogs: string[]): string {
-  const toolCalls: Record<string, number> = {};
-  const modifiedFiles = new Set<string>();
-  const narrativeTexts: string[] = [];
-  let errorCount = 0;
-
-  for (const log of allLogs) {
-    // Check for errors
-    if (log.includes("ERROR:")) {
-      errorCount++;
-    }
-
-    // Try to parse as JSON to extract Part information
-    try {
-      const parsed = JSON.parse(log.replace("ERROR: ", ""));
-
-      // Extract narrative from TextPart objects
-      if (parsed?.type === "text" && typeof parsed.text === "string") {
-        // Filter out very short or empty text
-        const text = parsed.text.trim();
-        if (text.length > 10) {
-          narrativeTexts.push(text);
-        }
-      }
-
-      // Extract tool usage from ToolPart objects
-      if (parsed?.type === "tool" && typeof parsed.tool === "string") {
-        const toolName = parsed.tool;
-        toolCalls[toolName] = (toolCalls[toolName] || 0) + 1;
-      }
-
-      // Extract file modifications from PatchPart objects
-      if (parsed?.type === "patch" && Array.isArray(parsed.files)) {
-        parsed.files.forEach((file: string) => {
-          if (typeof file === "string") {
-            modifiedFiles.add(file);
-          }
-        });
-      }
-    } catch {
-      // Not JSON or doesn't match expected format, skip
-    }
-  }
-
-  // Build narrative summary
-  const summaryParts: string[] = [];
-
-  // Add narrative if we have text
-  if (narrativeTexts.length > 0) {
-    // Create a condensed narrative by taking key sentences
-    const opening = narrativeTexts[0]; // First statement (approach)
-    const keySteps: string[] = [];
-
-    // Extract key action statements (sentences with "implement", "add", "create", "edit", etc.)
-    const actionWords = /\b(implement|add|create|edit|modif|updat|fix|test|verif|check|read|writ|run)\w*/i;
-    for (const text of narrativeTexts.slice(1)) {
-      if (actionWords.test(text) && keySteps.length < 3) {
-        keySteps.push(text);
-      }
-    }
-
-    // Combine into narrative
-    let narrative = opening;
-    if (keySteps.length > 0) {
-      narrative += " " + keySteps.join(" ");
-    }
-
-    // Truncate if extremely long (keep generous limit for detailed summaries)
-    if (narrative.length > 10000) {
-      narrative = narrative.substring(0, 9997) + "...";
-    }
-
-    summaryParts.push(narrative);
-  }
-
-  // Add metadata summary
-  const metadata: string[] = [];
-
-  if (modifiedFiles.size > 0) {
-    const fileList = Array.from(modifiedFiles).sort();
-    if (fileList.length <= 3) {
-      metadata.push(`Modified: ${fileList.join(", ")}`);
-    } else {
-      metadata.push(`Modified ${fileList.length} files`);
-    }
-  }
-
-  if (Object.keys(toolCalls).length > 0) {
-    const toolSummary = Object.entries(toolCalls)
-      .sort(([a], [b]) => a.localeCompare(b))
-      .map(([tool, count]) => `${tool}(${count})`)
-      .join(", ");
-    metadata.push(`Tools: ${toolSummary}`);
-  }
-
-  if (metadata.length > 0) {
-    summaryParts.push(`[${metadata.join("; ")}]`);
-  }
-
-  if (errorCount > 0) {
-    summaryParts.push(`⚠️ ${errorCount} errors`);
-  }
-
-  return summaryParts.length > 0
-    ? summaryParts.join(" ")
-    : "No activity detected";
-}
 
 async function printHelp(): Promise<void> {
   console.log(
@@ -377,10 +205,7 @@ async function main(): Promise<void> {
     evalDefinition: DatasetEval,
     agentRegistration: AgentRegistration,
     agentLabel: string,
-  ): Promise<{
-    summaries: string[];
-    exportData?: EvaluationRunExport;
-  }> => {
+  ): ReturnType<typeof executeCombination> => {
     const scores: ScoreAssignment[] = evalDefinition.scores;
     if (scores.length === 0) {
       const message = `Evaluation ${evalDefinition.repo} has no score assignments configured.`;
@@ -421,7 +246,7 @@ async function main(): Promise<void> {
     }
 
     const executeCombination = async (): Promise<{
-      summaries: string[];
+      lines: string[];
       exportData?: EvaluationRunExport;
     }> => {
       const combinationLabel = `${evalId} ${model}`;
@@ -429,13 +254,10 @@ async function main(): Promise<void> {
       interface EpisodeResult {
         index: number;
         aggregation: Map<string, ScoreAggregationInput>;
-        summary: AggregationSummary;
+        aggregationSummary: AggregationSummary;
         scoreExports: EvaluationRunExport["scores"];
-        summaryLine: string;
-        sessionIDs: string[];
         logs: string[];
-        tokens?: TokenUsage;
-        cost?: number;
+        usage: Usage;
       }
 
       const runEpisode = async (
@@ -454,7 +276,9 @@ async function main(): Promise<void> {
         };
 
         try {
-          console.log(`${prefix} Starting episode (timeout: ${EPISODE_TIMEOUT_MS / 1000 / 60} min)...`);
+          console.log(
+            `${prefix} Starting episode (timeout: ${EPISODE_TIMEOUT_MS / 1000 / 60} min)...`,
+          );
           console.log(`${prefix} Cloning repository...`);
           cwd = cloneRepositoryAtCommit(evalDefinition, baselineCommit);
 
@@ -481,14 +305,14 @@ async function main(): Promise<void> {
           }
 
           let tasksExecuted = 0;
-          const episodeSessionIDs: string[] = [];
-          const episodeLogs: string[] = [];
+
+          let usage: Usage = { input: 0, output: 0 };
 
           for (const task of plannerTasks) {
             const logPrefix = `${prefix} ${task.commit}`;
 
             try {
-              await withRetries(
+              const result = await withRetries(
                 async () => {
                   const result = await agentRegistration.definition.run(
                     model,
@@ -499,16 +323,9 @@ async function main(): Promise<void> {
                         console.log(`${logPrefix} ${commandString.trim()}`);
                       },
                       logPrefix,
-                      captureLogs: true,
                     },
                   );
-
-                  if (result.sessionID) {
-                    episodeSessionIDs.push(result.sessionID);
-                  }
-                  if (result.logs) {
-                    episodeLogs.push(...result.logs);
-                  }
+                  return result;
                 },
                 {
                   retries: 3,
@@ -523,10 +340,15 @@ async function main(): Promise<void> {
                       console.log(
                         `${logPrefix} Retrying agent run (attempt ${attempt + 1}/${retries})...`,
                       );
+                      usage.input = 0;
+                      usage.output = 0;
                     }
                   },
                 },
               );
+
+              usage.input += result.usage.input;
+              usage.output += result.usage.output;
             } catch (error) {
               const message =
                 error instanceof Error ? error.message : String(error);
@@ -564,59 +386,26 @@ async function main(): Promise<void> {
             fail("No score results were produced for this episode.");
           }
 
-          const summary = aggregateScores(
+          const aggregationSummary = aggregateScores(
             Array.from(episodeAggregation.values()),
           );
 
           const episodeScoreExports = buildScoreExportsFromAggregation(
             episodeAggregation,
-            summary,
+            aggregationSummary,
           );
 
-          // Fetch token and cost data from sessions
-          let episodeTokens: TokenUsage | undefined;
-          let episodeCost: number | undefined;
-          if (episodeSessionIDs.length > 0 && agentLabel === "opencode") {
-            // Only fetch for opencode agent since it uses sessions
-            const uniqueSessionIDs = Array.from(new Set(episodeSessionIDs));
-            const tokenDataPromises = uniqueSessionIDs.map((sessionID) =>
-              fetchSessionTokensAndCost(sessionID),
-            );
-            const tokenDataResults = await Promise.all(tokenDataPromises);
-
-            episodeTokens = {
-              input: 0,
-              output: 0,
-              reasoning: 0,
-              cacheRead: 0,
-              cacheWrite: 0,
-            };
-            episodeCost = 0;
-
-            for (const result of tokenDataResults) {
-              episodeTokens.input += result.tokens.input;
-              episodeTokens.output += result.tokens.output;
-              episodeTokens.reasoning += result.tokens.reasoning;
-              episodeTokens.cacheRead += result.tokens.cacheRead;
-              episodeTokens.cacheWrite += result.tokens.cacheWrite;
-              episodeCost += result.cost;
-            }
-          }
-
           console.log(
-            `${prefix} Episode completed with final score ${summary.finalScore.toFixed(3)} (base ${summary.baseScore.toFixed(3)} - variance penalty ${summary.variancePenalty.toFixed(3)})`,
+            `${prefix} Episode completed with final score ${aggregationSummary.finalScore.toFixed(3)} (base ${aggregationSummary.baseScore.toFixed(3)} - variance penalty ${aggregationSummary.variancePenalty.toFixed(3)})`,
           );
 
           return {
             index: episodeIndex,
             aggregation: episodeAggregation,
-            summary,
+            aggregationSummary,
             scoreExports: episodeScoreExports,
-            summaryLine: `${episodeTag} Episode final score ${summary.finalScore.toFixed(3)}.`,
-            sessionIDs: episodeSessionIDs,
-            logs: episodeLogs,
-            tokens: episodeTokens,
-            cost: episodeCost,
+            logs: [],
+            usage,
           };
         } finally {
           if (cwd) {
@@ -645,9 +434,7 @@ async function main(): Promise<void> {
             settled.reason instanceof Error
               ? settled.reason.message
               : String(settled.reason);
-          episodeFailures.push(
-            `Episode ${idx + 1} failed: ${errorMessage}`,
-          );
+          episodeFailures.push(`Episode ${idx + 1} failed: ${errorMessage}`);
           console.error(`[episode ${idx + 1}/${EPISODES}] ${errorMessage}`);
         }
       }
@@ -661,73 +448,43 @@ async function main(): Promise<void> {
       episodeResults.sort((a, b) => a.index - b.index);
 
       const aggregatedInputs = new Map<string, ScoreAggregationInput>();
-      const episodeSummaries: string[] = [];
       const episodeExports: Episode[] = [];
       const allLogs: string[] = [];
-      let totalTokens: TokenUsage | undefined;
-      let totalCost: number | undefined;
+      const averageUsage = episodeResults.reduce(
+        (prev, { usage }) => ({
+          input: prev.input + usage.input / episodeResults.length,
+          output: prev.output + usage.output / episodeResults.length,
+        }),
+        { input: 0, output: 0 },
+      );
 
       for (const result of episodeResults) {
         mergeAggregationInputs(aggregatedInputs, result.aggregation);
-        episodeSummaries.push(result.summaryLine);
         episodeExports.push({
-          finalScore: result.summary.finalScore,
-          baseScore: result.summary.baseScore,
-          variancePenalty: result.summary.variancePenalty,
+          finalScore: result.aggregationSummary.finalScore,
+          baseScore: result.aggregationSummary.baseScore,
+          variancePenalty: result.aggregationSummary.variancePenalty,
           scores: result.scoreExports,
+          usage: result.usage,
         });
 
         // Aggregate logs
         if (result.logs && result.logs.length > 0) {
           allLogs.push(...result.logs);
         }
-
-        // Aggregate tokens and costs
-        if (result.tokens) {
-          if (!totalTokens) {
-            totalTokens = {
-              input: 0,
-              output: 0,
-              reasoning: 0,
-              cacheRead: 0,
-              cacheWrite: 0,
-            };
-          }
-          totalTokens.input += result.tokens.input;
-          totalTokens.output += result.tokens.output;
-          totalTokens.reasoning += result.tokens.reasoning;
-          totalTokens.cacheRead += result.tokens.cacheRead;
-          totalTokens.cacheWrite += result.tokens.cacheWrite;
-        }
-
-        if (result.cost !== undefined) {
-          if (totalCost === undefined) {
-            totalCost = 0;
-          }
-          totalCost += result.cost;
-        }
       }
 
-      // Generate log summary
-      const logSummary =
-        allLogs.length > 0 ? generateLogSummary(allLogs) : undefined;
-
-      const { lines, exportData } = summarizeAggregation(
+      return summarizeAggregation(
         agentLabel,
         evalDefinition,
         model,
         combinationLabel,
         aggregatedInputs,
         episodeExports,
-        totalTokens,
-        totalCost,
-        logSummary,
+        averageUsage,
+        "",
+        summary,
       );
-
-      return {
-        summaries: [...episodeSummaries, ...lines],
-        exportData,
-      };
     };
 
     return await executeCombination();
@@ -761,7 +518,9 @@ async function main(): Promise<void> {
 
       // Generate and log radar chart URL
       const chartUrl = buildRadarChartUrl({
-        labels: evaluationResult.exportData.scores.map((s) => s.assignment.name),
+        labels: evaluationResult.exportData.scores.map(
+          (s) => s.assignment.name,
+        ),
         values: evaluationResult.exportData.scores.map((s) =>
           Number(s.averageScore.toFixed(3)),
         ),
@@ -926,14 +685,13 @@ function summarizeAggregation(
   contextLabel: string | undefined,
   aggregationInputs: Map<string, ScoreAggregationInput>,
   episodes: Episode[],
-  totalTokens?: TokenUsage,
-  totalCost?: number,
-  logSummary?: string,
+  usage: Usage,
+  summary: string,
 ): { lines: string[]; exportData: EvaluationRunExport } {
   const evalId = datasetEval.repo;
   const runContext = contextLabel ? `${evalId} [${contextLabel}]` : evalId;
 
-  const summary = aggregateScores(Array.from(aggregationInputs.values()));
+  const aggregation = aggregateScores(Array.from(aggregationInputs.values()));
 
   const lines: string[] = [];
   lines.push(`\nScore breakdown for ${model} on ${runContext}:`);
@@ -944,7 +702,7 @@ function summarizeAggregation(
     return Number(value.toPrecision(6)).toString();
   };
 
-  summary.perScore.forEach((entry) => {
+  aggregation.perScore.forEach((entry) => {
     lines.push(
       `  ${entry.assignment.name} → ${entry.averageScore.toFixed(3)} (weight ${formatRawWeight(entry.assignment.weight)}, normalized ${entry.normalizedWeight.toFixed(3)})`,
     );
@@ -959,7 +717,7 @@ function summarizeAggregation(
   });
 
   lines.push(
-    `  Final aggregate score: ${summary.finalScore.toFixed(3)} (base ${summary.baseScore.toFixed(3)} - penalty ${summary.variancePenalty.toFixed(3)})\n`,
+    `  Final aggregate score: ${aggregation.finalScore.toFixed(3)} (base ${aggregation.baseScore.toFixed(3)} - penalty ${aggregation.variancePenalty.toFixed(3)})\n`,
   );
 
   const scoreExports = buildScoreExportsFromEpisodes(episodes);
@@ -973,14 +731,13 @@ function summarizeAggregation(
     },
     model,
     jobUrl: process.env.GITHUB_BENCHMARK_JOB_URL,
-    finalScore: summary.finalScore,
-    baseScore: summary.baseScore,
-    variancePenalty: summary.variancePenalty,
+    finalScore: aggregation.finalScore,
+    baseScore: aggregation.baseScore,
+    variancePenalty: aggregation.variancePenalty,
     scores: scoreExports,
     episodes,
-    tokenUsage: totalTokens,
-    totalCost,
-    logSummary,
+    usage,
+    summary,
   };
 
   return { lines, exportData };
@@ -998,9 +755,9 @@ function mergeAggregationInputs(
 
 function buildScoreExportsFromAggregation(
   aggregationInputs: Map<string, ScoreAggregationInput>,
-  summary: AggregationSummary,
+  aggregationSummary: AggregationSummary,
 ): EvaluationRunExport["scores"] {
-  return summary.perScore.map((entry) => {
+  return aggregationSummary.perScore.map((entry) => {
     const raw = aggregationInputs.get(entry.assignment.name);
     const judges =
       raw?.judgeResults.map((result) => ({

@@ -27,6 +27,7 @@ export interface Episode {
   baseScore: number;
   variancePenalty: number;
   scores: ScoreResultExport[];
+  usage: Usage;
 }
 
 export interface EvaluationMetadataExport {
@@ -35,12 +36,9 @@ export interface EvaluationMetadataExport {
   to: DatasetEval["to"];
 }
 
-export interface TokenUsage {
+export interface Usage {
   input: number;
   output: number;
-  reasoning: number;
-  cacheRead: number;
-  cacheWrite: number;
 }
 
 export interface EvaluationRunExport {
@@ -53,7 +51,6 @@ export interface EvaluationRunExport {
   variancePenalty: number;
   scores: ScoreResultExport[];
   episodes: Episode[];
-  tokenUsage?: TokenUsage;
-  totalCost?: number;
-  logSummary?: string;
+  usage: Usage;
+  summary: string;
 }

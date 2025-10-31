@@ -3,6 +3,7 @@ import process from "node:process";
 
 import {
   Codex,
+  Usage,
   type CommandExecutionItem,
   type SandboxMode,
   type Thread,
@@ -122,15 +123,27 @@ const codexAgent: AgentDefinition = {
     const key = sessionKey(model, cwd);
     const thread = getOrCreateThread(model, cwd);
 
+    const actions: string[] = [];
+    let usage: Usage;
     try {
       const turn = await thread.run(prompt);
+      assert(turn.usage, "The agent did not emit the usage information.");
+      usage = turn.usage;
+      actions.push(...turn.items.map((item) => JSON.stringify(item)));
       logTurnItems(turn.items, options);
     } catch (error) {
       threadCache.delete(key);
       throw error;
     }
 
-    return { command: displayCommand };
+    return {
+      command: displayCommand,
+      actions,
+      usage: {
+        input: usage.input_tokens,
+        output: usage.output_tokens,
+      },
+    };
   },
 };
 
