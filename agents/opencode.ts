@@ -170,6 +170,7 @@ const opencodeAgent: AgentDefinition = {
       sessionCache.set(cacheKey, sessionID);
     }
 
+    const actions: string[] = [];
     const usage = {
       input: 0,
       output: 0,
@@ -192,6 +193,11 @@ const opencodeAgent: AgentDefinition = {
       usage.input = data.info.tokens.input;
       usage.output = data.info.tokens.output;
 
+      actions.push(JSON.stringify(data.info));
+      if (Array.isArray(data.parts)) {
+        data.parts.forEach((part) => actions.push(JSON.stringify(part)));
+      }
+
       logPromptResult(data, options);
     } catch (error) {
       sessionCache.delete(cacheKey);
@@ -205,7 +211,7 @@ const opencodeAgent: AgentDefinition = {
       throw error;
     }
 
-    return { command: displayCommand, usage };
+    return { command: displayCommand, actions, usage };
   },
 };
 

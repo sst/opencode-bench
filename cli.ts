@@ -16,6 +16,10 @@ import { listScores, scores as scoreRegistry } from "~/scores/index.js";
 import { dataset } from "~/lib/dataset.js";
 import type { DatasetEval, ScoreAssignment } from "~/lib/dataset.js";
 import { generatePlannerTasks, type PlannerTask } from "~/lib/planner.js";
+import {
+  generateActionsSummary,
+  type EpisodeActions,
+} from "~/lib/summarizer.js";
 import { fetchPlannerCommitDiffs } from "~/lib/github.js";
 import { finalizeAgentChanges } from "~/lib/finalizeAgentChanges.js";
 import { judges, getJudgeModelId } from "~/judges.js";
@@ -31,7 +35,6 @@ import type {
 import type {
   Episode,
   EvaluationRunExport,
-  TokenUsage,
   Usage,
 } from "~/types/export.js";
 import { withRetries, withTimeout } from "~/lib/utils/retry.js";
@@ -257,6 +260,7 @@ async function main(): Promise<void> {
         aggregationSummary: AggregationSummary;
         scoreExports: EvaluationRunExport["scores"];
         logs: string[];
+        actions: string[];
         usage: Usage;
       }
 
@@ -307,6 +311,7 @@ async function main(): Promise<void> {
           let tasksExecuted = 0;
 
           let usage: Usage = { input: 0, output: 0 };
+          const episodeActions: string[] = [];
 
           for (const task of plannerTasks) {
             const logPrefix = `${prefix} ${task.commit}`;
@@ -349,6 +354,9 @@ async function main(): Promise<void> {
 
               usage.input += result.usage.input;
               usage.output += result.usage.output;
+
+              // Collect actions from this task
+              episodeActions.push(...result.actions);
             } catch (error) {
               const message =
                 error instanceof Error ? error.message : String(error);
@@ -405,6 +413,7 @@ async function main(): Promise<void> {
             aggregationSummary,
             scoreExports: episodeScoreExports,
             logs: [],
+            actions: episodeActions,
             usage,
           };
         } finally {
@@ -450,6 +459,7 @@ async function main(): Promise<void> {
       const aggregatedInputs = new Map<string, ScoreAggregationInput>();
       const episodeExports: Episode[] = [];
       const allLogs: string[] = [];
+      const episodesActions: EpisodeActions[] = [];
       const averageUsage = episodeResults.reduce(
         (prev, { usage }) => ({
           input: prev.input + usage.input / episodeResults.length,
@@ -472,6 +482,28 @@ async function main(): Promise<void> {
         if (result.logs && result.logs.length > 0) {
           allLogs.push(...result.logs);
         }
+
+        // Collect actions for summarization
+        episodesActions.push({
+          episodeIndex: result.index,
+          actions: result.actions,
+        });
+      }
+
+      // Generate summary from all episodes' actions
+      let summary = "";
+      try {
+        summary = await generateActionsSummary(
+          evalDefinition,
+          model,
+          episodesActions,
+        );
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        console.error(
+          `[${combinationLabel}] Failed to generate summary: ${message}`,
+        );
+        summary = ""; // Keep empty string on failure
       }
 
       return summarizeAggregation(
@@ -482,7 +514,6 @@ async function main(): Promise<void> {
         aggregatedInputs,
         episodeExports,
         averageUsage,
-        "",
         summary,
       );
     };
@@ -497,7 +528,7 @@ async function main(): Promise<void> {
       agentName,
     );
 
-    evaluationResult.summaries.forEach((line) => {
+    evaluationResult.lines.forEach((line) => {
       console.log(line);
     });
 

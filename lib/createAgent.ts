@@ -24,7 +24,7 @@ export interface AgentDefinition {
 
 export interface AgentRunResult {
   command: string;
-  messages: string[];
+  actions: string[];
   usage: {
     input: number;
     output: number;
