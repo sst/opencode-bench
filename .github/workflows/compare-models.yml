@@ -2,24 +2,8 @@ name: Compare Models
 on:
   workflow_dispatch:
     inputs:
-      codex_gpt_5_codex:
-        description: codex:gpt-5-codex
-        type: boolean
-        default: false
       opencode_opencode_gpt_5_codex:
         description: opencode:opencode/gpt-5-codex
-        type: boolean
-        default: false
-      opencode_opencode_claude_sonnet_4_5:
-        description: opencode:opencode/claude-sonnet-4-5
-        type: boolean
-        default: false
-      opencode_opencode_big_pickle:
-        description: opencode:opencode/big-pickle
-        type: boolean
-        default: false
-      claude_code_claude_sonnet_4_5:
-        description: claude-code:claude-sonnet-4-5
         type: boolean
         default: false
 permissions:
