@@ -22,34 +22,49 @@ const DEFAULT_PERMISSION_CONFIG: NonNullable<OpencodeConfig["permission"]> = {
   webfetch: "allow",
 };
 
-// Custom fetch with focused error logging
+// Custom fetch with focused error logging and extended timeout
 const customFetch = async (request: Request): Promise<Response> => {
   const startTime = Date.now();
 
   try {
-    const response = await fetch(request);
-    const duration = Date.now() - startTime;
+    // Create AbortController with 25-minute timeout
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 1_500_000);
 
-    // Only log non-OK responses or slow requests
-    if (!response.ok || duration > 60000) {
-      console.error(`[opencode] Request to ${request.url} - Status: ${response.status}, Duration: ${duration}ms`);
+    try {
+      const response = await fetch(request, { signal: controller.signal });
+      clearTimeout(timeoutId);
+      const duration = Date.now() - startTime;
 
-      if (!response.ok) {
-        try {
-          const clonedResponse = response.clone();
-          const responseText = await clonedResponse.text();
-          console.error(`[opencode] Full error response body:`, responseText);
-        } catch (e) {
-          console.error(`[opencode] Could not read error response body`);
+      // Only log non-OK responses or slow requests
+      if (!response.ok || duration > 60000) {
+        console.error(`[opencode] Request to ${request.url} - Status: ${response.status}, Duration: ${duration}ms`);
+
+        if (!response.ok) {
+          try {
+            const clonedResponse = response.clone();
+            const responseText = await clonedResponse.text();
+            console.error(`[opencode] Full error response body:`, responseText);
+          } catch (e) {
+            console.error(`[opencode] Could not read error response body`);
+          }
         }
       }
-    }
 
-    return response;
+      return response;
+    } catch (fetchError) {
+      clearTimeout(timeoutId);
+      throw fetchError;
+    }
   } catch (error) {
     const duration = Date.now() - startTime;
     console.error(`[opencode] FETCH FAILED - URL: ${request.url}, Duration: ${duration}ms`);
-    console.error(`[opencode] Error: ${error instanceof Error ? error.message : String(error)}`);
+
+    if (error instanceof Error && error.name === 'AbortError') {
+      console.error(`[opencode] Error: Request timed out after 25 minutes`);
+    } else {
+      console.error(`[opencode] Error: ${error instanceof Error ? error.message : String(error)}`);
+    }
 
     if (error instanceof Error && error.stack) {
       console.error(`[opencode] Stack:`, error.stack);
@@ -63,7 +78,7 @@ const opencodePort = await detectPort(4096);
 
 const opencode = await createOpencode({
   port: opencodePort,
-  timeout: 600_000, // 10 minutes timeout for long-running LLM requests
+  timeout: 1_500_000, // 25 minutes timeout for long-running LLM requests
   config: {
     permission: DEFAULT_PERMISSION_CONFIG,
   },
