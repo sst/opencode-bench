@@ -76,12 +76,25 @@ const customFetch = async (request: Request): Promise<Response> => {
 
 const opencodePort = await detectPort(4096);
 
+// Set OpenCode config before server starts to ensure timeout is applied
+const opencodeConfig = {
+  permission: DEFAULT_PERMISSION_CONFIG,
+  provider: {
+    opencode: {
+      options: {
+        timeout: 1_500_000, // 25 minutes timeout for OpenCode provider requests
+      },
+    },
+  },
+};
+
+// Set via environment variable to ensure it's picked up by the server
+process.env.OPENCODE_CONFIG_CONTENT = JSON.stringify(opencodeConfig);
+
 const opencode = await createOpencode({
   port: opencodePort,
-  timeout: 1_500_000, // 25 minutes timeout for long-running LLM requests
-  config: {
-    permission: DEFAULT_PERMISSION_CONFIG,
-  },
+  timeout: 1_500_000, // 25 minutes timeout for server startup
+  config: opencodeConfig,
 });
 
 const sessionCache = new Map<string, string>();
