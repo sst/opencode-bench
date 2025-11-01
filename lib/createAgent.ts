@@ -20,6 +20,7 @@ export interface AgentDefinition {
     cwd: string,
     options?: AgentRunOptions,
   ) => Promise<AgentRunResult>;
+  cleanup?: () => void | Promise<void>;
 }
 
 export interface AgentRunResult {

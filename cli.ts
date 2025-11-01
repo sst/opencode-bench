@@ -595,7 +595,16 @@ main()
     }
     process.exitCode = 1;
   })
-  .finally(process.exit);
+  .finally(async () => {
+    // Cleanup all loaded agents
+    const agents = await listAgents();
+    for (const agent of agents) {
+      if (agent.definition.cleanup) {
+        await agent.definition.cleanup();
+      }
+    }
+    process.exit();
+  });
 
 function cleanupRepository(tempDir: string, entry: DatasetEval): void {
   try {

@@ -69,8 +69,6 @@ const opencode = await createOpencode({
   },
 });
 
-process.once("beforeExit", () => opencode.server.close());
-
 const sessionCache = new Map<string, string>();
 
 export const models: string[] = [
@@ -260,6 +258,9 @@ const opencodeAgent: AgentDefinition = {
     }
 
     return { command: displayCommand, actions, usage };
+  },
+  cleanup() {
+    opencode.server.close();
   },
 };
 
