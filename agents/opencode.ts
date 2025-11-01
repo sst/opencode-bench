@@ -38,7 +38,9 @@ const customFetch = async (request: Request): Promise<Response> => {
 
       // Only log non-OK responses or slow requests
       if (!response.ok || duration > 60000) {
-        console.error(`[opencode] Request to ${request.url} - Status: ${response.status}, Duration: ${duration}ms`);
+        console.error(
+          `[opencode] Request to ${request.url} - Status: ${response.status}, Duration: ${duration}ms`,
+        );
 
         if (!response.ok) {
           try {
@@ -58,12 +60,16 @@ const customFetch = async (request: Request): Promise<Response> => {
     }
   } catch (error) {
     const duration = Date.now() - startTime;
-    console.error(`[opencode] FETCH FAILED - URL: ${request.url}, Duration: ${duration}ms`);
+    console.error(
+      `[opencode] FETCH FAILED - URL: ${request.url}, Duration: ${duration}ms`,
+    );
 
-    if (error instanceof Error && error.name === 'AbortError') {
+    if (error instanceof Error && error.name === "AbortError") {
       console.error(`[opencode] Error: Request timed out after 25 minutes`);
     } else {
-      console.error(`[opencode] Error: ${error instanceof Error ? error.message : String(error)}`);
+      console.error(
+        `[opencode] Error: ${error instanceof Error ? error.message : String(error)}`,
+      );
     }
 
     if (error instanceof Error && error.stack) {
@@ -82,7 +88,7 @@ const opencodeConfig = {
   provider: {
     opencode: {
       options: {
-        timeout: 1_500_000, // 25 minutes timeout for OpenCode provider requests
+        timeout: false as const, // Disable timeout for OpenCode provider requests
       },
     },
   },
@@ -273,7 +279,10 @@ const opencodeAgent: AgentDefinition = {
 
       logPromptResult(data, options);
     } catch (error) {
-      console.error(`[opencode] Error in ${model}:`, error instanceof Error ? error.message : String(error));
+      console.error(
+        `[opencode] Error in ${model}:`,
+        error instanceof Error ? error.message : String(error),
+      );
       sessionCache.delete(cacheKey);
       logError(
         {
