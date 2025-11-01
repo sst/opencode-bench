@@ -148,6 +148,22 @@ jobs:
             echo "benchmark.json not found, skipping summary log"
           fi
 
+      - name: Generate Judges Summary for this Evaluation
+        env:
+          OPENCODE_API_KEY: ${{ secrets.OPENCODE_API_KEY }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          BENCHMARK_EVAL: ${{ matrix.eval }}
+        run: |
+          set -euo pipefail
+          echo ""
+          echo "═══════════════════════════════════════════════════════"
+          echo "JUDGE CONSISTENCY ANALYSIS"
+          echo "Evaluation: ${BENCHMARK_EVAL}"
+          echo "═══════════════════════════════════════════════════════"
+          echo ""
+          bun run scripts/judges-summary.ts benchmark.json --ai-summary || true
+          echo ""
+
       - name: Prepare artifact name
         id: artifact
         env:
