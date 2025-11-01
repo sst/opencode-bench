@@ -22,62 +22,11 @@ const DEFAULT_PERMISSION_CONFIG: NonNullable<OpencodeConfig["permission"]> = {
   webfetch: "allow",
 };
 
-// Custom fetch with focused error logging and extended timeout
+// Custom fetch with 25-minute timeout
 const customFetch = async (request: Request): Promise<Response> => {
-  const startTime = Date.now();
-
-  try {
-    // Create AbortController with 25-minute timeout
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 1_500_000);
-
-    try {
-      const response = await fetch(request, { signal: controller.signal });
-      clearTimeout(timeoutId);
-      const duration = Date.now() - startTime;
-
-      // Only log non-OK responses or slow requests
-      if (!response.ok || duration > 60000) {
-        console.error(
-          `[opencode] Request to ${request.url} - Status: ${response.status}, Duration: ${duration}ms`,
-        );
-
-        if (!response.ok) {
-          try {
-            const clonedResponse = response.clone();
-            const responseText = await clonedResponse.text();
-            console.error(`[opencode] Full error response body:`, responseText);
-          } catch (e) {
-            console.error(`[opencode] Could not read error response body`);
-          }
-        }
-      }
-
-      return response;
-    } catch (fetchError) {
-      clearTimeout(timeoutId);
-      throw fetchError;
-    }
-  } catch (error) {
-    const duration = Date.now() - startTime;
-    console.error(
-      `[opencode] FETCH FAILED - URL: ${request.url}, Duration: ${duration}ms`,
-    );
-
-    if (error instanceof Error && error.name === "AbortError") {
-      console.error(`[opencode] Error: Request timed out after 25 minutes`);
-    } else {
-      console.error(
-        `[opencode] Error: ${error instanceof Error ? error.message : String(error)}`,
-      );
-    }
-
-    if (error instanceof Error && error.stack) {
-      console.error(`[opencode] Stack:`, error.stack);
-    }
-
-    throw error;
-  }
+  return fetch(request, {
+    signal: AbortSignal.timeout(1_500_000),
+  });
 };
 
 const opencodePort = await detectPort(4096);
@@ -88,14 +37,18 @@ const opencodeConfig = {
   provider: {
     opencode: {
       options: {
-        timeout: false as const, // Disable timeout for OpenCode provider requests
+        timeout: false as false, // Disable timeout for OpenCode provider requests
       },
     },
   },
-};
+} satisfies OpencodeConfig;
 
-// Set via environment variable to ensure it's picked up by the server
-process.env.OPENCODE_CONFIG_CONTENT = JSON.stringify(opencodeConfig);
+// CRITICAL: Set via environment variable BEFORE importing/creating anything
+// The SDK reads this when spawning the server process
+const configJson = JSON.stringify(opencodeConfig);
+process.env.OPENCODE_CONFIG_CONTENT = configJson;
+
+console.error(`[opencode] Setting config: ${configJson}`);
 
 const opencode = await createOpencode({
   port: opencodePort,
