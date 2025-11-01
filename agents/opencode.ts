@@ -24,9 +24,20 @@ const DEFAULT_PERMISSION_CONFIG: NonNullable<OpencodeConfig["permission"]> = {
 
 // Custom fetch with 25-minute timeout
 const customFetch = async (request: Request): Promise<Response> => {
-  return fetch(request, {
-    signal: AbortSignal.timeout(1_500_000),
-  });
+  const startTime = Date.now();
+
+  try {
+    const response = await fetch(request, {
+      signal: AbortSignal.timeout(1_500_000),
+    });
+    const duration = Date.now() - startTime;
+    console.error(`[opencode] Request completed - Duration: ${duration}ms`);
+    return response;
+  } catch (error) {
+    const duration = Date.now() - startTime;
+    console.error(`[opencode] Request failed - Duration: ${duration}ms`);
+    throw error;
+  }
 };
 
 const opencodePort = await detectPort(4096);
