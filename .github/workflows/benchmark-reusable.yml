@@ -263,7 +263,7 @@ jobs:
             "${jobs_endpoint}")"
 
           job_url="$(printf '%s\n' "${job_json}" \
-            | jq -r --arg pattern "$job_pattern" 'select(type=="object" and has("jobs")) | .jobs[] | select(.name == $pattern) | .html_url' \
+            | jq -r --arg pattern "$job_pattern" 'select(type=="object" and has("jobs")) | .jobs[] | select(.name | contains($pattern)) | .html_url' \
             | head -n 1)"
 
           if [ -z "${job_url}" ] || [ "${job_url}" = "null" ]; then
