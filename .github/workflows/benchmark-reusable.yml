@@ -172,20 +172,6 @@ JSON
             echo "benchmark.json not found, skipping summary log"
           fi
 
-      - name: Run benchmark-level judge analysis
-        env:
-          BENCHMARK_EVAL: ${{ matrix.eval }}
-        run: |
-          set -euo pipefail
-          echo ""
-          echo "═══════════════════════════════════════════════════════"
-          echo "JUDGE CONSISTENCY ANALYSIS"
-          echo "Evaluation: ${BENCHMARK_EVAL}"
-          echo "═══════════════════════════════════════════════════════"
-          echo ""
-          bun run scripts/analysis.ts benchmark.json || true
-          echo ""
-
       - name: Prepare artifact name
         id: artifact
         env:
