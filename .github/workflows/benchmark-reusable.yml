@@ -29,7 +29,7 @@ jobs:
           MATRIX_JSON: ${{ inputs.matrix }}
         run: |
           set -euo pipefail
-          evals=$(jq -c 'map(.eval) | unique | map({ eval: ., safe: (gsub("/"; "-")) })' <<<"$MATRIX_JSON")
+          evals=$(jq -c '.include | unique_by(.eval) | map({ eval: .eval, safe: (.eval | gsub("/"; "-")) })' <<<"$MATRIX_JSON")
 
           if [ -z "${evals}" ] || [ "${evals}" = "null" ]; then
             echo "No evaluations found in matrix definition." >&2
