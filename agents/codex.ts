@@ -70,10 +70,14 @@ function logTurnItems(
     try {
       writeLog(process.stdout, JSON.stringify(item), options?.logPrefix);
     } catch (error) {
-      const fallback = isCommandExecutionItem(item)
+      const sanitizedItem = isCommandExecutionItem(item)
         ? { ...item, aggregated_output: "<omitted>" }
         : item;
-      writeLog(process.stdout, JSON.stringify(fallback), options?.logPrefix);
+      writeLog(
+        process.stdout,
+        JSON.stringify(sanitizedItem),
+        options?.logPrefix,
+      );
       if (error instanceof Error) {
         writeLog(
           process.stderr,

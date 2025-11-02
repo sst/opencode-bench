@@ -33,13 +33,7 @@ Focus on concrete observations from the data provided. Look for patterns such as
 
 Provide a concise, insightful analysis that helps developers understand agent behavior and improve the evaluation system.`;
 
-const fallback = (envName: string, defaultValue: string): string =>
-  process.env[envName]?.trim() || defaultValue;
-
-const analyzerModelId = fallback(
-  "ANALYZER_MODEL",
-  "opencode/claude-sonnet-4-5",
-);
+const analyzerModelId = "opencode/claude-sonnet-4-5";
 
 function buildDynamicContext(runs: EvaluationRunExport[]): string {
   const repo = runs[0].evaluation.repo;
@@ -99,25 +93,16 @@ function formatFallbackSummary(runs: EvaluationRunExport[]): string {
   return lines.join("\n").trimEnd();
 }
 
-async function generateAnalysis(
-  runs: EvaluationRunExport[],
-): Promise<string> {
+async function generateAnalysis(runs: EvaluationRunExport[]): Promise<string> {
   const context = buildDynamicContext(runs);
 
-  try {
-    const { text } = await generateText({
-      model: getZenLanguageModel(analyzerModelId),
-      system: AGENT_ANALYSIS_PROMPT,
-      prompt: context,
-      temperature: 0.3,
-    });
-    return text.trim();
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    return `Failed to generate AI analysis (${message}).\n\n${formatFallbackSummary(
-      runs,
-    )}`;
-  }
+  const { text } = await generateText({
+    model: getZenLanguageModel(analyzerModelId),
+    system: AGENT_ANALYSIS_PROMPT,
+    prompt: context,
+    temperature: 0.3,
+  });
+  return text.trim();
 }
 
 function usage(): void {
@@ -137,33 +122,24 @@ async function main(): Promise<void> {
   }
 
   const filePath = args[0];
-  let parsed: unknown;
+  let runs: EvaluationRunExport[];
 
   try {
     const fileContent = readFileSync(filePath, "utf-8");
-    parsed = JSON.parse(fileContent) as unknown;
+    runs = JSON.parse(fileContent) as EvaluationRunExport[];
   } catch (error) {
     console.error(`Error reading file ${filePath}:`, error);
     process.exit(1);
   }
-
-  const runs = (Array.isArray(parsed)
-    ? (parsed as EvaluationRunExport[])
-    : [parsed as EvaluationRunExport]).filter(
-    (run): run is EvaluationRunExport =>
-      run != null && typeof run === "object" && "finalScore" in run,
-  );
 
   if (runs.length === 0) {
     console.error("No evaluation runs found in the provided file.");
     process.exit(1);
   }
 
-  const orderedRuns = [...runs].sort(
-    (a, b) => b.finalScore - a.finalScore,
-  );
+  runs.sort((a, b) => b.finalScore - a.finalScore);
 
-  const output = await generateAnalysis(orderedRuns);
+  const output = await generateAnalysis(runs);
   process.stdout.write(`${output.trimEnd()}\n`);
 }
 
