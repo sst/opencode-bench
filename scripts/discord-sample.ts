@@ -7,6 +7,7 @@
  * If DISCORD_WEBHOOK_URL is set, the payload will be sent automatically.
  */
 
+import { strict as assert } from "node:assert";
 import { readFileSync } from "node:fs";
 import type { Episode, EvaluationRunExport } from "~/types/export.js";
 import { buildRadarChartUrl, buildBarChartUrl } from "~/lib/charts.js";
@@ -24,7 +25,7 @@ type ModelSummary = {
   rawModelId: string;
   agentId: string;
   final: number;
-  jobUrl?: string;
+  jobUrl: string;
   rows: ScoreRow[];
   episodes: Episode[];
 };
@@ -60,6 +61,11 @@ type DiscordPayload = {
   avatar_url: string;
   content?: string;
   embeds?: DiscordEmbed[];
+};
+
+type AnalysisLinkEntry = {
+  eval: string;
+  url: string;
 };
 
 const cloneScores = (
@@ -388,17 +394,46 @@ function buildOverallChartUrl(
   );
 }
 
-function buildPayloads(evalSummaries: EvalSummary[]): DiscordPayload[] {
+function loadAnalysisLinks(): Map<string, string> {
+  const filePath = process.env.ANALYSIS_LINKS_FILE?.trim();
+  if (!filePath) {
+    return new Map();
+  }
+
+  try {
+    const raw = readFileSync(filePath, "utf-8");
+    const entries = JSON.parse(raw) as AnalysisLinkEntry[];
+    return new Map(
+      entries
+        .filter(
+          (entry) =>
+            typeof entry?.eval === "string" &&
+            entry.eval.length > 0 &&
+            typeof entry?.url === "string" &&
+            entry.url.length > 0,
+        )
+        .map((entry) => [entry.eval, entry.url]),
+    );
+  } catch (error) {
+    console.error(
+      `[discord] Failed to load analysis links from ${filePath}:`,
+      error,
+    );
+    return new Map();
+  }
+}
+
+function buildPayloads(
+  evalSummaries: EvalSummary[],
+  analysisLinks: Map<string, string>,
+): DiscordPayload[] {
   const contentLink = resolveContentLink();
   const overallChartUrl = buildOverallChartUrl(evalSummaries);
 
   const embeds = evalSummaries.map((summary) => {
     const fields = summary.models.map((model) => {
       const finalScore = model.final.toFixed(3);
-      const decoratedValue =
-        model.jobUrl !== undefined
-          ? `[${finalScore}](${model.jobUrl})`
-          : finalScore;
+      const decoratedValue = `[${finalScore}](${model.jobUrl})`;
 
       return {
         name: model.id,
@@ -408,6 +443,18 @@ function buildPayloads(evalSummaries: EvalSummary[]): DiscordPayload[] {
     });
 
     const averageChartUrl = buildAverageChartUrl(summary.eval, summary.models);
+
+    const analysisLink = analysisLinks.get(summary.eval);
+    assert(
+      typeof analysisLink === "string" && analysisLink.length > 0,
+      `Missing analysis link for evaluation "${summary.eval}". Ensure analysis links are provided for every eval.`,
+    );
+
+    fields.push({
+      name: "Analysis",
+      value: `[Analysis](${analysisLink})`,
+      inline: false,
+    });
 
     return {
       title: summary.eval,
@@ -515,7 +562,8 @@ async function sendWebhook(
 async function main(): Promise<void> {
   const exportData = loadExport();
   const evalSummaries = toEvalSummaries(exportData);
-  const payloads = buildPayloads(evalSummaries);
+  const analysisLinks = loadAnalysisLinks();
+  const payloads = buildPayloads(evalSummaries, analysisLinks);
 
   console.log("===== Plain-text preview =====\n");
   for (const summary of evalSummaries) {
