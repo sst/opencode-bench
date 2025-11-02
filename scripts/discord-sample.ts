@@ -126,18 +126,21 @@ const claudeEpisodes: Episode[] = [
     baseScore: 0.912,
     variancePenalty: 0.003,
     scores: cloneScores(claudeScores, 0.002, -0.005),
+    usage: { input: 50000, output: 10000 },
   },
   {
     finalScore: 0.901,
     baseScore: 0.905,
     variancePenalty: 0.004,
     scores: cloneScores(claudeScores, 0, 0),
+    usage: { input: 51000, output: 10500 },
   },
   {
     finalScore: 0.896,
     baseScore: 0.902,
     variancePenalty: 0.006,
     scores: cloneScores(claudeScores, -0.002, 0.004),
+    usage: { input: 49000, output: 9800 },
   },
 ];
 
@@ -183,18 +186,21 @@ const gptEpisodes: Episode[] = [
     baseScore: 0.907,
     variancePenalty: 0.004,
     scores: cloneScores(gptScores, 0.003, -0.006),
+    usage: { input: 48000, output: 9500 },
   },
   {
     finalScore: 0.894,
     baseScore: 0.898,
     variancePenalty: 0.004,
     scores: cloneScores(gptScores, -0.002, 0.002),
+    usage: { input: 49000, output: 9800 },
   },
   {
     finalScore: 0.892,
     baseScore: 0.897,
     variancePenalty: 0.005,
     scores: cloneScores(gptScores, -0.003, 0.004),
+    usage: { input: 47500, output: 9400 },
   },
 ];
 
@@ -214,6 +220,8 @@ const sampleExport: EvaluationRunExport[] = [
     variancePenalty: 0.003,
     scores: claudeScores,
     episodes: claudeEpisodes,
+    usage: { input: 50000, output: 10100 },
+    summary: "",
   },
   {
     agent: "opencode",
@@ -230,6 +238,8 @@ const sampleExport: EvaluationRunExport[] = [
     variancePenalty: 0.004,
     scores: gptScores,
     episodes: gptEpisodes,
+    usage: { input: 48167, output: 9633 },
+    summary: "",
   },
 ];
 

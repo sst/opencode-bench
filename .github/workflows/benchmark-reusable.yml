@@ -134,11 +134,19 @@ jobs:
             COMMAND="bunx \"${PACKAGE_SPEC}\" \"${BENCHMARK_AGENT}\" --eval \"${BENCHMARK_EVAL}\" --model \"${BENCHMARK_MODEL}\" --output \"${OUTPUT_FILE}\""
 
             echo "Executing: ${COMMAND}"
-            if ! bunx "${PACKAGE_SPEC}" "${BENCHMARK_AGENT}" --eval "${BENCHMARK_EVAL}" --model "${BENCHMARK_MODEL}" --output "${OUTPUT_FILE}"; then
-              echo "openreval benchmark failed, dumping OpenCode logs..." >&2
-              find /home/runner/.local/share/opencode/log -type f -print -exec cat {} + || true
-              exit 1
-            fi
+            bunx "${PACKAGE_SPEC}" "${BENCHMARK_AGENT}" --eval "${BENCHMARK_EVAL}" --model "${BENCHMARK_MODEL}" --output "${OUTPUT_FILE}"
+
+      - name: Log benchmark summary
+        if: always()
+        run: |
+          set -euo pipefail
+          if [ -f benchmark.json ]; then
+            echo "=== Benchmark Summary ==="
+            jq -r '.summary // "No summary available"' benchmark.json
+            echo "========================"
+          else
+            echo "benchmark.json not found, skipping summary log"
+          fi
 
       - name: Generate Judges Summary for this Evaluation
         env:

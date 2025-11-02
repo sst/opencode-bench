@@ -7,22 +7,36 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { tmpdir } from "node:os";
 
+import { createOpencode } from "@opencode-ai/sdk";
+import detectPort from "detect-port";
+
 import { getAgent, listAgents } from "~/agents/index.js";
 import type { AgentRegistration } from "~/agents/index.js";
 import { listScores, scores as scoreRegistry } from "~/scores/index.js";
 import { dataset } from "~/lib/dataset.js";
 import type { DatasetEval, ScoreAssignment } from "~/lib/dataset.js";
 import { generatePlannerTasks, type PlannerTask } from "~/lib/planner.js";
+import {
+  generateActionsSummary,
+  type EpisodeActions,
+} from "~/lib/summarizer.js";
 import { fetchPlannerCommitDiffs } from "~/lib/github.js";
 import { finalizeAgentChanges } from "~/lib/finalizeAgentChanges.js";
 import { judges, getJudgeModelId } from "~/judges.js";
-import { aggregateScores } from "~/lib/utils/scoreAggregation.js";
+import {
+  aggregateScores,
+  averageJudgeScore,
+} from "~/lib/utils/scoreAggregation.js";
 import type { Judge } from "~/lib/judgeTypes.js";
 import type {
   AggregationSummary,
   ScoreAggregationInput,
 } from "~/lib/utils/scoreAggregation.js";
-import type { Episode, EvaluationRunExport } from "~/types/export.js";
+import type {
+  Episode,
+  EvaluationRunExport,
+  Usage,
+} from "~/types/export.js";
 import { withRetries, withTimeout } from "~/lib/utils/retry.js";
 import { buildRadarChartUrl } from "~/lib/charts.js";
 
@@ -194,10 +208,7 @@ async function main(): Promise<void> {
     evalDefinition: DatasetEval,
     agentRegistration: AgentRegistration,
     agentLabel: string,
-  ): Promise<{
-    summaries: string[];
-    exportData?: EvaluationRunExport;
-  }> => {
+  ): ReturnType<typeof executeCombination> => {
     const scores: ScoreAssignment[] = evalDefinition.scores;
     if (scores.length === 0) {
       const message = `Evaluation ${evalDefinition.repo} has no score assignments configured.`;
@@ -238,7 +249,7 @@ async function main(): Promise<void> {
     }
 
     const executeCombination = async (): Promise<{
-      summaries: string[];
+      lines: string[];
       exportData?: EvaluationRunExport;
     }> => {
       const combinationLabel = `${evalId} ${model}`;
@@ -246,9 +257,11 @@ async function main(): Promise<void> {
       interface EpisodeResult {
         index: number;
         aggregation: Map<string, ScoreAggregationInput>;
-        summary: AggregationSummary;
+        aggregationSummary: AggregationSummary;
         scoreExports: EvaluationRunExport["scores"];
-        summaryLine: string;
+        logs: string[];
+        actions: string[];
+        usage: Usage;
       }
 
       const runEpisode = async (
@@ -267,7 +280,9 @@ async function main(): Promise<void> {
         };
 
         try {
-          console.log(`${prefix} Starting episode (timeout: ${EPISODE_TIMEOUT_MS / 1000 / 60} min)...`);
+          console.log(
+            `${prefix} Starting episode (timeout: ${EPISODE_TIMEOUT_MS / 1000 / 60} min)...`,
+          );
           console.log(`${prefix} Cloning repository...`);
           cwd = cloneRepositoryAtCommit(evalDefinition, baselineCommit);
 
@@ -295,13 +310,16 @@ async function main(): Promise<void> {
 
           let tasksExecuted = 0;
 
+          let usage: Usage = { input: 0, output: 0 };
+          const episodeActions: string[] = [];
+
           for (const task of plannerTasks) {
             const logPrefix = `${prefix} ${task.commit}`;
 
             try {
-              await withRetries(
+              const result = await withRetries(
                 async () => {
-                  await agentRegistration.definition.run(
+                  const result = await agentRegistration.definition.run(
                     model,
                     task.prompt,
                     cwd!,
@@ -312,6 +330,7 @@ async function main(): Promise<void> {
                       logPrefix,
                     },
                   );
+                  return result;
                 },
                 {
                   retries: 3,
@@ -330,6 +349,13 @@ async function main(): Promise<void> {
                   },
                 },
               );
+
+              // Only accumulate usage from the successful result
+              usage.input += result.usage.input;
+              usage.output += result.usage.output;
+
+              // Collect actions from this task
+              episodeActions.push(...result.actions);
             } catch (error) {
               const message =
                 error instanceof Error ? error.message : String(error);
@@ -367,25 +393,27 @@ async function main(): Promise<void> {
             fail("No score results were produced for this episode.");
           }
 
-          const summary = aggregateScores(
+          const aggregationSummary = aggregateScores(
             Array.from(episodeAggregation.values()),
           );
 
           const episodeScoreExports = buildScoreExportsFromAggregation(
             episodeAggregation,
-            summary,
+            aggregationSummary,
           );
 
           console.log(
-            `${prefix} Episode completed with final score ${summary.finalScore.toFixed(3)} (base ${summary.baseScore.toFixed(3)} - variance penalty ${summary.variancePenalty.toFixed(3)})`,
+            `${prefix} Episode completed with final score ${aggregationSummary.finalScore.toFixed(3)} (base ${aggregationSummary.baseScore.toFixed(3)} - variance penalty ${aggregationSummary.variancePenalty.toFixed(3)})`,
           );
 
           return {
             index: episodeIndex,
             aggregation: episodeAggregation,
-            summary,
+            aggregationSummary,
             scoreExports: episodeScoreExports,
-            summaryLine: `${episodeTag} Episode final score ${summary.finalScore.toFixed(3)}.`,
+            logs: [],
+            actions: episodeActions,
+            usage,
           };
         } finally {
           if (cwd) {
@@ -414,9 +442,7 @@ async function main(): Promise<void> {
             settled.reason instanceof Error
               ? settled.reason.message
               : String(settled.reason);
-          episodeFailures.push(
-            `Episode ${idx + 1} failed: ${errorMessage}`,
-          );
+          episodeFailures.push(`Episode ${idx + 1} failed: ${errorMessage}`);
           console.error(`[episode ${idx + 1}/${EPISODES}] ${errorMessage}`);
         }
       }
@@ -430,33 +456,65 @@ async function main(): Promise<void> {
       episodeResults.sort((a, b) => a.index - b.index);
 
       const aggregatedInputs = new Map<string, ScoreAggregationInput>();
-      const episodeSummaries: string[] = [];
       const episodeExports: Episode[] = [];
+      const allLogs: string[] = [];
+      const episodesActions: EpisodeActions[] = [];
+      const averageUsage = episodeResults.reduce(
+        (prev, { usage }) => ({
+          input: prev.input + usage.input / episodeResults.length,
+          output: prev.output + usage.output / episodeResults.length,
+        }),
+        { input: 0, output: 0 },
+      );
 
       for (const result of episodeResults) {
         mergeAggregationInputs(aggregatedInputs, result.aggregation);
-        episodeSummaries.push(result.summaryLine);
         episodeExports.push({
-          finalScore: result.summary.finalScore,
-          baseScore: result.summary.baseScore,
-          variancePenalty: result.summary.variancePenalty,
+          finalScore: result.aggregationSummary.finalScore,
+          baseScore: result.aggregationSummary.baseScore,
+          variancePenalty: result.aggregationSummary.variancePenalty,
           scores: result.scoreExports,
+          usage: result.usage,
+        });
+
+        // Aggregate logs
+        if (result.logs && result.logs.length > 0) {
+          allLogs.push(...result.logs);
+        }
+
+        // Collect actions for summarization
+        episodesActions.push({
+          episodeIndex: result.index,
+          actions: result.actions,
         });
       }
 
-      const { lines, exportData } = summarizeAggregation(
+      // Generate summary from all episodes' actions
+      let summary = "";
+      try {
+        summary = await generateActionsSummary(
+          evalDefinition,
+          model,
+          episodesActions,
+        );
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        console.error(
+          `[${combinationLabel}] Failed to generate summary: ${message}`,
+        );
+        summary = ""; // Keep empty string on failure
+      }
+
+      return summarizeAggregation(
         agentLabel,
         evalDefinition,
         model,
         combinationLabel,
         aggregatedInputs,
         episodeExports,
+        averageUsage,
+        summary,
       );
-
-      return {
-        summaries: [...episodeSummaries, ...lines],
-        exportData,
-      };
     };
 
     return await executeCombination();
@@ -469,7 +527,7 @@ async function main(): Promise<void> {
       agentName,
     );
 
-    evaluationResult.summaries.forEach((line) => {
+    evaluationResult.lines.forEach((line) => {
       console.log(line);
     });
 
@@ -490,7 +548,9 @@ async function main(): Promise<void> {
 
       // Generate and log radar chart URL
       const chartUrl = buildRadarChartUrl({
-        labels: evaluationResult.exportData.scores.map((s) => s.assignment.name),
+        labels: evaluationResult.exportData.scores.map(
+          (s) => s.assignment.name,
+        ),
         values: evaluationResult.exportData.scores.map((s) =>
           Number(s.averageScore.toFixed(3)),
         ),
@@ -535,7 +595,16 @@ main()
     }
     process.exitCode = 1;
   })
-  .finally(process.exit);
+  .finally(async () => {
+    // Cleanup all loaded agents
+    const agents = await listAgents();
+    for (const agent of agents) {
+      if (agent.definition.cleanup) {
+        await agent.definition.cleanup();
+      }
+    }
+    process.exit();
+  });
 
 function cleanupRepository(tempDir: string, entry: DatasetEval): void {
   try {
@@ -655,11 +724,13 @@ function summarizeAggregation(
   contextLabel: string | undefined,
   aggregationInputs: Map<string, ScoreAggregationInput>,
   episodes: Episode[],
+  usage: Usage,
+  summary: string,
 ): { lines: string[]; exportData: EvaluationRunExport } {
   const evalId = datasetEval.repo;
   const runContext = contextLabel ? `${evalId} [${contextLabel}]` : evalId;
 
-  const summary = aggregateScores(Array.from(aggregationInputs.values()));
+  const aggregation = aggregateScores(Array.from(aggregationInputs.values()));
 
   const lines: string[] = [];
   lines.push(`\nScore breakdown for ${model} on ${runContext}:`);
@@ -670,7 +741,7 @@ function summarizeAggregation(
     return Number(value.toPrecision(6)).toString();
   };
 
-  summary.perScore.forEach((entry) => {
+  aggregation.perScore.forEach((entry) => {
     lines.push(
       `  ${entry.assignment.name} → ${entry.averageScore.toFixed(3)} (weight ${formatRawWeight(entry.assignment.weight)}, normalized ${entry.normalizedWeight.toFixed(3)})`,
     );
@@ -685,7 +756,7 @@ function summarizeAggregation(
   });
 
   lines.push(
-    `  Final aggregate score: ${summary.finalScore.toFixed(3)} (base ${summary.baseScore.toFixed(3)} - penalty ${summary.variancePenalty.toFixed(3)})\n`,
+    `  Final aggregate score: ${aggregation.finalScore.toFixed(3)} (base ${aggregation.baseScore.toFixed(3)} - penalty ${aggregation.variancePenalty.toFixed(3)})\n`,
   );
 
   const scoreExports = buildScoreExportsFromEpisodes(episodes);
@@ -699,11 +770,13 @@ function summarizeAggregation(
     },
     model,
     jobUrl: process.env.GITHUB_BENCHMARK_JOB_URL,
-    finalScore: summary.finalScore,
-    baseScore: summary.baseScore,
-    variancePenalty: summary.variancePenalty,
+    finalScore: aggregation.finalScore,
+    baseScore: aggregation.baseScore,
+    variancePenalty: aggregation.variancePenalty,
     scores: scoreExports,
     episodes,
+    usage,
+    summary,
   };
 
   return { lines, exportData };
@@ -721,9 +794,9 @@ function mergeAggregationInputs(
 
 function buildScoreExportsFromAggregation(
   aggregationInputs: Map<string, ScoreAggregationInput>,
-  summary: AggregationSummary,
+  aggregationSummary: AggregationSummary,
 ): EvaluationRunExport["scores"] {
-  return summary.perScore.map((entry) => {
+  return aggregationSummary.perScore.map((entry) => {
     const raw = aggregationInputs.get(entry.assignment.name);
     const judges =
       raw?.judgeResults.map((result) => ({

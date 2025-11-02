@@ -22,23 +22,58 @@ const DEFAULT_PERMISSION_CONFIG: NonNullable<OpencodeConfig["permission"]> = {
   webfetch: "allow",
 };
 
+// Custom fetch with 25-minute timeout
+const customFetch = async (request: Request): Promise<Response> => {
+  const startTime = Date.now();
+
+  try {
+    const response = await fetch(request, {
+      signal: AbortSignal.timeout(1_500_000),
+    });
+    const duration = Date.now() - startTime;
+    console.error(`[opencode] Request completed - Duration: ${duration}ms`);
+    return response;
+  } catch (error) {
+    const duration = Date.now() - startTime;
+    console.error(`[opencode] Request failed - Duration: ${duration}ms`);
+    throw error;
+  }
+};
+
 const opencodePort = await detectPort(4096);
+
+// Set OpenCode config before server starts to ensure timeout is applied
+const opencodeConfig = {
+  permission: DEFAULT_PERMISSION_CONFIG,
+  provider: {
+    opencode: {
+      options: {
+        timeout: false as false, // Disable timeout for OpenCode provider requests
+      },
+    },
+  },
+} satisfies OpencodeConfig;
+
+// CRITICAL: Set via environment variable BEFORE importing/creating anything
+// The SDK reads this when spawning the server process
+const configJson = JSON.stringify(opencodeConfig);
+process.env.OPENCODE_CONFIG_CONTENT = configJson;
+
+console.error(`[opencode] Setting config: ${configJson}`);
 
 const opencode = await createOpencode({
   port: opencodePort,
-  config: {
-    permission: DEFAULT_PERMISSION_CONFIG,
-  },
+  timeout: 1_500_000, // 25 minutes timeout for server startup
+  config: opencodeConfig,
 });
-process.once("beforeExit", () => opencode.server.close());
 
 const sessionCache = new Map<string, string>();
 
 export const models: string[] = [
   // "opencode/gpt-5",
   "opencode/gpt-5-codex",
-  "opencode/claude-sonnet-4-5",
-  "opencode/big-pickle",
+  // "opencode/claude-sonnet-4-5",
+  // "opencode/big-pickle",
   // "opencode/claude-sonnet-4",
   // "opencode/claude-3-5-haiku",
   // "opencode/claude-opus-4-1",
@@ -73,33 +108,36 @@ function writeLog(
 
 function logJson(value: unknown, options: AgentRunOptions | undefined): void {
   try {
-    writeLog(process.stdout, JSON.stringify(value), options?.logPrefix);
+    const message = JSON.stringify(value);
+    writeLog(process.stdout, message, options?.logPrefix);
   } catch (error) {
     const reason = error instanceof Error ? error.message : String(error);
-    writeLog(
-      process.stdout,
-      JSON.stringify({ error: "serialization_failed", reason }),
-      options?.logPrefix,
-    );
+    const errorMessage = JSON.stringify({
+      error: "serialization_failed",
+      reason,
+    });
+    writeLog(process.stdout, errorMessage, options?.logPrefix);
   }
 }
 
 function logError(value: unknown, options: AgentRunOptions | undefined): void {
   try {
-    writeLog(process.stderr, JSON.stringify(value), options?.logPrefix);
+    const message = JSON.stringify(value);
+    writeLog(process.stderr, message, options?.logPrefix);
   } catch (error) {
     const reason = error instanceof Error ? error.message : String(error);
-    writeLog(
-      process.stderr,
-      JSON.stringify({ error: "serialization_failed", reason }),
-      options?.logPrefix,
-    );
+    const errorMessage = JSON.stringify({
+      error: "serialization_failed",
+      reason,
+    });
+    writeLog(process.stderr, errorMessage, options?.logPrefix);
   }
 }
 
 function logPromptResult(
   result: { info: AssistantMessage; parts: Part[] },
   options: AgentRunOptions | undefined,
+  logs?: string[],
 ): void {
   logJson({ info: result.info }, options);
   if (Array.isArray(result.parts)) {
@@ -167,8 +205,14 @@ const opencodeAgent: AgentDefinition = {
       sessionCache.set(cacheKey, sessionID);
     }
 
+    const actions: string[] = [];
+    const usage = {
+      input: 0,
+      output: 0,
+    };
     try {
       const [providerID, modelID] = model.split("/");
+
       const { data } = await opencode.client.session.prompt({
         path: { id: sessionID! },
         query: { directory: cwd },
@@ -180,10 +224,29 @@ const opencodeAgent: AgentDefinition = {
           parts: [{ type: "text", text: prompt }],
         },
         throwOnError: true,
+        fetch: customFetch,
       });
+
+      if (data.info?.tokens) {
+        usage.input = data.info.tokens.input || 0;
+        usage.output = data.info.tokens.output || 0;
+      } else {
+        console.error(
+          `[opencode] WARNING: No token usage in response. Available fields: ${Object.keys(data.info || {}).join(", ")}`,
+        );
+      }
+
+      actions.push(JSON.stringify(data.info));
+      if (Array.isArray(data.parts)) {
+        data.parts.forEach((part) => actions.push(JSON.stringify(part)));
+      }
 
       logPromptResult(data, options);
     } catch (error) {
+      console.error(
+        `[opencode] Error in ${model}:`,
+        error instanceof Error ? error.message : String(error),
+      );
       sessionCache.delete(cacheKey);
       logError(
         {
@@ -195,7 +258,10 @@ const opencodeAgent: AgentDefinition = {
       throw error;
     }
 
-    return { command: displayCommand };
+    return { command: displayCommand, actions, usage };
+  },
+  cleanup() {
+    opencode.server.close();
   },
 };
 

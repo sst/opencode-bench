@@ -27,12 +27,18 @@ export interface Episode {
   baseScore: number;
   variancePenalty: number;
   scores: ScoreResultExport[];
+  usage: Usage;
 }
 
 export interface EvaluationMetadataExport {
   repo: DatasetEval["repo"];
   from: DatasetEval["from"];
   to: DatasetEval["to"];
+}
+
+export interface Usage {
+  input: number;
+  output: number;
 }
 
 export interface EvaluationRunExport {
@@ -45,4 +51,6 @@ export interface EvaluationRunExport {
   variancePenalty: number;
   scores: ScoreResultExport[];
   episodes: Episode[];
+  usage: Usage;
+  summary: string;
 }
