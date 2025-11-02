@@ -25,13 +25,11 @@ jobs:
     steps:
       - name: Extract unique evaluations
         id: compute
+        env:
+          MATRIX_JSON: ${{ inputs.matrix }}
         run: |
           set -euo pipefail
-          matrix_json=$(cat <<'JSON'
-          ${{ inputs.matrix }}
-          JSON
-          )
-          evals=$(jq -c 'map(.eval) | unique' <<<"$matrix_json")
+          evals=$(jq -c 'map(.eval) | unique | map({ eval: ., safe: (gsub("/"; "-")) })' <<<"$MATRIX_JSON")
 
           if [ -z "${evals}" ] || [ "${evals}" = "null" ]; then
             echo "No evaluations found in matrix definition." >&2
@@ -202,7 +200,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        eval: ${{ fromJSON(needs.prepare-analysis.outputs.evals) }}
+        include: ${{ fromJSON(needs.prepare-analysis.outputs.evals) }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -219,7 +217,7 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           path: eval-benchmarks
-          pattern: benchmark-*-*-${{ replace(matrix.eval, '/', '-') }}
+          pattern: benchmark-*-*-${{ matrix.safe }}
 
       - name: Merge benchmark exports
         id: merge
