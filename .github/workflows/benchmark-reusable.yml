@@ -28,9 +28,9 @@ jobs:
         run: |
           set -euo pipefail
           matrix_json=$(cat <<'JSON'
-${{ inputs.matrix }}
-JSON
-)
+          ${{ inputs.matrix }}
+          JSON
+          )
           evals=$(jq -c 'map(.eval) | unique' <<<"$matrix_json")
 
           if [ -z "${evals}" ] || [ "${evals}" = "null" ]; then
