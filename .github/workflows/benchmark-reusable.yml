@@ -17,6 +17,30 @@ permissions:
   actions: read
 
 jobs:
+  prepare-analysis:
+    name: Prepare Judge Analysis Matrix
+    runs-on: ubuntu-latest
+    outputs:
+      evals: ${{ steps.compute.outputs.evals }}
+    steps:
+      - name: Extract unique evaluations
+        id: compute
+        run: |
+          set -euo pipefail
+          matrix_json=$(cat <<'JSON'
+${{ inputs.matrix }}
+JSON
+)
+          evals=$(jq -c 'map(.eval) | unique' <<<"$matrix_json")
+
+          if [ -z "${evals}" ] || [ "${evals}" = "null" ]; then
+            echo "No evaluations found in matrix definition." >&2
+            evals="[]"
+          fi
+
+          echo "Analysis eval matrix: ${evals}"
+          echo "evals=${evals}" >> "$GITHUB_OUTPUT"
+
   benchmark:
     name: Benchmark ${{ matrix.agent }} / ${{ matrix.model }} / ${{ matrix.eval }}
     runs-on: ubuntu-latest
@@ -148,10 +172,8 @@ jobs:
             echo "benchmark.json not found, skipping summary log"
           fi
 
-      - name: Generate Judges Summary for this Evaluation
+      - name: Run benchmark-level judge analysis
         env:
-          OPENCODE_API_KEY: ${{ secrets.OPENCODE_API_KEY }}
-          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           BENCHMARK_EVAL: ${{ matrix.eval }}
         run: |
           set -euo pipefail
@@ -161,7 +183,7 @@ jobs:
           echo "Evaluation: ${BENCHMARK_EVAL}"
           echo "═══════════════════════════════════════════════════════"
           echo ""
-          bun run scripts/judges-summary.ts benchmark.json --ai-summary || true
+          bun run scripts/analysis.ts benchmark.json || true
           echo ""
 
       - name: Prepare artifact name
@@ -182,6 +204,55 @@ jobs:
         with:
           name: ${{ steps.artifact.outputs.name }}
           path: benchmark.json
+
+  eval-analysis:
+    name: Judge Analysis - ${{ matrix.eval }}
+    runs-on: ubuntu-latest
+    needs:
+      - benchmark
+      - prepare-analysis
+    if: needs.prepare-analysis.outputs.evals != '[]'
+    environment: production
+    strategy:
+      fail-fast: false
+      matrix:
+        eval: ${{ fromJSON(needs.prepare-analysis.outputs.evals) }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v1
+        with:
+          bun-version: 1.2.21
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Download benchmark artifacts for eval
+        uses: actions/download-artifact@v4
+        with:
+          path: eval-benchmarks
+          pattern: benchmark-*-*-${{ replace(matrix.eval, '/', '-') }}
+
+      - name: Merge benchmark exports
+        id: merge
+        run: |
+          set -euo pipefail
+
+          if [ ! -d eval-benchmarks ] || ! find eval-benchmarks -type f -name '*.json' -print -quit | grep -q .; then
+            echo "No benchmark artifacts found for eval ${{ matrix.eval }}; skipping analysis."
+            echo "has_data=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          bun run scripts/merge-benchmark-exports.ts eval-benchmarks merged-benchmark.json
+          echo "Merged benchmark export ready for analysis."
+          echo "has_data=true" >> "$GITHUB_OUTPUT"
+
+      - name: Run judges analysis
+        if: steps.merge.outputs.has_data == 'true'
+        run: bun run scripts/analysis.ts merged-benchmark.json
 
   notify:
     runs-on: ubuntu-latest
