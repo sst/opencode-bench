@@ -41,7 +41,6 @@
         commands:
           - ./.venv/bin/pytest -vv
           - ./.venv/bin/flake8 datadog_lambda/
-
 - repo: AlaminPu1007/algorithm-visualizer
   from: ca409519ec96a83ec8d6c2ba30f2487f8d601719
   to: 21845e972dd8e2378cbcd16accc5ae8cdd37acb2

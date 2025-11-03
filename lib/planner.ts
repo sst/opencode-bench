@@ -5,9 +5,6 @@ import type { DatasetEval } from "~/lib/dataset.js";
 import { plannerExamples } from "~/lib/plannerExamples.js";
 import { getZenLanguageModel } from "~/lib/zenModels.js";
 
-const fallback = (envName: string, defaultValue: string): string =>
-  process.env[envName]?.trim() || defaultValue;
-
 export interface PlannerCommitDiff {
   sha: string;
   title: string;
@@ -61,7 +58,7 @@ What NOT to include:
 
 Always respond strictly as JSON conforming to the schema. Do not add commentary.`;
 
-const plannerModelId = fallback("PLANNER_MODEL", "opencode/claude-sonnet-4-5");
+const plannerModelId = "opencode/claude-sonnet-4-5";
 
 function buildSystemPrompt(): string {
   if (plannerExamples.length === 0) {

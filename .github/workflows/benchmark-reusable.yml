@@ -17,6 +17,28 @@ permissions:
   actions: read
 
 jobs:
+  prepare-analysis:
+    name: Prepare Judge Analysis Matrix
+    runs-on: ubuntu-latest
+    outputs:
+      evals: ${{ steps.compute.outputs.evals }}
+    steps:
+      - name: Extract unique evaluations
+        id: compute
+        env:
+          MATRIX_JSON: ${{ inputs.matrix }}
+        run: |
+          set -euo pipefail
+          evals=$(jq -c '.include | unique_by(.eval) | map({ eval: .eval, safe: (.eval | gsub("/"; "-")) })' <<<"$MATRIX_JSON")
+
+          if [ -z "${evals}" ] || [ "${evals}" = "null" ]; then
+            echo "No evaluations found in matrix definition." >&2
+            evals="[]"
+          fi
+
+          echo "Analysis eval matrix: ${evals}"
+          echo "evals=${evals}" >> "$GITHUB_OUTPUT"
+
   benchmark:
     name: Benchmark ${{ matrix.agent }} / ${{ matrix.model }} / ${{ matrix.eval }}
     runs-on: ubuntu-latest
@@ -167,9 +189,111 @@ jobs:
           name: ${{ steps.artifact.outputs.name }}
           path: benchmark.json
 
+  eval-analysis:
+    name: Judge Analysis - ${{ matrix.eval }}
+    runs-on: ubuntu-latest
+    needs:
+      - benchmark
+      - prepare-analysis
+    if: needs.prepare-analysis.outputs.evals != '[]'
+    environment: production
+    strategy:
+      fail-fast: false
+      matrix:
+        include: ${{ fromJSON(needs.prepare-analysis.outputs.evals) }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v1
+        with:
+          bun-version: 1.2.21
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Download benchmark artifacts for eval
+        uses: actions/download-artifact@v4
+        with:
+          path: eval-benchmarks
+          pattern: benchmark-*-*-${{ matrix.safe }}
+
+      - name: Merge benchmark exports
+        id: merge
+        run: |
+          set -euo pipefail
+
+          if [ ! -d eval-benchmarks ] || ! find eval-benchmarks -type f -name '*.json' -print -quit | grep -q .; then
+            echo "No benchmark artifacts found for eval ${{ matrix.eval }}; skipping analysis."
+            echo "has_data=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          bun run scripts/merge-benchmark-exports.ts eval-benchmarks merged-benchmark.json
+          echo "Merged benchmark export ready for analysis."
+          echo "has_data=true" >> "$GITHUB_OUTPUT"
+
+      - name: Run judges analysis
+        if: steps.merge.outputs.has_data == 'true'
+        id: analysis
+        env:
+          OPENCODE_API_KEY: ${{ secrets.OPENCODE_API_KEY }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          CODEX_API_KEY: ${{ secrets.CODEX_API_KEY }}
+        run: |
+          set -euo pipefail
+          bun run scripts/analysis.ts merged-benchmark.json > analysis.txt
+          cat analysis.txt
+
+      - name: Determine analysis job URL
+        if: steps.merge.outputs.has_data == 'true'
+        id: analysis_url
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          MATRIX_EVAL: ${{ matrix.eval }}
+          MATRIX_SAFE: ${{ matrix.safe }}
+        run: |
+          set -euo pipefail
+          job_pattern="Judge Analysis - ${MATRIX_EVAL}"
+          jobs_endpoint="https://api.github.com/repos/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}/jobs?per_page=100"
+          job_json="$(curl -fsSL \
+            -H "Authorization: token ${GITHUB_TOKEN}" \
+            -H "Accept: application/vnd.github+json" \
+            "${jobs_endpoint}")"
+
+          job_url="$(printf '%s\n' "${job_json}" \
+            | jq -r --arg pattern "$job_pattern" 'select(type=="object" and has("jobs")) | .jobs[] | select(.name | contains($pattern)) | .html_url' \
+            | head -n 1)"
+
+          if [ -z "${job_url}" ] || [ "${job_url}" = "null" ]; then
+            echo "Failed to determine job URL for pattern ${job_pattern}" >&2
+            printf '%s\n' "${job_json}" | jq -r '.jobs[]?.name' >&2 || true
+            exit 1
+          fi
+
+          step_url="${job_url}#step:7:0"
+
+          jq -n \
+            --arg eval "${MATRIX_EVAL}" \
+            --arg safe "${MATRIX_SAFE}" \
+            --arg url "${step_url}" \
+            '{eval: $eval, safe: $safe, url: $url}' > analysis-info.json
+
+      - name: Upload analysis artifact
+        if: steps.merge.outputs.has_data == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: analysis-${{ matrix.safe }}
+          path: |
+            analysis.txt
+            analysis-info.json
+
   notify:
     runs-on: ubuntu-latest
-    needs: benchmark
+    needs:
+      - benchmark
+      - eval-analysis
     if: needs.benchmark.result == 'success'
     environment: production
     steps:
@@ -189,12 +313,30 @@ jobs:
         with:
           path: benchmarks
 
+      - name: Download analysis artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: analysis
+          pattern: analysis-*
+
       - name: Merge benchmark exports
         run: bun run scripts/merge-benchmark-exports.ts benchmarks merged-benchmark.json
+
+      - name: Build analysis link map
+        run: |
+          set -euo pipefail
+          mkdir -p analysis
+          mapfile -d '' info_files < <(find analysis -type f -name 'analysis-info.json' -print0 2>/dev/null || true)
+          if [ "${#info_files[@]}" -eq 0 ]; then
+            echo "[]" > analysis/analysis-links.json
+          else
+            jq -s 'map({eval: .eval, url: .url, safe: .safe})' "${info_files[@]}" > analysis/analysis-links.json
+          fi
 
       - name: Send Discord notification
         env:
           DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+          ANALYSIS_LINKS_FILE: ${{ github.workspace }}/analysis/analysis-links.json
         run: |
           set -euo pipefail
           if [ ! -f merged-benchmark.json ]; then

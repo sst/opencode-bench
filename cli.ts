@@ -32,11 +32,7 @@ import type {
   AggregationSummary,
   ScoreAggregationInput,
 } from "~/lib/utils/scoreAggregation.js";
-import type {
-  Episode,
-  EvaluationRunExport,
-  Usage,
-} from "~/types/export.js";
+import type { Episode, EvaluationRunExport, Usage } from "~/types/export.js";
 import { withRetries, withTimeout } from "~/lib/utils/retry.js";
 import { buildRadarChartUrl } from "~/lib/charts.js";
 
@@ -769,7 +765,7 @@ function summarizeAggregation(
       to: datasetEval.to,
     },
     model,
-    jobUrl: process.env.GITHUB_BENCHMARK_JOB_URL,
+    jobUrl: process.env.GITHUB_BENCHMARK_JOB_URL!,
     finalScore: aggregation.finalScore,
     baseScore: aggregation.baseScore,
     variancePenalty: aggregation.variancePenalty,

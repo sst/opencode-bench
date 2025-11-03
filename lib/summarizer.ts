@@ -4,9 +4,6 @@ import { z } from "zod";
 import type { DatasetEval } from "~/lib/dataset.js";
 import { getZenLanguageModel } from "~/lib/zenModels.js";
 
-const fallback = (envName: string, defaultValue: string): string =>
-  process.env[envName]?.trim() || defaultValue;
-
 export interface EpisodeActions {
   episodeIndex: number;
   actions: string[];
@@ -43,10 +40,7 @@ Guidelines:
 - Note any errors or issues encountered
 - Be objective and descriptive, not evaluative`;
 
-const summarizerModelId = fallback(
-  "SUMMARIZER_MODEL",
-  "opencode/claude-sonnet-4-5",
-);
+const summarizerModelId = "opencode/claude-sonnet-4-5";
 
 export async function generateActionsSummary(
   evaluation: DatasetEval,

@@ -1,17 +1,14 @@
 import type { Judge } from "~/lib/judgeTypes.js";
 import { getZenLanguageModel } from "~/lib/zenModels.js";
 
-const fallback = (envName: string, defaultValue: string): string =>
-  process.env[envName]?.trim() || defaultValue;
-
 function resolveJudgeModelId(judgeName: Judge["name"]): string {
   switch (judgeName) {
     case "claude-4.5":
-      return fallback("CLAUDE_MODEL", "opencode/claude-sonnet-4-5");
+      return "opencode/claude-sonnet-4-5";
     case "gpt-5-codex":
-      return fallback("GPT5_CODEX_MODEL", "opencode/gpt-5-codex");
+      return "opencode/gpt-5-codex";
     case "kimi":
-      return fallback("KIMI_MODEL", "opencode/kimi-k2");
+      return "opencode/kimi-k2";
     default:
       return judgeName;
   }
