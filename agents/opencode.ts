@@ -73,7 +73,7 @@ export const models: string[] = [
   // "opencode/gpt-5",
   // "opencode/gpt-5-codex",
   "opencode/claude-sonnet-4-5",
-  // "opencode/big-pickle",
+  "opencode/big-pickle",
   // "opencode/claude-sonnet-4",
   // "opencode/claude-3-5-haiku",
   // "opencode/claude-opus-4-1",
