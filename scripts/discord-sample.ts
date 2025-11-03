@@ -263,7 +263,28 @@ function loadExport(): EvaluationRunExport[] {
 function toEvalSummaries(exportData: EvaluationRunExport[]): EvalSummary[] {
   const evalMap = new Map<string, ModelSummary[]>();
 
-  exportData.forEach((run) => {
+  exportData.forEach((run, index) => {
+    assert(
+      run !== null && typeof run === "object",
+      `Invalid evaluation entry at index ${index}`,
+    );
+
+    const repo = run.evaluation?.repo;
+    assert(
+      typeof repo === "string" && repo.length > 0,
+      `Missing evaluation repo for entry at index ${index}`,
+    );
+
+    assert(
+      Array.isArray(run.scores),
+      `Missing scores array for evaluation "${repo}" (index ${index})`,
+    );
+
+    assert(
+      typeof run.jobUrl === "string" && run.jobUrl.length > 0,
+      `Missing job URL for evaluation "${repo}" model "${run.model}"`,
+    );
+
     const modelIds = Array.isArray(run.model) ? run.model : [run.model];
     const modelRows = run.scores.map((score) => ({
       name: score.assignment.name,
@@ -273,7 +294,7 @@ function toEvalSummaries(exportData: EvaluationRunExport[]): EvalSummary[] {
       variance: score.variance,
     }));
 
-    const summaries = evalMap.get(run.evaluation.repo) ?? [];
+    const summaries = evalMap.get(repo) ?? [];
 
     modelIds.forEach((modelId) => {
       const agentName = (run.agent ?? "").trim();
@@ -290,7 +311,7 @@ function toEvalSummaries(exportData: EvaluationRunExport[]): EvalSummary[] {
       });
     });
 
-    evalMap.set(run.evaluation.repo, summaries);
+    evalMap.set(repo, summaries);
   });
 
   return Array.from(evalMap.entries()).map(([repo, models]) => ({

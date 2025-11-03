@@ -272,10 +272,12 @@ jobs:
             exit 1
           fi
 
+          step_url="${job_url}#step:7:0"
+
           jq -n \
             --arg eval "${MATRIX_EVAL}" \
             --arg safe "${MATRIX_SAFE}" \
-            --arg url "${job_url}" \
+            --arg url "${step_url}" \
             '{eval: $eval, safe: $safe, url: $url}' > analysis-info.json
 
       - name: Upload analysis artifact
