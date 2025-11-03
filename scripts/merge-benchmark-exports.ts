@@ -37,9 +37,24 @@ const mergedRuns: EvaluationRunExport[] = [];
 
 for (const filePath of jsonFiles) {
   const raw = readFileSync(filePath, "utf8");
-  const parsed: EvaluationRunExport = JSON.parse(raw);
+  const parsed = JSON.parse(raw) as unknown;
 
-  mergedRuns.push(parsed);
+  if (!Array.isArray(parsed)) {
+    process.stderr.write(
+      `Error: Expected array of evaluation runs in ${filePath}.\n`,
+    );
+    process.exit(1);
+  }
+
+  parsed.forEach((entry, index) => {
+    if (entry && typeof entry === "object" && "evaluation" in entry) {
+      mergedRuns.push(entry as EvaluationRunExport);
+    } else {
+      process.stderr.write(
+        `Warning: Skipping entry ${index} in ${filePath} (missing evaluation data).\n`,
+      );
+    }
+  });
 }
 
 writeFileSync(outputPath, JSON.stringify(mergedRuns, null, 2));
