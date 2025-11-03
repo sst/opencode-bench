@@ -39,22 +39,14 @@ for (const filePath of jsonFiles) {
   const raw = readFileSync(filePath, "utf8");
   const parsed = JSON.parse(raw) as unknown;
 
-  if (!Array.isArray(parsed)) {
+  if (!parsed || typeof parsed !== "object" || !("evaluation" in parsed)) {
     process.stderr.write(
-      `Error: Expected array of evaluation runs in ${filePath}.\n`,
+      `Error: Expected evaluation run object in ${filePath}.\n`,
     );
     process.exit(1);
   }
 
-  parsed.forEach((entry, index) => {
-    if (entry && typeof entry === "object" && "evaluation" in entry) {
-      mergedRuns.push(entry as EvaluationRunExport);
-    } else {
-      process.stderr.write(
-        `Warning: Skipping entry ${index} in ${filePath} (missing evaluation data).\n`,
-      );
-    }
-  });
+  mergedRuns.push(parsed as EvaluationRunExport);
 }
 
 writeFileSync(outputPath, JSON.stringify(mergedRuns, null, 2));
