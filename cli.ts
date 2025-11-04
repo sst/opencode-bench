@@ -342,7 +342,7 @@ async function main(): Promise<void> {
           let usage: Usage = { input: 0, output: 0 };
           const episodeActions: string[] = [];
 
-          for (const task of prompts) {
+          for (const task of tasks) {
             const logPrefix = `${prefix} ${task.commit}`;
 
             try {
