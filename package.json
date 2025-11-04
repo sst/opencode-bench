@@ -15,6 +15,7 @@
     "check": "tsc --noEmit",
     "dev": "bun run cli.ts",
     "test": "bun test",
+    "prompts": "bun run cli.ts prompts",
     "test:consistency": "bun test tests/judgeConsistency.test.ts",
     "test:consistency:medium": "bun test tests/judgeConsistencyMedium.test.ts",
     "test:consistency:complex": "bun test tests/judgeConsistencyComplex.test.ts",

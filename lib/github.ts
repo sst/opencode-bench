@@ -4,7 +4,6 @@ import { request as octokitRequest } from "@octokit/request";
 import type { RequestInterface } from "@octokit/types";
 
 import type { DatasetEval } from "~/lib/dataset.js";
-import type { PlannerCommitDiff } from "~/lib/planner.js";
 
 const DIFF_ACCEPT_HEADER = "application/vnd.github.v3.diff";
 
@@ -64,9 +63,15 @@ export async function fetchComparisonDiff(entry: DatasetEval): Promise<string> {
   return diff;
 }
 
-export async function fetchPlannerCommitDiffs(
+export interface CommitDiff {
+  sha: string;
+  title: string;
+  diff: string;
+}
+
+export async function fetchCommitDiffs(
   entry: DatasetEval,
-): Promise<PlannerCommitDiff[]> {
+): Promise<CommitDiff[]> {
   const client = getRequestClient();
   const { owner, repo } = splitRepo(entry);
 
@@ -124,7 +129,7 @@ export async function fetchPlannerCommitDiffs(
           sha,
           title,
           diff,
-        } satisfies PlannerCommitDiff;
+        } satisfies CommitDiff;
       } catch (error) {
         console.error(
           `Failed to fetch diff for commit ${sha} in ${entry.repo}:`,
@@ -135,5 +140,5 @@ export async function fetchPlannerCommitDiffs(
     }),
   );
 
-  return results.filter((value): value is PlannerCommitDiff => value !== null);
+  return results.filter((value): value is CommitDiff => value !== null);
 }

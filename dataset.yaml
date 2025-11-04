@@ -1,6 +1,7 @@
 - repo: prismicio-community/course-fizzi-next
   from: 15037446358508e153e765da49f8f5defa7fbbf6
   to: 2760114f2647ebec8f63e0ecc2dc87a8cd4096ac
+  prompts: prompts/course-fizzi-next.yaml
   issues: []
   scores:
     api-signature:
@@ -22,6 +23,7 @@
 - repo: DataDog/datadog-lambda-python
   from: 93d4a07fa61a4d4d2feec08e722505a9e0cc8657
   to: d7763789f262b2da228f8210509e302e6e510d0a
+  prompts: prompts/datadog-lambda-python.yaml
   issues: []
   scores:
     api-signature:
@@ -44,6 +46,7 @@
 - repo: AlaminPu1007/algorithm-visualizer
   from: ca409519ec96a83ec8d6c2ba30f2487f8d601719
   to: 21845e972dd8e2378cbcd16accc5ae8cdd37acb2
+  prompts: prompts/algorithm-visualizer.yaml
   issues: []
   scores:
     api-signature:
