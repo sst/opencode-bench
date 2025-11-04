@@ -5,33 +5,20 @@ import type { DatasetEval } from "~/lib/dataset.js";
 import { plannerExamples } from "~/lib/plannerExamples.js";
 import { getZenLanguageModel } from "~/lib/zenModels.js";
 
-export interface PlannerCommitDiff {
-  sha: string;
-  title: string;
-  diff: string;
-}
+import { readFileSync, writeFileSync, existsSync } from "node:fs";
+import { parse, stringify } from "yaml";
+import assert from "node:assert";
+import { CommitDiff, fetchCommitDiffs } from "./github.js";
 
-export interface PlannerTask {
+export interface Task {
   commit: string;
   prompt: string;
 }
 
-const plannerSchema = z.object({
+const schema = z.object({
   commit: z.string().min(7),
   prompt: z.string().min(1),
 });
-
-function sanitizePlannerPrompt(text: string): string {
-  const trimmed = text.trim();
-  if (trimmed.length === 0) {
-    return "Apply the referenced change precisely as described, without introducing unrelated work.";
-  }
-
-  return trimmed
-    .replace(/\bcommits\b/gi, "changes")
-    .replace(/\bcommit\b/gi, "change")
-    .replace(/\bsource control\b/gi, "version control");
-}
 
 const baseSystemPrompt = `You are Planner, a planning assistant that turns a single Git commit's diff into an actionable directive for an execution agent.
 
@@ -75,10 +62,10 @@ function buildSystemPrompt(): string {
   return `${baseSystemPrompt}\n\n---\n${examplesSection}`;
 }
 
-export async function generatePlannerTask(
+async function generateTask(
   entry: DatasetEval,
-  commit: PlannerCommitDiff,
-): Promise<PlannerTask> {
+  commit: CommitDiff,
+): Promise<Task> {
   const truncatedDiff =
     commit.diff.length > 50_000
       ? `${commit.diff.slice(0, 50_000)}\n... [truncated]`
@@ -87,7 +74,7 @@ export async function generatePlannerTask(
   try {
     const result = await generateObject({
       model: getZenLanguageModel(plannerModelId),
-      schema: plannerSchema,
+      schema,
       system: buildSystemPrompt(),
       temperature: 0,
       prompt: `Repository: ${entry.repo}
@@ -102,26 +89,106 @@ ${truncatedDiff}
 Return the JSON object describing the task.`,
     });
 
-    const trimmedCommit = result.object.commit.trim();
     return {
-      commit: trimmedCommit.length > 0 ? trimmedCommit : commit.sha,
-      prompt: sanitizePlannerPrompt(result.object.prompt),
+      commit: commit.sha,
+      prompt: result.object.prompt,
     };
   } catch (error) {
-    const formatted =
-      error instanceof Error ? error : new Error(String(error));
+    const formatted = error instanceof Error ? error : new Error(String(error));
     formatted.message = `Planner failed for commit ${commit.sha} in ${entry.repo}: ${formatted.message}`;
     throw formatted;
   }
 }
 
-export async function generatePlannerTasks(
+async function generateTasks(
   entry: DatasetEval,
-  commits: PlannerCommitDiff[],
-): Promise<PlannerTask[]> {
+  commits: CommitDiff[],
+): Promise<Task[]> {
   const tasks = await Promise.all(
-    commits.map((commit) => generatePlannerTask(entry, commit)),
+    commits.map((commit) => generateTask(entry, commit)),
   );
 
   return tasks;
+}
+
+const promptFileSchema = z.object({
+  generated_at: z.string(),
+  prompts: z.array(
+    z.object({
+      commit: z.string().min(7),
+      prompt: z.string().min(1),
+    }),
+  ),
+});
+
+export type PromptsFile = z.infer<typeof promptFileSchema>;
+
+export function loadPromptsFile(filePath: string): Task[] {
+  assert(
+    promptsFileExists(filePath),
+    `Prompts file not found: ${filePath}. Run the prompts command to create it.`,
+  );
+
+  const content = readFileSync(filePath, "utf-8");
+  const parsed = parse(content);
+  const validated = promptFileSchema.parse(parsed);
+
+  return validated.prompts;
+}
+
+function savePromptsFile(filePath: string, tasks: Task[]): void {
+  const promptsFile: PromptsFile = {
+    generated_at: new Date().toISOString(),
+    prompts: tasks,
+  };
+
+  const yamlContent = stringify(promptsFile, {
+    lineWidth: 0, // Disable line wrapping
+  });
+
+  writeFileSync(filePath, yamlContent, "utf-8");
+}
+
+function promptsFileExists(filePath: string): boolean {
+  return existsSync(filePath);
+}
+
+export async function generatePromptsForEval(
+  evalDef: DatasetEval,
+): Promise<void> {
+  const evalId = evalDef.repo;
+  const promptsPath = evalDef.prompts;
+
+  console.log(`[${evalId}] Generating prompts...`);
+
+  try {
+    console.log(`[${evalId}] Fetching commit diffs from GitHub...`);
+    const commitDiffs = await fetchCommitDiffs(evalDef);
+
+    assert(
+      commitDiffs.length > 0,
+      `No commits found between ${evalDef.from} and ${evalDef.to} for ${evalDef.repo}.`,
+    );
+
+    console.log(
+      `[${evalId}] Found ${commitDiffs.length} commits, generating prompts...`,
+    );
+    const plannerTasks = await generateTasks(evalDef, commitDiffs);
+
+    assert(
+      plannerTasks.length > 0,
+      `Planner produced no tasks for ${evalDef.repo} (${evalDef.from}..${evalDef.to}).`,
+    );
+
+    console.log(
+      `[${evalId}] Saving ${plannerTasks.length} prompts to ${promptsPath}...`,
+    );
+    savePromptsFile(promptsPath, plannerTasks);
+
+    console.log(`[${evalId}] Successfully generated prompts!`);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    console.error(`[${evalId}] Failed to generate prompts: ${message}`);
+    throw error;
+  }
 }

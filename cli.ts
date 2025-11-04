@@ -1,4 +1,4 @@
-#!/usr/bin/env node
+#!/usr/bin/env bun
 import { strict as assert } from "node:assert";
 import process from "node:process";
 
@@ -6,27 +6,20 @@ import { execSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { tmpdir } from "node:os";
-
-import { createOpencode } from "@opencode-ai/sdk";
-import detectPort from "detect-port";
-
 import { getAgent, listAgents } from "~/agents/index.js";
 import type { AgentRegistration } from "~/agents/index.js";
 import { listScores, scores as scoreRegistry } from "~/scores/index.js";
 import { dataset } from "~/lib/dataset.js";
 import type { DatasetEval, ScoreAssignment } from "~/lib/dataset.js";
-import { generatePlannerTasks, type PlannerTask } from "~/lib/planner.js";
+import { generatePromptsForEval } from "~/lib/prompts.js";
 import {
   generateActionsSummary,
   type EpisodeActions,
 } from "~/lib/summarizer.js";
-import { fetchPlannerCommitDiffs } from "~/lib/github.js";
 import { finalizeAgentChanges } from "~/lib/finalizeAgentChanges.js";
+import { loadPromptsFile } from "~/lib/prompts.js";
 import { judges, getJudgeModelId } from "~/judges.js";
-import {
-  aggregateScores,
-  averageJudgeScore,
-} from "~/lib/utils/scoreAggregation.js";
+import { aggregateScores } from "~/lib/utils/scoreAggregation.js";
 import type { Judge } from "~/lib/judgeTypes.js";
 import type {
   AggregationSummary,
@@ -155,12 +148,74 @@ function isHelpRequest(arg: string | undefined): boolean {
   );
 }
 
+async function handlePrompts(args: string[]): Promise<void> {
+  if (args.length === 0 || args[0] === "--help" || args[0] === "-h") {
+    console.log("Usage: orvl prompts [--eval <repo>] ");
+    console.log("");
+    console.log("Options:");
+    console.log(
+      "  --eval <repo>  Generate prompts for a specific evaluation (e.g., DataDog/datadog-lambda-python)",
+    );
+    console.log("");
+    console.log("Examples:");
+    console.log("  orvl prompts --eval DataDog/datadog-lambda-python");
+    return;
+  }
+
+  let generateAll = true;
+  let targetEval: string | undefined;
+
+  for (let i = 0; i < args.length; i++) {
+    const arg = args[i];
+    if (arg === "--eval") {
+      generateAll = false;
+      i++;
+      targetEval = args[i];
+      assert(targetEval, "Option --eval requires a value");
+    } else {
+      console.error(`Unknown option: ${arg}`);
+      process.exitCode = 1;
+      return;
+    }
+  }
+
+  let evalsToGenerate: DatasetEval[] = [];
+
+  if (generateAll) {
+    evalsToGenerate = [...dataset];
+  } else if (targetEval) {
+    const evalDef = dataset.find((entry) => entry.repo === targetEval);
+    if (!evalDef) {
+      console.error(`Evaluation not found: ${targetEval}`);
+      console.error("Available evaluations:");
+      dataset.forEach((entry) => console.error(`  - ${entry.repo}`));
+      process.exitCode = 1;
+      return;
+    }
+    evalsToGenerate = [evalDef];
+  }
+
+  console.log(
+    `Generating prompts for ${evalsToGenerate.length} evaluation(s)...\n`,
+  );
+
+  await Promise.all(
+    evalsToGenerate.map((evalDef) => generatePromptsForEval(evalDef)),
+  );
+}
+
 async function main(): Promise<void> {
   const args = process.argv.slice(2);
   const agentName = args[0];
 
   if (isHelpRequest(agentName)) {
     await printHelp();
+    return;
+  }
+
+  // Handle special commands
+  if (agentName === "prompts") {
+    await handlePrompts(args.slice(1));
     return;
   }
 
@@ -215,34 +270,12 @@ async function main(): Promise<void> {
 
     const evalId = evalDefinition.repo;
 
-    let plannerTasks: PlannerTask[] = [];
+    const tasks = loadPromptsFile(evalDefinition.prompts);
 
-    try {
-      console.log(`[${evalId} planner] Fetching commit diffs from GitHub...`);
-      const commitDiffs = await fetchPlannerCommitDiffs(evalDefinition);
-
-      assert(
-        commitDiffs.length > 0,
-        `No commits found between ${evalDefinition.from} and ${evalDefinition.to} for ${evalDefinition.repo}.`,
-      );
-
-      plannerTasks = await generatePlannerTasks(evalDefinition, commitDiffs);
-
-      assert(
-        plannerTasks.length > 0,
-        `Planner produced no tasks for ${evalDefinition.repo} (${evalDefinition.from}..${evalDefinition.to}).`,
-      );
-    } catch (error) {
-      if (error instanceof Error) {
-        console.error(
-          `Failed to prepare evaluation ${evalId}: ${error.message}`,
-        );
-      } else {
-        console.error("Failed to prepare evaluation", evalId);
-      }
-      process.exitCode = 1;
-      assert(false, "evaluation preparation failed");
-    }
+    assert(
+      tasks.length > 0,
+      `No prompts found in ${evalDefinition.prompts} for ${evalDefinition.repo}.`,
+    );
 
     const executeCombination = async (): Promise<{
       lines: string[];
@@ -309,7 +342,7 @@ async function main(): Promise<void> {
           let usage: Usage = { input: 0, output: 0 };
           const episodeActions: string[] = [];
 
-          for (const task of plannerTasks) {
+          for (const task of tasks) {
             const logPrefix = `${prefix} ${task.commit}`;
 
             try {
