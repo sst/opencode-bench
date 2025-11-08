@@ -3,12 +3,14 @@ import type { BenchmarkData } from "./types/benchmark";
 import { loadBenchmarkData } from "./utils/loadData";
 import { fetchLatestCommit } from "./utils/github";
 import { OverviewDashboard } from "./components/OverviewDashboard";
-import { ComparisonMatrix } from "./components/ComparisonMatrix";
-import { DetailedScoreView } from "./components/DetailedScoreView";
+import { RunsView } from "./components/RunsView";
+import { ErrorAnalysisView } from "./components/ErrorAnalysisView";
+import { InsightsView } from "./components/InsightsView";
 import { CommitSelector } from "./components/CommitSelector";
+import { BarChart3, Microscope, AlertTriangle, TrendingUp } from "lucide-react";
 import "./App.css";
 
-type View = "overview" | "comparison" | "detailed";
+type View = "overview" | "runs" | "error-analysis" | "insights";
 
 function App() {
   const [data, setData] = useState<BenchmarkData | null>(null);
@@ -17,23 +19,9 @@ function App() {
   const [view, setView] = useState<View>("overview");
   const [selectedCommit, setSelectedCommit] = useState<string | null>(null);
 
-  // Fetch latest commit on mount
+  // Use hardcoded commit - no auto-fetch
   useEffect(() => {
-    async function init() {
-      try {
-        const latestCommit = await fetchLatestCommit();
-        if (latestCommit) {
-          setSelectedCommit(latestCommit.sha);
-        } else {
-          // Fallback to hardcoded commit if API fails
-          setSelectedCommit("ea446df3c3284cf6be379486a9807d0c48ef7d78");
-        }
-      } catch (err) {
-        console.error("Failed to fetch latest commit:", err);
-        setSelectedCommit("ea446df3c3284cf6be379486a9807d0c48ef7d78");
-      }
-    }
-    init();
+    setSelectedCommit("ea446df3c3284cf6be379486a9807d0c48ef7d78");
   }, []);
 
   // Load data when commit is selected
@@ -101,33 +89,47 @@ function App() {
               <div className="hidden md:flex gap-1 bg-gray-100 rounded-lg p-1">
                 <button
                   onClick={() => setView("overview")}
-                  className={`px-4 py-2 rounded-md text-sm font-medium transition-all ${
+                  className={`px-4 py-2 rounded-md text-sm font-medium transition-all flex items-center gap-2 ${
                     view === "overview"
                       ? "bg-white text-gray-900 shadow-sm"
                       : "text-gray-600 hover:text-gray-900"
                   }`}
                 >
+                  <BarChart3 className="w-4 h-4" />
                   Overview
                 </button>
                 <button
-                  onClick={() => setView("comparison")}
-                  className={`px-4 py-2 rounded-md text-sm font-medium transition-all ${
-                    view === "comparison"
+                  onClick={() => setView("runs")}
+                  className={`px-4 py-2 rounded-md text-sm font-medium transition-all flex items-center gap-2 ${
+                    view === "runs"
                       ? "bg-white text-gray-900 shadow-sm"
                       : "text-gray-600 hover:text-gray-900"
                   }`}
                 >
-                  Comparison
+                  <Microscope className="w-4 h-4" />
+                  Runs
                 </button>
                 <button
-                  onClick={() => setView("detailed")}
-                  className={`px-4 py-2 rounded-md text-sm font-medium transition-all ${
-                    view === "detailed"
+                  onClick={() => setView("error-analysis")}
+                  className={`px-4 py-2 rounded-md text-sm font-medium transition-all flex items-center gap-2 ${
+                    view === "error-analysis"
                       ? "bg-white text-gray-900 shadow-sm"
                       : "text-gray-600 hover:text-gray-900"
                   }`}
                 >
-                  Detailed
+                  <AlertTriangle className="w-4 h-4" />
+                  Error Analysis
+                </button>
+                <button
+                  onClick={() => setView("insights")}
+                  className={`px-4 py-2 rounded-md text-sm font-medium transition-all flex items-center gap-2 ${
+                    view === "insights"
+                      ? "bg-white text-gray-900 shadow-sm"
+                      : "text-gray-600 hover:text-gray-900"
+                  }`}
+                >
+                  <TrendingUp className="w-4 h-4" />
+                  Insights
                 </button>
               </div>
             </div>
@@ -173,8 +175,9 @@ function App() {
         )}
         
         {view === "overview" && <OverviewDashboard runs={data.runs} />}
-        {view === "comparison" && <ComparisonMatrix runs={data.runs} />}
-        {view === "detailed" && <DetailedScoreView runs={data.runs} />}
+        {view === "runs" && <RunsView runs={data.runs} commitData={data.commitData} />}
+        {view === "error-analysis" && <ErrorAnalysisView runs={data.runs} commitData={data.commitData} />}
+        {view === "insights" && <InsightsView runs={data.runs} analysis={data.analysis} />}
         
         {/* Debug info */}
         {import.meta.env.DEV && (

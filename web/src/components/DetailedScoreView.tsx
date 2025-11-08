@@ -2,6 +2,7 @@ import { useState } from "react";
 import type { EvaluationRunExport } from "../types/benchmark";
 import { RadarScoreChart } from "./RadarScoreChart";
 import { EpisodeScoreChart } from "./EpisodeScoreChart";
+import { JudgeComparisonView } from "./JudgeComparisonView";
 
 interface DetailedScoreViewProps {
   runs: EvaluationRunExport[];
@@ -11,12 +12,15 @@ export function DetailedScoreView({ runs }: DetailedScoreViewProps) {
   const [selectedRun, setSelectedRun] = useState<EvaluationRunExport | null>(
     runs[0] || null
   );
+  const [selectedEpisode, setSelectedEpisode] = useState(0);
 
   const formatScore = (score: number) => (score * 100).toFixed(2);
 
   if (!selectedRun) {
     return <div className="p-4">No benchmark data available</div>;
   }
+
+  const currentEpisode = selectedRun.episodes[selectedEpisode];
 
   return (
     <div className="detailed-score-view">
@@ -94,9 +98,79 @@ export function DetailedScoreView({ runs }: DetailedScoreViewProps) {
         <EpisodeScoreChart run={selectedRun} />
       </div>
 
-      {/* Score Breakdown by Assignment */}
+      {/* Episode Selector */}
+      <div className="bg-white rounded-2xl shadow-lg border border-gray-100 p-6 mb-6">
+        <h3 className="text-xl font-bold mb-4 text-gray-900">Episode Analysis</h3>
+        <div className="flex gap-2 mb-4">
+          {selectedRun.episodes.map((episode, index) => (
+            <button
+              key={index}
+              onClick={() => setSelectedEpisode(index)}
+              className={`flex-1 p-4 rounded-lg border-2 transition-all ${
+                selectedEpisode === index
+                  ? "border-blue-500 bg-blue-50"
+                  : "border-gray-200 hover:border-gray-300"
+              }`}
+            >
+              <div className="text-sm font-semibold text-gray-700 mb-1">
+                Episode {index}
+              </div>
+              <div className="text-2xl font-bold text-gray-900">
+                {formatScore(episode.finalScore)}%
+              </div>
+              <div className="text-xs text-gray-500 mt-1">
+                Variance: {episode.variancePenalty.toFixed(3)}
+              </div>
+            </button>
+          ))}
+        </div>
+
+        {currentEpisode && (
+          <div className="bg-gray-50 rounded-lg p-4 border border-gray-200">
+            <div className="grid grid-cols-3 gap-4 text-sm">
+              <div>
+                <span className="text-gray-600">Base Score:</span>
+                <span className="ml-2 font-semibold">{formatScore(currentEpisode.baseScore)}%</span>
+              </div>
+              <div>
+                <span className="text-gray-600">Input Tokens:</span>
+                <span className="ml-2 font-semibold">{currentEpisode.usage.input.toLocaleString()}</span>
+              </div>
+              <div>
+                <span className="text-gray-600">Output Tokens:</span>
+                <span className="ml-2 font-semibold">{currentEpisode.usage.output.toLocaleString()}</span>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Judge Comparison by Score Type */}
       <div className="bg-white rounded-2xl shadow-lg border border-gray-100 p-8 mb-6">
-        <h3 className="text-2xl font-bold mb-6 text-gray-900">Score Breakdown by Assignment</h3>
+        <h3 className="text-2xl font-bold mb-6 text-gray-900">
+          Judge Evaluations - Episode {selectedEpisode}
+        </h3>
+        <p className="text-sm text-gray-600 mb-6">
+          Compare how all judges evaluated this episode across each score dimension.
+        </p>
+        <div className="space-y-8">
+          {currentEpisode?.scores.map((scoreResult, index) => (
+            <JudgeComparisonView
+              key={index}
+              score={scoreResult}
+              episodeIndex={selectedEpisode}
+              evalRepo={selectedRun.evaluation.repo}
+              benchmarkCommit=""
+              agentModel={`${selectedRun.agent}:${selectedRun.model}`}
+            />
+          ))}
+        </div>
+      </div>
+
+      {/* Aggregate Score Breakdown (kept for reference) */}
+      <div className="bg-white rounded-2xl shadow-lg border border-gray-100 p-8 mb-6">
+        <h3 className="text-2xl font-bold mb-6 text-gray-900">Aggregate Score Breakdown</h3>
+        <p className="text-sm text-gray-600 mb-4">Average across all episodes</p>
         <div className="space-y-4">
           {selectedRun.scores.map((scoreResult, index) => (
             <ScoreAssignmentCard

@@ -69,6 +69,20 @@ export interface CommitData {
   };
 }
 
+export interface ErrorAnalysisFeedback {
+  feedbackId: string;
+  timestamp: string;
+  userId?: string;
+  componentType: "planner" | "judge" | "agent-summary" | "cross-analysis";
+  componentId: string;
+  rating?: string;
+  category?: string;
+  comment?: string;
+  evalRepo: string;
+  benchmarkCommit: string;
+  agentModel?: string;
+}
+
 export interface BenchmarkData {
   runs: EvaluationRunExport[];
   analysis: Map<string, { text: string; info: AnalysisInfo }>;
