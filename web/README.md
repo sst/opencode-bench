@@ -45,7 +45,7 @@ the `weight` captures the score's importance in the final score. the list of sco
           - ./.venv/bin/flake8 datadog_lambda/
 ```
 
-any commit between `from` (exclusive) and `to` (inclusive) has a specific prompt (task) that the agent should act on. these prompts might change on a monthly basis by a maintainer so we avoid making the benchmarks too deterministic. the prompts change slightly so this does not make old benchmarks incomparable to the new benchmarks even though that's not the goal of OpenCode-bench because with this benchmark we're trying to compare agents & models to each other.
+any commit between `from` (exclusive) and `to` (inclusive) has a specific prompt (task) that the agent should act on. these prompts might change on a monthly basis by a maintainer so we avoid making the benchmarks too deterministic. the prompts change slightly so this does not make old benchmarks incomparable to the new benchmarks even though that's not the goal of OpenCode-bench because with this benchmark we're trying to compare agents & models to each other, rather than compare them to the old themselves.
 
 ```yaml
 generated_at: 2025-11-04T01:45:24.286Z
@@ -64,9 +64,9 @@ since each commit has a benchmark execution with it, we let the user navigate be
 
 by default, the last run is shown on the home page as the main information. but that can change through navigating the commit history to show the benchmarks of a 1 month old run for instance.
 
-each run shows a per agent and a per model comparison/chart is formed by aggregating the scores of each combination per eval. so the user is able to see more specific information that is specific to a single eval.
+each run shows a per combination comparison/chart is formed by aggregating the scores of each combination per eval. so the user is able to see more specific information that is specific to a single eval.
 
-we store a per agent:model analysis summary as well that talks about how that agent behaved in a specific run. there's also a difference analysis summary that is per eval, which talks about how different agents/models behvaed in that eval.
+we store a per combination (agent:model) analysis summary as well that talks about how that agent behaved in a specific run. there's also a difference analysis summary that is per eval, which talks about how different agents/models behvaed in that eval.
 
 [scatter charts](https://recharts.github.io/en-US/examples/SimpleScatterChart/) are often used to demonstrate the performace of AI models compared to each other.
 
