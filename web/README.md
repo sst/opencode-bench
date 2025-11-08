@@ -45,7 +45,7 @@ the `weight` captures the score's importance in the final score. the list of sco
           - ./.venv/bin/flake8 datadog_lambda/
 ```
 
-any commit between `from` (exclusive) and `to` (inclusive) has a specific prompt (task) that the agent should act on. these prompts might change on a month to month basis by a maintainer so we avoid making the benchmarks too deterministic. the prompts change slightly so this does not make old benchmarks incomparable to the new benchmarks even though that's not the goal of OpenCode-bench because with this benchmark we're trying to compare agents & models to each other.
+any commit between `from` (exclusive) and `to` (inclusive) has a specific prompt (task) that the agent should act on. these prompts might change on a monthly basis by a maintainer so we avoid making the benchmarks too deterministic. the prompts change slightly so this does not make old benchmarks incomparable to the new benchmarks even though that's not the goal of OpenCode-bench because with this benchmark we're trying to compare agents & models to each other.
 
 ```yaml
 generated_at: 2025-11-04T01:45:24.286Z
