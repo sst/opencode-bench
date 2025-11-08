@@ -93,3 +93,239 @@ error-analysis can be as simple as like and dislike buttons and a small input bo
 - the task generation prompt and its generated tasks.
 
 the goal is to constantly verify that our automated evaluations (LLM-as-a-judge) align with human judgement.
+
+## Error Analysis Implementation
+
+We have four LLM-powered components that require community error analysis:
+
+### 1. Task Generation (Planner)
+Location: Converts git diffs into agent prompts
+Model: `opencode/claude-sonnet-4-5`
+
+UI Should Show:
+- Original commit diff (truncated for readability)
+- Generated task prompt
+- The actual changes the agent produced
+
+Feedback Collection:
+- Binary: "Does this prompt capture the commit's intent?" [Yes/No]
+- Multiple choice: "This prompt is: [Too vague | Too specific | Just right | Missing context]"
+- Text input: "How would you improve this prompt?"
+
+### 2. Score Judges (15 total: 5 score types × 3 judges)
+Judges: claude-4.5, gpt-5-codex, kimi
+Score Types: api-signature, logic-equivalence, integration-points, test-coverage, checks
+
+UI Should Show:
+- Episode selector: Toggle between Episode 0, 1, 2 (judges evaluate each independently)
+- Reference diff (expected changes)
+- Candidate diff (agent's actual changes for this episode)
+- Judge's system prompt (scoring criteria)
+- All 3 judges side-by-side, always showing:
+  - Judge name and model
+  - Score (0 or 1) for this episode
+  - Full rationale (200-1000 words with code analysis) for this episode
+- Episode variance indicator (shows consistency across episodes)
+
+Feedback Collection:
+- Binary per judge: "Do you agree with this judge's decision?" [Agree/Disagree/Unsure]
+- If disagree: "What did the judge get wrong?" (text input)
+- Rating per judge: "This judge was: [Too strict | Just right | Too lenient]"
+- Flag: "These judges are inconsistent" (when variance is high within an episode)
+- Flag: "This episode is an outlier" (when one episode diverges significantly from the other two)
+
+Design Note:
+- Always display all 3 judges' rationales side-by-side for the selected episode to make inconsistencies obvious. Highlight when variance > 0.15.
+- When episode scores vary significantly (e.g., Episode 0: 0.5, Episode 1: 0.2, Episode 2: 0.3), allow comparing the same judge's rationale across episodes to understand why scores changed.
+
+### 3. Agent Behavior Summarizer
+Location: Summarizes agent's actions across 3 episodes
+Model: `opencode/claude-sonnet-4-5`
+
+UI Should Show:
+- Raw action logs per episode (first 50 actions, expandable)
+- Generated summary (200-500 words)
+- Final scores for context
+
+Feedback Collection:
+- Rating: "Is this summary accurate?" [Very | Mostly | Partially | Not at all]
+- Text input: "What's missing from this summary?"
+- Text input: "Did the summary claim something that didn't happen?"
+
+### 4. Cross-Agent Analysis
+Location: Compares all agent:model combinations on same eval
+Model: `opencode/claude-sonnet-4-5`
+
+UI Should Show:
+- All runs' scores and summaries (the input data)
+- Generated comparative analysis (1000+ words)
+
+Feedback Collection:
+- Rating: "Is this analysis insightful?" [Very | Somewhat | Not really | No]
+- Text input: "What pattern did the analysis miss?"
+- Binary: "Are the recommendations actionable?" [Yes/Somewhat/No]
+
+## Error Analysis Data Structure
+
+Store feedback alongside benchmark results:
+
+```typescript
+interface ErrorAnalysisFeedback {
+  feedbackId: string;
+  timestamp: string;
+  userId?: string; // Optional: track who provided feedback
+
+  // Component identification
+  componentType: "planner" | "judge" | "agent-summary" | "cross-analysis";
+  componentId: string; // e.g., "api-signature:claude-4.5" or "planner:abc123"
+
+  // Structured responses
+  rating?: "agree" | "disagree" | "unsure" | number;
+  category?: string; // Multiple choice responses
+  comment?: string; // Free text
+
+  // Context for aggregation
+  evalRepo: string;
+  benchmarkCommit: string;
+  agentModel?: string; // If applicable to specific run
+}
+```
+
+## Aggregation Dashboard
+
+Create a monitoring dashboard showing:
+- Judge Consistency: % of human agreement per judge per score type
+- High-Variance Issues: Evals where judges disagree + humans flag inconsistencies
+- Planner Quality: % of tasks rated "too vague" or "too specific"
+- Summary Accuracy: % of summaries rated "mostly" or "very" accurate
+- Trending Issues: Patterns in feedback over time
+
+---
+
+## Data Structure Reference
+
+This section documents the exact data fields available for each agent:model:eval combination. Use this as a reference when designing UI components.
+
+### Top-Level Run Information
+Each benchmark run contains:
+- agent: Agent type (e.g., "claude-code", "opencode", "codex")
+- model: Model identifier (e.g., "claude-sonnet-4-5", "gpt-5-codex", "big-pickle")
+- evaluation: Object with:
+  - `repo`: GitHub repository (e.g., "DataDog/datadog-lambda-python")
+  - `from`: Starting commit hash
+  - `to`: Target commit hash the agent attempts to replicate
+
+### Scoring Metrics
+- finalScore: Final weighted score after penalties (0-1 scale, e.g., 0.32469)
+- baseScore: Raw weighted average before penalties (0-1 scale, e.g., 0.36667)
+- variancePenalty: Penalty for inconsistent judge performance (e.g., 0.04198)
+
+### Per-Score Breakdown
+For each score dimension (api-signature, logic-equivalence, integration-points, test-coverage, checks):
+
+- assignment:
+  - `name`: Score type identifier (e.g., "api-signature")
+  - `weight`: Importance weight (e.g., 0.2 = 20%)
+  - `args`: (Optional) Configuration for executable checks:
+    - `setup`: Array of setup commands
+    - `commands`: Array of test commands to run
+
+- averageScore: Mean score across all judges (0-1 scale)
+- normalizedWeight: Weight after normalization (typically same as original)
+- variance: Statistical variance in judge scores (higher = more disagreement among judges)
+
+- judges: Array of individual judge evaluations:
+  - `name`: Judge identifier (e.g., "claude-4.5", "gpt-5-codex", "kimi")
+  - `model`: Full model path (e.g., "opencode/claude-sonnet-4-5")
+  - `score`: Binary rating (0 = FAIL, 1 = PASS)
+  - `rationale`: Full text explanation (typically 200-1000 words with code examples, diffs, and detailed technical analysis)
+
+### Analysis Summaries
+
+Per Agent:Model Summary (stored in benchmark's `summary` field):
+- Multi-paragraph markdown text (typically 200-500 words)
+- Describes agent behavior across episodes
+- Common sections: "Overview", "Approach", "Key Actions", "Observations"
+- Highlights patterns like tool usage, exploration strategies, consistency
+
+Per Eval Cross-Agent Analysis (stored in `analysis-{safe-repo-name}/analysis.txt`):
+- Comprehensive comparison document (1000+ words)
+- Compares all agent:model combinations on the same eval
+- Example sections:
+  - "Executive Summary"
+  - "Systematic Performance Patterns" (tier separation, penalty analysis)
+  - "Implementation Quality Differences"
+  - "Testing Strategy Divergence"
+  - "Agent Behavioral Tendencies"
+- Includes comparison tables and detailed insights
+
+Analysis Metadata (in `analysis-{safe-repo-name}/analysis-info.json`):
+- `eval`: Repository name
+- `safe`: URL-safe repository name
+- `url`: Link to GitHub Actions run that generated the analysis
+
+### Run Metadata (in `metadata.json`)
+Each benchmark run includes:
+- commit: Git commit hash of the benchmark run
+- workflowRun: GitHub Actions workflow details:
+  - `id`: Workflow run ID
+  - `name`: Workflow name (e.g., "Publish and Benchmark Preview Packages")
+  - `status`: "completed", "in_progress", etc.
+  - `conclusion`: "success", "failure", etc.
+  - `createdAt`: ISO timestamp
+- artifacts: Array of generated benchmark/analysis artifacts:
+  - `name`: Artifact identifier (pattern: `benchmark-{agent}-{model}-{safe-repo-name}` or `analysis-{safe-repo-name}`)
+  - `size`: File size in bytes
+  - `createdAt`: ISO timestamp
+  - `expired`: Boolean
+
+### Episode-Specific Data
+Each benchmark run executes 3 episodes (independent attempts at the same task). This helps measure consistency and identify variance in agent behavior.
+
+episodes: Array of 3 episode objects, each containing:
+- finalScore: Episode-specific final score (0-1 scale)
+- baseScore: Episode-specific base score before penalties
+- variancePenalty: Penalty applied for this episode
+- usage: Token usage for this episode:
+  - `input`: Input tokens consumed
+  - `output`: Output tokens generated
+- scores: Full score breakdown identical to the run-level structure:
+  - Each score dimension (api-signature, logic-equivalence, etc.) with:
+    - `assignment`: Score name, weight, args
+    - `averageScore`: Mean judge score for this episode
+    - `variance`: Judge disagreement variance for this episode
+    - `judges`: Array of 3 judge evaluations (name, model, score, rationale)
+
+Key Insight: Episode-level scores can vary significantly. For example:
+- Episode 0: finalScore = 0.500
+- Episode 1: finalScore = 0.211
+- Episode 2: finalScore = 0.322
+
+This variance reveals agent consistency issues and is critical for understanding reliability.
+
+### Aggregate-Level Data
+- usage: Aggregated token usage across all episodes:
+  - `input`: Total input tokens
+  - `output`: Total output tokens
+
+### Important Design Considerations
+
+1. Judge rationales are substantial - Not one-liners; they're detailed technical analyses with code snippets, sometimes 500+ words each. Design for expandable/collapsible detailed views.
+
+2. Data is hierarchical - Run → Eval → Scores → Judges. Navigation should reflect this hierarchy clearly.
+
+3. Two types of summaries exist:
+   - Agent-specific: "How did this agent:model perform on this eval?"
+   - Cross-agent: "How did all agents compare on this specific eval?"
+
+4. Multiple commits = multiple snapshots - Each commit has its own `metadata.json` with different artifact lists. Design for temporal navigation between these snapshots.
+
+5. Scores are multi-dimensional and variable - Each eval can have different score types with different weights. One eval might have 5 scores, another might have 3. Radar charts should handle variable dimensions.
+
+6. Variance is meaningful - High variance indicates judge disagreement. Surface this visually as it signals potential evaluation issues or edge cases.
+
+7. Episodes reveal consistency patterns - Each run has 3 independent episodes with separate scores and judge rationales. Design for:
+   - Episode-by-episode comparison views (show all 3 side-by-side)
+   - Variance visualization across episodes (e.g., bar chart showing episode scores)
+   - Episode-specific judge rationales (judges evaluate each episode independently, so rationales differ per episode)
+   - Identifying which episodes succeeded vs failed and why
