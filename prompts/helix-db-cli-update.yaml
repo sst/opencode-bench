@@ -1,0 +1,4 @@
+generated_at: 2025-11-09T11:07:49.421Z
+prompts:
+  - commit: 651aef390cb11ac712ddd299e050752b601b4864
+    prompt: Standardize CLI binary naming to use Rust target triples instead of OS-arch patterns. Update the GitHub Actions workflow files for both CLI builds to rename binaries from the old pattern (e.g., helix-cli-linux-amd64, helix-cli-macos-arm64) to the new Rust target triple pattern (e.g., helix-x86_64-unknown-linux-gnu, helix-aarch64-apple-darwin). Update the install script to detect platform and architecture by directly mapping to Rust target triples rather than constructing names from separate OS and arch variables. The script should detect the OS type and architecture in one pass and set the target string accordingly, then construct the binary name using that target triple. Ensure Windows binaries retain the .exe extension. This change aligns binary naming with Rust's native target naming conventions across all build and installation workflows.

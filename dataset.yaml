@@ -65,3 +65,24 @@
         commands:
           - npm run lint
           - npm run build
+- repo: HelixDB/helix-db
+  from: ac6d036abe9d921aeecb5f8a84a6766903b2beef
+  to: 651aef390cb11ac712ddd299e050752b601b4864
+  prompts: prompts/helix-db-cli-update.yaml
+  issues: []
+  scores:
+    api-signature:
+      weight: 0.2
+    logic-equivalence:
+      weight: 0.3
+    integration-points:
+      weight: 0.2
+    test-coverage:
+      weight: 0.2
+    checks:
+      weight: 0.1
+      args:
+        setup:
+          - cargo fetch
+        commands:
+          - cargo fmt --all -- --check
