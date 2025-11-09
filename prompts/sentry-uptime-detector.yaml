@@ -1,0 +1,17 @@
+generated_at: 2025-11-09T17:56:17.175Z
+prompts:
+  - commit: b950f7636b79d9431b800d6fbe7c166f3ff00d29
+    prompt: |-
+      Add Duration and Uptime percentage sections to the uptime detector details page. These sections should display quick-glance metrics for on-call engineers to see historical performance without leaving the detector view.
+
+      Fetch uptime summary data using the existing uptime summary endpoint for the current detector. While the data is loading, show a placeholder. If no data is available for the detector, display a dash ("-"). When data is present, render the average duration and uptime percentage using the appropriate display components.
+
+      The Duration section should show the average duration from the summary data. The Uptime section should show the uptime percentage calculated from the summary's check counts, with a note explaining it represents the last 90 days.
+
+      Update the test suite to cover:
+      - Rendering the Duration section with data
+      - Rendering the Uptime section with percentage calculated from check counts
+      - Mock the uptime summary endpoint in existing tests that render uptime detectors
+      - Adjust assertions that count "Uptime" text occurrences to account for the new section heading
+
+      Follow existing patterns in the codebase for layout, loading states, and component integration.

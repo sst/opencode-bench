@@ -31,6 +31,7 @@ export interface Episode {
 }
 
 export interface EvaluationMetadataExport {
+  identifier: DatasetEval["identifier"];
   repo: DatasetEval["repo"];
   from: DatasetEval["from"];
   to: DatasetEval["to"];

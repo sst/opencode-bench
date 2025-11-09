@@ -795,6 +795,7 @@ function summarizeAggregation(
   const exportData: EvaluationRunExport = {
     agent: agentName,
     evaluation: {
+      identifier: datasetEval.identifier,
       repo: datasetEval.repo,
       from: datasetEval.from,
       to: datasetEval.to,

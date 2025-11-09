@@ -32,6 +32,7 @@ type ModelSummary = {
 
 type EvalSummary = {
   eval: string;
+  label: string;
   models: ModelSummary[];
 };
 
@@ -214,6 +215,7 @@ const sampleExport: EvaluationRunExport[] = [
   {
     agent: "opencode",
     evaluation: {
+      identifier: "prismicio-community/course-fizzi-next@e90e3f4..2760114",
       repo: "prismicio-community/course-fizzi-next",
       from: "e90e3f4e07119d60e8822d4f474f6dfa5afe589f",
       to: "2760114f2647ebec8f63e0ecc2dc87a8cd4096ac",
@@ -232,6 +234,7 @@ const sampleExport: EvaluationRunExport[] = [
   {
     agent: "opencode",
     evaluation: {
+      identifier: "prismicio-community/course-fizzi-next@e90e3f4..2760114",
       repo: "prismicio-community/course-fizzi-next",
       from: "e90e3f4e07119d60e8822d4f474f6dfa5afe589f",
       to: "2760114f2647ebec8f63e0ecc2dc87a8cd4096ac",
@@ -262,6 +265,7 @@ function loadExport(): EvaluationRunExport[] {
 
 function toEvalSummaries(exportData: EvaluationRunExport[]): EvalSummary[] {
   const evalMap = new Map<string, ModelSummary[]>();
+  const labelMap = new Map<string, string>();
 
   exportData.forEach((run, index) => {
     assert(
@@ -273,6 +277,12 @@ function toEvalSummaries(exportData: EvaluationRunExport[]): EvalSummary[] {
     assert(
       typeof repo === "string" && repo.length > 0,
       `Missing evaluation repo for entry at index ${index}`,
+    );
+
+    const identifier = run.evaluation?.identifier ?? repo;
+    assert(
+      typeof identifier === "string" && identifier.length > 0,
+      `Missing evaluation identifier for "${repo}" (index ${index})`,
     );
 
     assert(
@@ -294,7 +304,7 @@ function toEvalSummaries(exportData: EvaluationRunExport[]): EvalSummary[] {
       variance: score.variance,
     }));
 
-    const summaries = evalMap.get(repo) ?? [];
+    const summaries = evalMap.get(identifier) ?? [];
 
     modelIds.forEach((modelId) => {
       const agentName = (run.agent ?? "").trim();
@@ -311,11 +321,15 @@ function toEvalSummaries(exportData: EvaluationRunExport[]): EvalSummary[] {
       });
     });
 
-    evalMap.set(repo, summaries);
+    evalMap.set(identifier, summaries);
+    if (!labelMap.has(identifier)) {
+      labelMap.set(identifier, repo);
+    }
   });
 
-  return Array.from(evalMap.entries()).map(([repo, models]) => ({
-    eval: repo,
+  return Array.from(evalMap.entries()).map(([identifier, models]) => ({
+    eval: identifier,
+    label: labelMap.get(identifier) ?? identifier,
     models,
   }));
 }
@@ -463,12 +477,15 @@ function buildPayloads(
       };
     });
 
-    const averageChartUrl = buildAverageChartUrl(summary.eval, summary.models);
+    const averageChartUrl = buildAverageChartUrl(
+      summary.label,
+      summary.models,
+    );
 
     const analysisLink = analysisLinks.get(summary.eval);
     assert(
       typeof analysisLink === "string" && analysisLink.length > 0,
-      `Missing analysis link for evaluation "${summary.eval}". Ensure analysis links are provided for every eval.`,
+      `Missing analysis link for evaluation "${summary.label}" (key: ${summary.eval}). Ensure analysis links are provided for every eval.`,
     );
 
     fields.push({
@@ -478,7 +495,7 @@ function buildPayloads(
     });
 
     return {
-      title: summary.eval,
+      title: summary.label,
       color: embedColor,
       fields,
       ...(averageChartUrl
@@ -588,7 +605,7 @@ async function main(): Promise<void> {
 
   console.log("===== Plain-text preview =====\n");
   for (const summary of evalSummaries) {
-    console.log(`Eval: ${summary.eval}`);
+    console.log(`Eval: ${summary.label} (${summary.eval})`);
     summary.models.forEach((model) => {
       console.log(`Model: ${model.id}`);
       console.log(`  Score: ${model.final.toFixed(3)}`);

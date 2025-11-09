@@ -113,3 +113,24 @@
           - cargo fetch
         commands:
           - cargo fmt --all -- --check
+- repo: getsentry/sentry
+  from: 62c4c6573f53f39b2f5b73356e26f330a501e7ea
+  to: b950f7636b79d9431b800d6fbe7c166f3ff00d29
+  prompts: prompts/sentry-uptime-detector.yaml
+  issues: []
+  context: >
+    Product wants a quick-glance Duration readout and an uptime percentage on the
+    detector details page so on-call engineers can see historical performance
+    without leaving the detector view. The agent should hydrate those summaries
+    using the existing uptime summary endpoint, show a placeholder while loading,
+    handle missing data gracefully, and expand the relevant tests/specs to cover
+    the new sections.
+  scores:
+    api-signature:
+      weight: 0.2
+    logic-equivalence:
+      weight: 0.3
+    integration-points:
+      weight: 0.3
+    test-coverage:
+      weight: 0.2
