@@ -71,6 +71,10 @@ async function generateTask(
       ? `${commit.diff.slice(0, 50_000)}\n... [truncated]`
       : commit.diff;
 
+  const additionalContext = entry.context
+    ? `Additional maintainer context:\n${entry.context}\n\n`
+    : "";
+
   try {
     const result = await generateObject({
       model: getZenLanguageModel(plannerModelId),
@@ -81,7 +85,7 @@ async function generateTask(
 Base commit: ${entry.from}
 Target commit: ${entry.to}
 
-Commit: ${commit.sha}
+${additionalContext}Commit: ${commit.sha}
 Title: ${commit.title}
 Diff:
 ${truncatedDiff}

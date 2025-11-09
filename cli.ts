@@ -42,19 +42,19 @@ const EPISODE_TIMEOUT_MS = 30 * 60 * 1000; // 30 minutes per episode
 
 async function printHelp(): Promise<void> {
   console.log(
-    "Usage: orvl <agent> --model <model> --eval <owner/name> [--output <file>]",
+    "Usage: orvl <agent> --model <model> --eval <repo>@<from..to> [--output <file>]",
   );
   console.log("");
   console.log("Examples:");
   console.log(
-    "  orvl opencode --model opencode/gpt-5-codex --eval noworneverev/graphrag-visualizer",
+    "  orvl opencode --model opencode/gpt-5-codex --eval noworneverev/graphrag-visualizer@1503744..2760114",
   );
   console.log(
-    "  orvl opencode --model opencode/claude-sonnet-4-5 --eval prismicio-community/course-fizzi-next",
+    "  orvl opencode --model opencode/claude-sonnet-4-5 --eval prismicio-community/course-fizzi-next@1503744..2760114",
   );
   console.log();
   console.log(
-    "  orvl opencode --model opencode/gpt-5-codex --eval prismicio-community/course-fizzi-next --output results.json",
+    "  orvl opencode --model opencode/gpt-5-codex --eval prismicio-community/course-fizzi-next@1503744..2760114 --output results.json",
   );
   console.log("");
   const agents = await listAgents();
@@ -67,8 +67,8 @@ async function printHelp(): Promise<void> {
 }
 
 function listEvalIdentifiers(): string[] {
-  return Array.from(new Set(dataset.map((entry) => entry.repo))).sort((a, b) =>
-    a.localeCompare(b),
+  return Array.from(new Set(dataset.map((entry) => entry.identifier))).sort(
+    (a, b) => a.localeCompare(b),
   );
 }
 
@@ -150,15 +150,15 @@ function isHelpRequest(arg: string | undefined): boolean {
 
 async function handlePrompts(args: string[]): Promise<void> {
   if (args.length === 0 || args[0] === "--help" || args[0] === "-h") {
-    console.log("Usage: orvl prompts [--eval <repo>] ");
+    console.log("Usage: orvl prompts [--eval <repo>@<from..to>] ");
     console.log("");
     console.log("Options:");
     console.log(
-      "  --eval <repo>  Generate prompts for a specific evaluation (e.g., DataDog/datadog-lambda-python)",
+      "  --eval <repo>@<from..to>  Generate prompts for a specific evaluation (e.g., DataDog/datadog-lambda-python@93d4a07..d776378)",
     );
     console.log("");
     console.log("Examples:");
-    console.log("  orvl prompts --eval DataDog/datadog-lambda-python");
+    console.log("  orvl prompts --eval DataDog/datadog-lambda-python@93d4a07..d776378");
     return;
   }
 
@@ -184,11 +184,11 @@ async function handlePrompts(args: string[]): Promise<void> {
   if (generateAll) {
     evalsToGenerate = [...dataset];
   } else if (targetEval) {
-    const evalDef = dataset.find((entry) => entry.repo === targetEval);
+    const evalDef = dataset.find((entry) => entry.identifier === targetEval);
     if (!evalDef) {
       console.error(`Evaluation not found: ${targetEval}`);
       console.error("Available evaluations:");
-      dataset.forEach((entry) => console.error(`  - ${entry.repo}`));
+      dataset.forEach((entry) => console.error(`  - ${entry.identifier}`));
       process.exitCode = 1;
       return;
     }
@@ -247,7 +247,9 @@ async function main(): Promise<void> {
     `Model ${modelFilter} is not registered for agent ${agent.name}.`,
   );
 
-  const evalDefinition = dataset.find((entry) => entry.repo === evalFilter);
+  const evalDefinition = dataset.find(
+    (entry) => entry.identifier === evalFilter,
+  );
 
   if (!evalDefinition) {
     console.error(`Eval ${evalFilter ?? evalFilter} was not found.`);

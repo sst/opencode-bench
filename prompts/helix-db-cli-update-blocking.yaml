@@ -1,0 +1,4 @@
+generated_at: 2025-11-09T15:46:14.881Z
+prompts:
+  - commit: 12ebac2e330aa4dfd5509852653508de51be4186
+    prompt: Refactor the update command to avoid crashes caused by calling blocking update logic from an async context. Move the blocking work into a separate synchronous function and invoke it via a spawn_blocking call from the async entry point. Preserve all existing behavior and ensure the command continues to work as expected.
