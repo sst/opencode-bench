@@ -44,6 +44,8 @@ jobs:
 
       - id: matrix
         name: Build benchmark matrix
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           bun add -g opencode-ai@dev @openai/codex-sdk
           set -euo pipefail
