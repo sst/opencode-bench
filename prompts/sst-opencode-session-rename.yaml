@@ -1,0 +1,4 @@
+generated_at: 2025-11-09T18:45:00.000Z
+prompts:
+  - commit: a96365fd81555a2967524930aeb949009008f9a2
+    prompt: Add a “Rename session” command bar action that opens the existing session rename dialog for the currently active session.
