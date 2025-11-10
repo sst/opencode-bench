@@ -1,139 +1,139 @@
-- repo: prismicio-community/course-fizzi-next
-  from: 15037446358508e153e765da49f8f5defa7fbbf6
-  to: 2760114f2647ebec8f63e0ecc2dc87a8cd4096ac
-  prompts: prompts/course-fizzi-next.yaml
-  issues: []
-  scores:
-    api-signature:
-      weight: 0.2
-    logic-equivalence:
-      weight: 0.3
-    integration-points:
-      weight: 0.2
-    test-coverage:
-      weight: 0.2
-    checks:
-      weight: 0.1
-      args:
-        setup:
-          - npm ci
-        commands:
-          - npm run lint
-          - npm exec prettier -- --check .
-- repo: DataDog/datadog-lambda-python
-  from: 93d4a07fa61a4d4d2feec08e722505a9e0cc8657
-  to: d7763789f262b2da228f8210509e302e6e510d0a
-  prompts: prompts/datadog-lambda-python.yaml
-  issues: []
-  scores:
-    api-signature:
-      weight: 0.2
-    logic-equivalence:
-      weight: 0.3
-    integration-points:
-      weight: 0.2
-    test-coverage:
-      weight: 0.2
-    checks:
-      weight: 0.1
-      args:
-        setup:
-          - python3 -m venv .venv
-          - ./.venv/bin/python -m pip install ".[dev]"
-        commands:
-          - ./.venv/bin/pytest -vv
-          - ./.venv/bin/flake8 datadog_lambda/
-- repo: AlaminPu1007/algorithm-visualizer
-  from: ca409519ec96a83ec8d6c2ba30f2487f8d601719
-  to: 21845e972dd8e2378cbcd16accc5ae8cdd37acb2
-  prompts: prompts/algorithm-visualizer.yaml
-  issues: []
-  scores:
-    api-signature:
-      weight: 0.22
-    logic-equivalence:
-      weight: 0.34
-    integration-points:
-      weight: 0.22
-    test-coverage:
-      weight: 0.2
-    checks:
-      weight: 0.1
-      args:
-        setup:
-          - npm ci
-        commands:
-          - npm run lint
-          - npm run build
-- repo: HelixDB/helix-db
-  from: ac6d036abe9d921aeecb5f8a84a6766903b2beef
-  to: 651aef390cb11ac712ddd299e050752b601b4864
-  prompts: prompts/helix-db-cli-update.yaml
-  issues: []
-  scores:
-    api-signature:
-      weight: 0.2
-    logic-equivalence:
-      weight: 0.3
-    integration-points:
-      weight: 0.2
-    test-coverage:
-      weight: 0.2
-    checks:
-      weight: 0.1
-      args:
-        setup:
-          - cargo fetch
-        commands:
-          - cargo fmt --all -- --check
-- repo: HelixDB/helix-db
-  from: 35a9e733c659762487ba03ee68184f91639b912a
-  to: 12ebac2e330aa4dfd5509852653508de51be4186
-  prompts: prompts/helix-db-cli-update-blocking.yaml
-  issues: []
-  context: >
-    Maintainer note: keep the prompt high-level. Mention only that the async CLI
-    calls a blocking update routine and that this mismatch causes crashes; do not
-    reference specific crates, APIs, stack traces, or error strings. Focus on
-    instructing the agent to move the blocking work off the async path while
-    preserving existing behavior.
-  scores:
-    api-signature:
-      weight: 0.2
-    logic-equivalence:
-      weight: 0.3
-    integration-points:
-      weight: 0.2
-    test-coverage:
-      weight: 0.2
-    checks:
-      weight: 0.1
-      args:
-        setup:
-          - cargo fetch
-        commands:
-          - cargo fmt --all -- --check
-- repo: getsentry/sentry
-  from: 62c4c6573f53f39b2f5b73356e26f330a501e7ea
-  to: b950f7636b79d9431b800d6fbe7c166f3ff00d29
-  prompts: prompts/sentry-uptime-detector.yaml
-  issues: []
-  context: >
-    Product wants a quick-glance Duration readout and an uptime percentage on the
-    detector details page so on-call engineers can see historical performance
-    without leaving the detector view. The agent should hydrate those summaries
-    using the existing uptime summary endpoint, show a placeholder while loading,
-    handle missing data gracefully, and expand the relevant tests/specs to cover
-    the new sections.
-  scores:
-    api-signature:
-      weight: 0.2
-    logic-equivalence:
-      weight: 0.3
-    integration-points:
-      weight: 0.3
-    test-coverage:
-      weight: 0.2
+# - repo: prismicio-community/course-fizzi-next
+#   from: 15037446358508e153e765da49f8f5defa7fbbf6
+#   to: 2760114f2647ebec8f63e0ecc2dc87a8cd4096ac
+#   prompts: prompts/course-fizzi-next.yaml
+#   issues: []
+#   scores:
+#     api-signature:
+#       weight: 0.2
+#     logic-equivalence:
+#       weight: 0.3
+#     integration-points:
+#       weight: 0.2
+#     test-coverage:
+#       weight: 0.2
+#     checks:
+#       weight: 0.1
+#       args:
+#         setup:
+#           - npm ci
+#         commands:
+#           - npm run lint
+#           - npm exec prettier -- --check .
+# - repo: DataDog/datadog-lambda-python
+#   from: 93d4a07fa61a4d4d2feec08e722505a9e0cc8657
+#   to: d7763789f262b2da228f8210509e302e6e510d0a
+#   prompts: prompts/datadog-lambda-python.yaml
+#   issues: []
+#   scores:
+#     api-signature:
+#       weight: 0.2
+#     logic-equivalence:
+#       weight: 0.3
+#     integration-points:
+#       weight: 0.2
+#     test-coverage:
+#       weight: 0.2
+#     checks:
+#       weight: 0.1
+#       args:
+#         setup:
+#           - python3 -m venv .venv
+#           - ./.venv/bin/python -m pip install ".[dev]"
+#         commands:
+#           - ./.venv/bin/pytest -vv
+#           - ./.venv/bin/flake8 datadog_lambda/
+# - repo: AlaminPu1007/algorithm-visualizer
+#   from: ca409519ec96a83ec8d6c2ba30f2487f8d601719
+#   to: 21845e972dd8e2378cbcd16accc5ae8cdd37acb2
+#   prompts: prompts/algorithm-visualizer.yaml
+#   issues: []
+#   scores:
+#     api-signature:
+#       weight: 0.22
+#     logic-equivalence:
+#       weight: 0.34
+#     integration-points:
+#       weight: 0.22
+#     test-coverage:
+#       weight: 0.2
+#     checks:
+#       weight: 0.1
+#       args:
+#         setup:
+#           - npm ci
+#         commands:
+#           - npm run lint
+#           - npm run build
+# - repo: HelixDB/helix-db
+#   from: ac6d036abe9d921aeecb5f8a84a6766903b2beef
+#   to: 651aef390cb11ac712ddd299e050752b601b4864
+#   prompts: prompts/helix-db-cli-update.yaml
+#   issues: []
+#   scores:
+#     api-signature:
+#       weight: 0.2
+#     logic-equivalence:
+#       weight: 0.3
+#     integration-points:
+#       weight: 0.2
+#     test-coverage:
+#       weight: 0.2
+#     checks:
+#       weight: 0.1
+#       args:
+#         setup:
+#           - cargo fetch
+#         commands:
+#           - cargo fmt --all -- --check
+# - repo: HelixDB/helix-db
+#   from: 35a9e733c659762487ba03ee68184f91639b912a
+#   to: 12ebac2e330aa4dfd5509852653508de51be4186
+#   prompts: prompts/helix-db-cli-update-blocking.yaml
+#   issues: []
+#   context: >
+#     Maintainer note: keep the prompt high-level. Mention only that the async CLI
+#     calls a blocking update routine and that this mismatch causes crashes; do not
+#     reference specific crates, APIs, stack traces, or error strings. Focus on
+#     instructing the agent to move the blocking work off the async path while
+#     preserving existing behavior.
+#   scores:
+#     api-signature:
+#       weight: 0.2
+#     logic-equivalence:
+#       weight: 0.3
+#     integration-points:
+#       weight: 0.2
+#     test-coverage:
+#       weight: 0.2
+#     checks:
+#       weight: 0.1
+#       args:
+#         setup:
+#           - cargo fetch
+#         commands:
+#           - cargo fmt --all -- --check
+# - repo: getsentry/sentry
+#   from: 62c4c6573f53f39b2f5b73356e26f330a501e7ea
+#   to: b950f7636b79d9431b800d6fbe7c166f3ff00d29
+#   prompts: prompts/sentry-uptime-detector.yaml
+#   issues: []
+#   context: >
+#     Product wants a quick-glance Duration readout and an uptime percentage on the
+#     detector details page so on-call engineers can see historical performance
+#     without leaving the detector view. The agent should hydrate those summaries
+#     using the existing uptime summary endpoint, show a placeholder while loading,
+#     handle missing data gracefully, and expand the relevant tests/specs to cover
+#     the new sections.
+#   scores:
+#     api-signature:
+#       weight: 0.2
+#     logic-equivalence:
+#       weight: 0.3
+#     integration-points:
+#       weight: 0.3
+#     test-coverage:
+#       weight: 0.2
 - repo: sst/opencode
   from: 090d27df11a718cff3453a38da22d8a5eb405631
   to: b3c6d0b08a571796e4a9ecce798408b15a525df1
@@ -152,21 +152,21 @@
       weight: 0.2
     test-coverage:
       weight: 0.2
-- repo: sst/opencode
-  from: 5f7e1e099b2b5786dd94a172c33d6997d54c215f
-  to: a96365fd81555a2967524930aeb949009008f9a2
-  prompts: prompts/sst-opencode-session-rename.yaml
-  issues: []
-  context: >
-    The command bar is missing a "Rename session" action. Add a concise entry that
-    opens the existing session rename dialog for the current session via the
-    command palette; keep the prompt short and avoid implementation details.
-  scores:
-    api-signature:
-      weight: 0.2
-    logic-equivalence:
-      weight: 0.3
-    integration-points:
-      weight: 0.2
-    test-coverage:
-      weight: 0.2
+# - repo: sst/opencode
+#   from: 5f7e1e099b2b5786dd94a172c33d6997d54c215f
+#   to: a96365fd81555a2967524930aeb949009008f9a2
+#   prompts: prompts/sst-opencode-session-rename.yaml
+#   issues: []
+#   context: >
+#     The command bar is missing a "Rename session" action. Add a concise entry that
+#     opens the existing session rename dialog for the current session via the
+#     command palette; keep the prompt short and avoid implementation details.
+#   scores:
+#     api-signature:
+#       weight: 0.2
+#     logic-equivalence:
+#       weight: 0.3
+#     integration-points:
+#       weight: 0.2
+#     test-coverage:
+#       weight: 0.2
