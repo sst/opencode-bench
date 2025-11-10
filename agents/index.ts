@@ -27,11 +27,11 @@ function createAgentRegistration(
 }
 
 const agents: Record<string, AgentRegistration> = {
-  // codex: createAgentRegistration("codex", await import("~/agents/codex.js")),
-  // opencode: createAgentRegistration(
-  //   "opencode",
-  //   await import("~/agents/opencode.js"),
-  // ),
+  codex: createAgentRegistration("codex", await import("~/agents/codex.js")),
+  opencode: createAgentRegistration(
+    "opencode",
+    await import("~/agents/opencode.js"),
+  ),
   "claude-code": createAgentRegistration(
     "claude-code",
     await import("~/agents/claude-code.js"),
