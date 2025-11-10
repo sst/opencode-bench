@@ -152,5 +152,3 @@
       weight: 0.2
     test-coverage:
       weight: 0.2
-    checks:
-      weight: 0.1
