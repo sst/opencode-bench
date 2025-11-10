@@ -33,6 +33,7 @@ type ModelSummary = {
 type EvalSummary = {
   eval: string;
   label: string;
+  title: string;
   models: ModelSummary[];
 };
 
@@ -330,6 +331,7 @@ function toEvalSummaries(exportData: EvaluationRunExport[]): EvalSummary[] {
   return Array.from(evalMap.entries()).map(([identifier, models]) => ({
     eval: identifier,
     label: labelMap.get(identifier) ?? identifier,
+    title: `${labelMap.get(identifier) ?? identifier} (${identifier})`,
     models,
   }));
 }
@@ -495,7 +497,7 @@ function buildPayloads(
     });
 
     return {
-      title: summary.label,
+      title: summary.title,
       color: embedColor,
       fields,
       ...(averageChartUrl

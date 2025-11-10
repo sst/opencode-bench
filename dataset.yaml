@@ -134,3 +134,23 @@
       weight: 0.3
     test-coverage:
       weight: 0.2
+- repo: sst/opencode
+  from: 090d27df11a718cff3453a38da22d8a5eb405631
+  to: b3c6d0b08a571796e4a9ecce798408b15a525df1
+  prompts: prompts/sst-opencode-formatting.yaml
+  issues: []
+  context: >
+    Keep the prompt extremely short. Simply tell the agent that formatting isn't
+    working and needs to be fixed—no mention of files, causes, or implementation
+    hints.
+  scores:
+    api-signature:
+      weight: 0.2
+    logic-equivalence:
+      weight: 0.3
+    integration-points:
+      weight: 0.2
+    test-coverage:
+      weight: 0.2
+    checks:
+      weight: 0.1
