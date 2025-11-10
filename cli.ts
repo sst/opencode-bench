@@ -409,7 +409,27 @@ async function main(): Promise<void> {
           );
 
           if (!hasChanges) {
-            fail("No changes detected for this episode.");
+            console.log(
+              `${prefix} No changes detected; recording zeroed episode.`,
+            );
+
+            const emptyAggregation = new Map<string, ScoreAggregationInput>();
+            const emptySummary: AggregationSummary = {
+              perScore: [],
+              finalScore: 0,
+              baseScore: 0,
+              variancePenalty: 0,
+            };
+
+            return {
+              index: episodeIndex,
+              aggregation: emptyAggregation,
+              aggregationSummary: emptySummary,
+              scoreExports: [],
+              logs: [],
+              actions: episodeActions,
+              usage,
+            };
           }
 
           const episodeAggregation = await collectAggregationInputsForRun(
