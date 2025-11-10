@@ -408,29 +408,8 @@ async function main(): Promise<void> {
             baselineCommit,
           );
 
-          if (!hasChanges) {
-            console.log(
-              `${prefix} No changes detected; recording zeroed episode.`,
-            );
-
-            const emptyAggregation = new Map<string, ScoreAggregationInput>();
-            const emptySummary: AggregationSummary = {
-              perScore: [],
-              finalScore: 0,
-              baseScore: 0,
-              variancePenalty: 0,
-            };
-
-            return {
-              index: episodeIndex,
-              aggregation: emptyAggregation,
-              aggregationSummary: emptySummary,
-              scoreExports: [],
-              logs: [],
-              actions: episodeActions,
-              usage,
-            };
-          }
+          // Even if no changes were written, continue to scoring so judges can
+          // compare the untouched baseline against the desired target.
 
           const episodeAggregation = await collectAggregationInputsForRun(
             evalDefinition,
