@@ -1,195 +1,168 @@
-> opencode bench
+# OpenCode Bench
 
-A benchmarking framework for evaluating opencode's AI coding agents across real-world GitHub repositories. The framework runs agents against target repositories and scores their outputs using multiple LLM judges, measuring code quality across dimensions like readability, functionality, adherence to best practices, and efficiency.
+A rigorous benchmarking framework for evaluating AI coding agents on real-world GitHub repositories. OpenCode Bench runs agents against production code changes and scores their outputs using multiple LLM judges across five key dimensions: API signature compliance, logic equivalence, integration correctness, test coverage, and project checks.
 
-```bash
-orvl opencode --model opencode/gpt-5-codex --eval noworneverev/graphrag-visualizer
-orvl opencode --model opencode/claude-sonnet-4-5 --eval prismicio-community/course-fizzi-next --output results.json
-```
+## Key Features
 
-Both `--model` and `--eval` are required; the CLI now runs a single agent/model/eval pairing at a time. Each invocation executes three isolated `[episode X/3]` runs (fresh clones) and aggregates the judge scores before exporting results.
+- **Multi-Judge Evaluation** - Three independent LLM judges score each submission with variance penalties for disagreement
+- **Real-World Scenarios** - Evaluations based on actual production commits from open-source repositories
+- **Episode Isolation** - Three isolated runs per evaluation with fresh repository clones for statistical reliability
+- **Multi-Dimensional Scoring** - Five weighted score types measuring different aspects of code quality
+- **Mathematical Rigor** - Weighted aggregation with variance penalties ensures consistent, fair scoring
 
-## Setup
+## Quick Start
+
+### Prerequisites
+
+- [Bun](https://bun.sh) runtime (v1.2.21+)
+- API keys for the agents you want to test:
+  - `OPENCODE_API_KEY` for OpenCode agents
+  - `OPENAI_API_KEY` for Codex agents
+  - `ANTHROPIC_API_KEY` for Claude Code agents
+
+### Installation
+
 ```bash
 bun install
 bun run build
 ```
 
-During development the CLI can be executed directly with Bun:
+### Basic Usage
+
+Run a benchmark evaluation:
 
 ```bash
-bun run dev -- <agent> --model <model> --eval <owner/name>
+orvl opencode --model opencode/claude-sonnet-4-5 --eval prismicio-community/course-fizzi-next
 ```
 
-## Continuous Releases
-Install the [pkg.pr.new GitHub App](https://github.com/apps/pkg-pr-new) on your repository to enable preview packages for every push or pull request. The workflow in `.github/workflows/pkg-pr-new.yml` installs dependencies with Bun, builds the project, and runs `bunx pkg-pr-new publish` to publish previews automatically.
+Export results to JSON:
 
-## Scores
-a score is a function that returns a score (0 to 1).
-
-`scores/ui.ts`
-```typescript
-export default createScore(() => {
-	// here's where the judge would operate and give a score
-	// ...
-	return {
-		score: 0.43,
-		rationale: "Baseline UI rationale"
-	}
-})
+```bash
+orvl opencode --model opencode/gpt-5-codex --eval DataDog/datadog-lambda-python --output results.json
 ```
 
-## TODO
-- [ ] Stabilize scoring by replacing flaky LLM judges for logic-equivalence, integration-points, test-coverage, and checks with deterministic analysis (see `benchmark-observations.md` for details).
+Both `--model` and `--eval` are required. Each invocation executes three isolated episodes (fresh clones) and aggregates the judge scores before exporting results.
 
-`scores/code-quality.ts`
-```typescript
-export default createScore(() => {
-	// ...
-	return {
-		score: 0.12,
-		rationale: "Baseline code quality rationale"
-	}
-})
+### Development Mode
+
+During development, run the CLI directly with Bun:
+
+```bash
+bun run dev -- opencode --model opencode/claude-sonnet-4-5 --eval <owner/repo>
 ```
 
-// --- setup --------------------------------------------------
+## How It Works
 
-// Assessors and their weights
-const assessors = ["Claude", "GPT", "Kimi"];
-const w = [0.5, 0.3, 0.2]; // must sum to 1
+OpenCode Bench evaluates AI coding agents by:
 
-// Score types and their weights
-const scoreTypes = ["readability", "cases", "bugs"];
-const v = [0.4, 0.3, 0.3]; // must sum to 1
+1. **Selecting a baseline** - Checking out a repository at a specific commit
+2. **Generating a task** - Creating a prompt from a later production commit
+3. **Running the agent** - Executing the AI agent with a 30-minute timeout
+4. **Comparing outputs** - Diffing the agent's changes against the actual production code
+5. **Multi-judge scoring** - Three LLM judges evaluate across five dimensions
+6. **Aggregating results** - Computing weighted scores with variance penalties
 
-// Scores matrix S[i][j] = score from assessor i on score type j
-const S = [
-  [0.80, 0.60, 0.70], // Claude
-  [0.90, 0.70, 0.60], // GPT
-  [0.70, 0.50, 0.80], // Kimi
-];
-
-// --- functions ---------------------------------------------
-
-// weighted mean for a single score type j
-function meanForScoreType(j) {
-  return S.reduce((acc, row, i) => acc + w[i] * row[j], 0);
-}
-
-// weighted variance for a single score type j
-function varianceForScoreType(j) {
-  const mean = meanForScoreType(j);
-  return S.reduce((acc, row, i) => acc + w[i] * (row[j] - mean) ** 2, 0);
-}
-
-// --- compute ------------------------------------------------
-
-const means = scoreTypes.map((_, j) => meanForScoreType(j));
-const R = scoreTypes.reduce((acc, _, j) => acc + v[j] * means[j], 0);
-
-// disagreement penalty
-const variances = scoreTypes.map((_, j) => varianceForScoreType(j));
-const lambda = 0.5;
-const R_pen = R - lambda * variances.reduce((acc, varj, j) => acc + v[j] * varj, 0);
-
-// --- output -------------------------------------------------
-console.log("Per-score-type means:", means);
-console.log("Overall R:", R.toFixed(3));
-console.log("Per-score-type variances:", variances);
-console.log("Penalized R_pen:", R_pen.toFixed(3));
-```
-
-```
-Per-score-type means: [ 0.81, 0.61, 0.69 ]
-Overall R: 0.714
-Per-score-type variances: [ 0.005, 0.005, 0.005 ]
-Penalized R_pen: 0.712
-```
-
-
-#### Judges
-Potential scores across three judges.
-
-- UI
-- functionality (computer-use models? playwright access?)
-- UX (similar to functionality)
-- code readability
-- adherence to best practices and project configs
-	- respecting AGENTS.md, CLAUDE.md, ...
-	- `.eslintrc` / `.prettierrc` / ...
-- token consumption, speed, tool calls number
-	- do we incentivize everyone to do less tool calls? or more? maybe we should remove it, just a thought.
-	- the less tokens and the faster the agent is, the better.
-	- this score does not need an LLM judge.
-
-## Agents
-
-`agents/opencode.ts`
-```typescript
-export const models = ["openai/gpt-4o", "anthropic/claude-sonnet-4"] // useful for assertions and matrix testing
-
-export default createAgent((model, prompt) => {
-	void prompt
-	return `opencode run -m ${model}`
-})
-```
-
-### Dummy agents
-
-To test out the the benchmark itself, we can have a dummy agent that we measure how the judges behave on those dummy outputs.
-
-`agents/dummy-bad.ts`
-```typescript
-export const models = ["openai/gpt-4o", "anthropic/claude-sonnet-4"] // useful for assertions and matrix testing
-
-export default createAgent((model, prompt) => {
-	// fs.writeFile to write dummy files
-	return `echo ...`
-})
-```
-
-the variance between this dummy and `agents/dummy-good.ts` should be high to validate that the judges produce _fair_ scores.
+Each evaluation runs three isolated episodes to ensure statistical reliability. Episodes use fresh repository clones and independent judge assessments.
 
 ## Scoring Methodology
 
-All current scores are produced by LLM judges (`claude-4.5`, `gpt-5-codex`, `kimi`). For each assignment we gather their outputs into a matrix \(S \in [0,1]^{m \times k}\), where rows index judges and columns index score types. Given judge weights \(w \in \Delta^{m-1}\) (currently uniform) and assignment weights \(v \in \Delta^{k-1}\), the base score is
+### Score Dimensions
 
-\[
-R = v^\top S^\top w = \sum_{j=1}^k v_j \left( \sum_{i=1}^m w_i s_{ij} \right).
-\]
+Each submission is evaluated across five weighted dimensions:
 
-To discourage disagreement we subtract a variance penalty (see `lib/utils/scoreAggregation.ts`):
+- **API Signature** (20%) - Function signatures match expected interfaces
+- **Logic Equivalence** (30%) - Conditional logic produces equivalent outcomes
+- **Integration Points** (20%) - External calls maintain correct order and arguments
+- **Test Coverage** (20%) - Adequate test coverage and quality
+- **Checks** (10%) - Passes linting, tests, and build processes
 
-\[
-R_{\text{pen}} = R - \lambda \sum_{j=1}^k v_j \operatorname{Var}_j, \qquad \operatorname{Var}_j = \sum_{i=1}^m w_i (s_{ij} - \bar{s}_j)^2, \quad \bar{s}_j = \sum_{i=1}^m w_i s_{ij}.
-\]
+Weights are configurable per evaluation in `dataset.yaml`.
 
-The tests in `tests/scoreAggregation.test.ts` exercise this aggregation. The TODO above tracks the plan to replace noisy LLM scorers with deterministic checks while keeping the same aggregation pipeline.
+### Mathematical Formulation
 
+Scores are aggregated using a weighted variance-penalized approach. For a matrix S ∈ [0,1]^(m×k) where rows index judges and columns index score types, with judge weights w ∈ Δ^(m-1) and score weights v ∈ Δ^(k-1), the base score is:
 
-  rank  repo                                      stars  forks
-  1     noworneverev/graphrag-visualizer           375     46
-  2     KwokKwok/Silo                              240     25
-  3     prismicio-community/course-fizzi-next      180     77
-  4     mylofi/local-vault                         118      3
-  5     Rasalas/msg-reader                          74     14
-  6     halitsever/nest-cloudflare-turnstile        62     16
-  7     psyko-gh/overcrawlrr                        60      1
-  8     googleworkspace/drive-picker-element        46      6
-  9     pbstar/fitview                              37      0
-  10    ekoln/nextdaily                             33     20
+```
+R = v^T S^T w = Σ(j=1 to k) v_j ( Σ(i=1 to m) w_i s_ij )
+```
 
-  Forks Leaderboard
+To discourage judge disagreement, a variance penalty is applied:
 
-  rank  repo                                      stars  forks
-  1     prismicio-community/course-fizzi-next      180     77
-  2     noworneverev/graphrag-visualizer           375     46
-  3     KwokKwok/Silo                              240     25
-  4     Cefalo/quick-meet                           32     22
-  5     ekoln/nextdaily                             33     20
-  6     halitsever/nest-cloudflare-turnstile        62     16
-  7     BhuwanSKumar/refrain-addiction-main         11     16
-  8     Rasalas/msg-reader                          74     14
-  9     AlaminPu1007/algorithm-visualizer           22      7
-  10    mohitchandel/AI-APP-Template                12      7
+```
+R_pen = R - λ Σ(j=1 to k) v_j Var_j
+
+where:
+  Var_j = Σ(i=1 to m) w_i (s_ij - s̄_j)²
+  s̄_j = Σ(i=1 to m) w_i s_ij
+  λ = 0.5 (disagreement penalty coefficient)
+```
+
+Implementation details are in `lib/utils/scoreAggregation.ts` and tested in `tests/scoreAggregation.test.ts`.
+
+### Judges
+
+Currently uses three LLM judges with equal weighting:
+- **claude-4.5** (Claude Sonnet 4.5 via Anthropic)
+- **gpt-5-codex** (GPT-5 Codex via OpenAI)
+- **kimi** (Kimi-k2 via Moonshot)
+
+All judges use "Zen" model variants optimized for code evaluation.
+
+## Development
+
+### Building
+
+```bash
+bun run build
+```
+
+This compiles `cli.ts` to `dist/cli.js` with all necessary externals.
+
+### Testing
+
+Run the full test suite:
+
+```bash
+bun test
+```
+
+Test judge consistency:
+
+```bash
+bun run test:consistency
+```
+
+Test score aggregation:
+
+```bash
+bun test tests/scoreAggregation.test.ts
+```
+
+### Project Structure
+
+```
+agents/          # Agent integrations (OpenCode, Codex, Claude Code)
+scores/          # Score dimension implementations
+prompts/         # Task definitions per evaluation (YAML)
+lib/             # Core framework utilities
+tests/           # Test suite
+dataset.yaml     # Evaluation definitions
+cli.ts           # Main CLI orchestrator
+```
+
+### Continuous Integration
+
+The project uses GitHub Actions for CI/CD with automated benchmark publishing. Preview packages are published on every push via [pkg.pr.new](https://github.com/apps/pkg-pr-new).
+
+## Contributing
+
+Contributions are welcome! Key areas for improvement:
+
+- Complementing LLM judges with deterministic analysis for improved stability (see `benchmark-observations.md`)
+- Adding new evaluation datasets from real-world repositories
+- Adding support for additional AI coding agents
+
+## Resources
+
+- **Detailed Observations** - See `benchmark-observations.md` for analysis of scoring stability and improvement suggestions
+- **Research Notes** - See `notes.md` for methodology discussions and validation approaches
