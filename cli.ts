@@ -38,7 +38,7 @@ interface ParsedCliOptions {
 }
 
 const EPISODES = 3;
-const EPISODE_TIMEOUT_MS = 30 * 60 * 1000; // 30 minutes per episode
+const EPISODE_TIMEOUT_MS = 40 * 60 * 1000; // 40 minutes per episode
 
 async function printHelp(): Promise<void> {
   console.log(

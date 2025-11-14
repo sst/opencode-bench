@@ -1,0 +1,4 @@
+generated_at: 2025-11-14T07:23:04.598Z
+prompts:
+  - commit: 6ceee3b60877249fa891aafc05de003f356926ef
+    prompt: Update the product trial alert to conditionally display different messaging when a trial ends, based on the organization's plan tier. Business plan customers should see a simple "Your unlimited [product] trial ended." message without any upgrade prompt. Team plan and free plan users should continue to see the existing message that includes "Keep using more by upgrading your plan." The button logic for trial-ended state should remain unchanged. Add test coverage for both Business plan users (verifying the upgrade prompt is absent) and Team plan users (verifying the upgrade prompt is present), in addition to the existing free plan test case.
