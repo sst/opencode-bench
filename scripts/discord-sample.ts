@@ -331,7 +331,7 @@ function toEvalSummaries(exportData: EvaluationRunExport[]): EvalSummary[] {
   return Array.from(evalMap.entries()).map(([identifier, models]) => ({
     eval: identifier,
     label: labelMap.get(identifier) ?? identifier,
-    title: `(${identifier})`,
+    title: identifier,
     models,
   }));
 }
