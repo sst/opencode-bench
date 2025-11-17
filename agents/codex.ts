@@ -23,6 +23,7 @@ const threadCache = new Map<string, Thread>();
 
 export const models: string[] = [
   "gpt-5-codex",
+  "gpt-5.1-codex",
   // "gpt-5",
   // "o3",
   // "o4-mini"
