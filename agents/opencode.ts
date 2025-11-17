@@ -22,14 +22,33 @@ const DEFAULT_PERMISSION_CONFIG: NonNullable<OpencodeConfig["permission"]> = {
   webfetch: "allow",
 };
 
-// Custom fetch with 25-minute timeout
+const DEFAULT_FETCH_TIMEOUT_MS = 45 * 60 * 1000; // 40 minute episode limit + 5 minute buffer
+const configuredFetchTimeoutMs = (() => {
+  const raw = process.env.OPENCODE_FETCH_TIMEOUT_MS;
+  if (!raw) return DEFAULT_FETCH_TIMEOUT_MS;
+  const parsed = Number.parseInt(raw, 10);
+  if (Number.isFinite(parsed) && parsed > 0) {
+    return parsed;
+  }
+  console.error(
+    `[opencode] Invalid OPENCODE_FETCH_TIMEOUT_MS value "${raw}", falling back to ${DEFAULT_FETCH_TIMEOUT_MS}ms`,
+  );
+  return DEFAULT_FETCH_TIMEOUT_MS;
+})();
+console.error(
+  `[opencode] Using fetch timeout ${configuredFetchTimeoutMs}ms for agent requests`,
+);
+
+// Custom fetch with extended timeout
 const customFetch = async (request: Request): Promise<Response> => {
   const startTime = Date.now();
+  const fetchOptions: RequestInit = {};
+  if (configuredFetchTimeoutMs > 0) {
+    fetchOptions.signal = AbortSignal.timeout(configuredFetchTimeoutMs);
+  }
 
   try {
-    const response = await fetch(request, {
-      signal: AbortSignal.timeout(1_500_000),
-    });
+    const response = await fetch(request, fetchOptions);
     const duration = Date.now() - startTime;
     console.error(`[opencode] Request completed - Duration: ${duration}ms`);
     return response;
