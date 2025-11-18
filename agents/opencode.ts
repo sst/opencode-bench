@@ -54,17 +54,14 @@ const opencode = await createOpencode({
 const sessionCache = new Map<string, string>();
 
 export const models: string[] = [
-  // "opencode/gpt-5",
   "opencode/gpt-5-codex",
   "opencode/gpt-5.1-codex",
   "opencode/claude-sonnet-4-5",
   "opencode/glm-4.6",
-  // "opencode/claude-sonnet-4",
-  // "opencode/claude-3-5-haiku",
-  // "opencode/claude-opus-4-1",
-  // "opencode/qwen3-coder",
-  // "opencode/grok-code",
-  // "opencode/kimi-k2",
+  "opencode/gemini-3-pro",
+  "opencode/qwen3-coder",
+  "opencode/kimi-k2",
+  "opencode/grok-code",
 ];
 
 function formatCommand(command: string, args: string[]): string {
@@ -125,12 +122,8 @@ function logPromptResult(
   logs?: string[],
 ): void {
   logJson({ info: result.info }, options);
-  if (result.parts?.length) {
-    return;
-  }
-  if (Array.isArray(result.parts)) {
-    result.parts.forEach((part) => logJson(part, options));
-  } else {
+
+  if (!Array.isArray(result.parts)) {
     logError(
       {
         error: "invalid_parts_array",
@@ -139,7 +132,11 @@ function logPromptResult(
       },
       options,
     );
+
+    return;
   }
+
+  result.parts.forEach((part) => logJson(part, options));
 }
 
 function serializeError(error: unknown): Record<string, unknown> {
