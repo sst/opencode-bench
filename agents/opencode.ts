@@ -24,26 +24,6 @@ const DEFAULT_PERMISSION_CONFIG: NonNullable<OpencodeConfig["permission"]> = {
 
 const DEFAULT_FETCH_TIMEOUT_MS = 45 * 60 * 1000; // 40 minute episode limit + 5 minute buffer
 
-// Custom fetch with extended timeout
-const customFetch = async (request: Request): Promise<Response> => {
-  const startTime = Date.now();
-  const fetchOptions: RequestInit = {
-    signal: AbortSignal.timeout(25 * 60 * 1000),
-  };
-
-  try {
-    const response = await fetch(request, fetchOptions);
-    const duration = Date.now() - startTime;
-    console.error(`[opencode] Request completed - Duration: ${duration}ms`);
-    return response;
-  } catch (error) {
-    const duration = Date.now() - startTime;
-    console.error(`[opencode] Request failed - Duration: ${duration}ms`);
-    console.error(error);
-    throw error;
-  }
-};
-
 const opencodePort = await detectPort(4096);
 
 // Set OpenCode config before server starts to ensure timeout is applied
@@ -228,7 +208,6 @@ const opencodeAgent: AgentDefinition = {
           parts: [{ type: "text", text: prompt }],
         },
         throwOnError: true,
-        fetch: customFetch,
       });
 
       if (data.info?.tokens) {
