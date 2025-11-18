@@ -120,11 +120,14 @@ function logError(value: unknown, options: AgentRunOptions | undefined): void {
 }
 
 function logPromptResult(
-  result: { info: AssistantMessage; parts: Part[] },
+  result: { info: AssistantMessage; parts?: Part[] },
   options: AgentRunOptions | undefined,
   logs?: string[],
 ): void {
   logJson({ info: result.info }, options);
+  if (result.parts?.length) {
+    return;
+  }
   if (Array.isArray(result.parts)) {
     result.parts.forEach((part) => logJson(part, options));
   } else {
