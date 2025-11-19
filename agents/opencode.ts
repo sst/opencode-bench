@@ -116,29 +116,6 @@ function logError(value: unknown, options: AgentRunOptions | undefined): void {
   }
 }
 
-function logPromptResult(
-  result: { info: AssistantMessage; parts?: Part[] },
-  options: AgentRunOptions | undefined,
-  logs?: string[],
-): void {
-  logJson({ info: result.info }, options);
-
-  if (!Array.isArray(result.parts)) {
-    logError(
-      {
-        error: "invalid_parts_array",
-        message: `Expected 'parts' to be an array, but got ${typeof result.parts}`,
-        receivedResponse: result,
-      },
-      options,
-    );
-
-    return;
-  }
-
-  result.parts.forEach((part) => logJson(part, options));
-}
-
 function serializeError(error: unknown): Record<string, unknown> {
   if (error instanceof Error) {
     return {
@@ -198,7 +175,7 @@ const opencodeAgent: AgentDefinition = {
     try {
       const [providerID, modelID] = model.split("/");
 
-      const { data } = await opencode.client.session.prompt({
+      const { data, error } = await opencode.client.session.prompt({
         path: { id: sessionID! },
         query: { directory: cwd },
         body: {
@@ -208,24 +185,21 @@ const opencodeAgent: AgentDefinition = {
           },
           parts: [{ type: "text", text: prompt }],
         },
-        throwOnError: true,
       });
 
-      if (data.info?.tokens) {
-        usage.input = data.info.tokens.input || 0;
-        usage.output = data.info.tokens.output || 0;
-      } else {
-        console.error(
-          `[opencode] WARNING: No token usage in response. Available fields: ${Object.keys(data.info || {}).join(", ")}`,
-        );
+      if (error) {
+        throw error;
       }
+
+      usage.input = data.info.tokens.input || 0;
+      usage.output = data.info.tokens.output || 0;
 
       actions.push(JSON.stringify(data.info));
-      if (Array.isArray(data.parts)) {
-        data.parts.forEach((part) => actions.push(JSON.stringify(part)));
-      }
 
-      logPromptResult(data, options);
+      data.parts.forEach((part) => actions.push(JSON.stringify(part)));
+
+      logJson({ info: data.info }, options);
+      data.parts.forEach((part) => logJson(part, options));
     } catch (error) {
       console.error(
         `[opencode] Error in ${model}:`,
