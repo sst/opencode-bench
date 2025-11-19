@@ -74,39 +74,9 @@ jobs:
           BENCHMARK_EVAL: ${{ matrix.eval }}
         run: |
           set -euo pipefail
-          # When using reusable workflows, job names get prefixed, so we search for jobs containing our pattern
           job_pattern="Benchmark ${BENCHMARK_AGENT} / ${BENCHMARK_MODEL} / ${BENCHMARK_EVAL}"
-          jobs_endpoint="https://api.github.com/repos/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}/jobs?per_page=100"
-          job_json="$(curl -fsSL \
-            -H "Authorization: token ${GITHUB_TOKEN}" \
-            -H "Accept: application/vnd.github+json" \
-            "${jobs_endpoint}")"
+          job_url="$(bun run scripts/determine-job-url.ts --pattern "${job_pattern}")"
 
-          # Try to find job by exact name match first, then by pattern match
-          job_info="$(printf '%s\n' "${job_json}" \
-            | jq -r --arg pattern "$job_pattern" 'select(type=="object" and has("jobs")) | .jobs[] | select(.name | contains($pattern)) | select(.status == "in_progress") | [.id, .html_url] | @tsv' \
-            | head -n 1)"
-
-          if [ -z "${job_info}" ] || [ "${job_info}" = "null" ]; then
-            echo "Failed to determine job info for pattern: ${job_pattern}" >&2
-            echo "Available jobs:" >&2
-            printf '%s\n' "${job_json}" | jq -r '.jobs[]?.name' >&2 || true
-            exit 1
-          fi
-
-          IFS=$'\t' read -r job_id job_url <<<"${job_info}"
-
-          if [ -z "${job_id}" ] || [ "${job_id}" = "null" ]; then
-            echo "Failed to determine job ID for pattern: ${job_pattern}" >&2
-            exit 1
-          fi
-
-          if [ -z "${job_url}" ] || [ "${job_url}" = "null" ]; then
-            echo "Failed to determine job URL for pattern: ${job_pattern}" >&2
-            exit 1
-          fi
-
-          echo "Job ID: ${job_id}"
           echo "Job URL: ${job_url}"
           echo "GITHUB_BENCHMARK_JOB_URL=${job_url}" >> "$GITHUB_ENV"
           echo "url=${job_url}" >> "$GITHUB_OUTPUT"
@@ -256,21 +226,7 @@ jobs:
         run: |
           set -euo pipefail
           job_pattern="Judge Analysis - ${MATRIX_EVAL}"
-          jobs_endpoint="https://api.github.com/repos/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}/jobs?per_page=100"
-          job_json="$(curl -fsSL \
-            -H "Authorization: token ${GITHUB_TOKEN}" \
-            -H "Accept: application/vnd.github+json" \
-            "${jobs_endpoint}")"
-
-          job_url="$(printf '%s\n' "${job_json}" \
-            | jq -r --arg pattern "$job_pattern" 'select(type=="object" and has("jobs")) | .jobs[] | select(.name | contains($pattern)) | .html_url' \
-            | head -n 1)"
-
-          if [ -z "${job_url}" ] || [ "${job_url}" = "null" ]; then
-            echo "Failed to determine job URL for pattern ${job_pattern}" >&2
-            printf '%s\n' "${job_json}" | jq -r '.jobs[]?.name' >&2 || true
-            exit 1
-          fi
+          job_url="$(bun run scripts/determine-job-url.ts --pattern "${job_pattern}")"
 
           step_url="${job_url}#step:7:0"
 
