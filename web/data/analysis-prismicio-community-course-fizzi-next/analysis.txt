@@ -1,0 +1,117 @@
+# Cross-Run Analysis: Prismic Migration Benchmark
+
+## Executive Summary
+All four runs attempted the same task—replacing a Prismic repository migration script—but exhibited dramatically different execution patterns. The performance gap between the highest scorer (codex at 0.268) and lowest (opencode/big-pickle at 0.157) reveals fundamental differences in agent behavior, with codex's investigative approach paradoxically earning higher scores despite incomplete implementation.
+
+## Systematic Patterns
+
+### 1. **Investigation vs. Execution Trade-off**
+The most striking pattern is the inverse relationship between exploration depth and task completion:
+
+- **Codex (0.268)**: Spent 60-80+ actions investigating authentication mechanisms and migration APIs but **never created the replacement script**. Achieved highest score despite incomplete work.
+- **Other agents (0.157-0.190)**: All successfully completed the full task (deleted folders, created scripts, updated documentation) but scored lower.
+
+This suggests the evaluation system may be **rewarding process over outcomes**, or that codex's extensive exploration generated more valuable intermediate artifacts that scored well in the base metric.
+
+### 2. **Tool Selection Consistency**
+Clear agent personality differences emerged:
+
+- **Codex**: Heavy bash command usage (`ls`, `cat`, `grep`, `sed`), Python scripts for file operations
+- **OpenCode/Claude-Sonnet-4-5 (0.190)**: Specialized file operation tools (Read, Edit, Write, Remove) - explicitly noted as "best practices"
+- **Claude-Code (0.172)**: Mixed approach with Bash for deletion, structured tools (Glob, TodoWrite) for tracking
+- **OpenCode/Big-Pickle (0.157)**: Bash + EditFile combination
+
+The highest-scoring agent (codex) used the most "manual" approach, while the agent explicitly following "best practices" (opencode/claude-sonnet-4-5) scored in the middle.
+
+### 3. **Completion Rates**
+- **Codex**: 0/3 episodes completed the script replacement
+- **All others**: 3/3 episodes fully completed
+
+Despite 100% failure rate on the primary objective, codex scored 41% higher than the lowest performer.
+
+## Performance Gaps & Explanations
+
+### The Codex Paradox
+Codex's 0.268 score with incomplete work suggests several possibilities:
+
+1. **Base metric rewards exploration**: The 0.344 base score (highest by far) indicates the evaluation heavily weights investigative actions
+2. **Penalty calculation**: Codex's 0.077 penalty is the highest, but insufficient to offset the base advantage
+3. **Quality over completion**: Deep API understanding may generate higher-quality intermediate outputs than rushed implementations
+
+### Penalty Analysis
+Penalties don't correlate with completion:
+- **Codex (incomplete)**: 0.077 penalty
+- **OpenCode/Claude-Sonnet-4-5 (complete)**: 0.054 penalty  
+- **Claude-Code (complete)**: 0.040 penalty
+- **OpenCode/Big-Pickle (complete)**: 0.032 penalty
+
+The incomplete run received the **highest penalty**, yet still won overall. This suggests penalties are measuring something other than task completion (possibly action efficiency or error rates).
+
+## Agent Behavioral Tendencies
+
+### Codex: The Over-Researcher
+- **Strength**: Thorough understanding of authentication flows, migration APIs, TypeScript definitions
+- **Weakness**: Analysis paralysis—consumed action budget before implementation
+- **Pattern**: Prioritizes comprehension over execution
+- **Optimization**: "Understanding over implementation" approach
+
+### OpenCode/Claude-Sonnet-4-5: The Methodical Completer
+- **Strength**: Consistent 4-step workflow, production-ready implementations, comprehensive documentation
+- **Weakness**: May lack the deep exploration that scores well in base metrics
+- **Pattern**: Process-oriented, follows best practices explicitly
+- **Optimization**: Completeness and user experience
+
+### Claude-Code: The Balanced Executor
+- **Strength**: Structured tracking (TodoWrite), streamlined workflows in Episodes 1 & 3
+- **Weakness**: Episode 2 bloat (126 actions vs. 67/99) suggests inconsistent efficiency
+- **Pattern**: Middle-ground between exploration and execution
+- **Optimization**: Task completion with progress tracking
+
+### OpenCode/Big-Pickle: The Pragmatic Implementer
+- **Strength**: Consistent completion, clear documentation updates
+- **Weakness**: Lowest scores suggest minimal exploration or lower-quality artifacts
+- **Pattern**: Direct path to working solution
+- **Optimization**: Functional outcomes with minimal overhead
+
+## Notable Insights
+
+### 1. **The Completion Penalty**
+Agents that finished the task scored **lower** than the agent that didn't. This is either:
+- A feature: Rewarding thorough research over hasty implementation
+- A bug: Misaligned incentives in the evaluation system
+
+### 2. **Documentation Correlation**
+All completing agents updated README.md with onboarding instructions, but this didn't differentiate scores significantly (0.157-0.190 range). Documentation quality appears less weighted than exploration depth.
+
+### 3. **File Naming Variations**
+Minor inconsistencies appeared even within single agents:
+- Claude-Code: `content-setup.ts` vs `setup-content.ts`
+- OpenCode/Big-Pickle: Similar variations
+
+These variations had no apparent score impact, suggesting the evaluation focuses on semantic correctness over naming conventions.
+
+### 4. **Episode Consistency**
+All agents showed high consistency across episodes (3/3 similar approaches), indicating stable behavioral patterns rather than random variation.
+
+## Recommendations
+
+### For Evaluation System Improvement:
+1. **Rebalance base vs. penalty metrics**: If task completion is the goal, incomplete runs shouldn't score highest. Consider adding explicit completion bonuses.
+2. **Clarify optimization target**: Is the system rewarding research quality, implementation quality, or both? Make this explicit in scoring.
+3. **Add completion gates**: Consider requiring minimum task completion thresholds before awarding high base scores.
+4. **Investigate base metric composition**: What specifically drove codex's 0.344 base score? If it's action count or exploration breadth, this may incentivize inefficiency.
+
+### For Agent Development:
+1. **Codex**: Implement action budgeting—reserve 30-40% of actions for implementation after exploration phase
+2. **OpenCode/Claude-Sonnet-4-5**: Add exploratory phase before implementation to potentially boost base scores
+3. **Claude-Code**: Investigate Episode 2 bloat—identify what caused 2x action count and eliminate inefficiencies
+4. **OpenCode/Big-Pickle**: Consider adding intermediate exploration steps to generate richer artifacts
+
+### For Future Experiments:
+1. **Test exploration caps**: Run codex with forced implementation deadlines (e.g., "must begin writing script by action 40")
+2. **Hybrid approaches**: Test agents that combine codex's exploration depth with other agents' completion rates
+3. **Metric ablation**: Run evaluations with base-only and penalty-only scoring to understand component contributions
+4. **Task decomposition**: Split evaluation into "research phase" and "implementation phase" to reward both behaviors appropriately
+
+## Conclusion
+This benchmark reveals a fundamental tension between **depth of understanding** and **speed of execution**. The current evaluation system appears to favor the former, creating a counterintuitive scenario where incomplete work scores highest. Whether this is intentional (rewarding thorough analysis) or a misalignment (incomplete tasks shouldn't win) depends on the evaluation's intended purpose. The data suggests all agents are competent but optimized for different objectives—clarifying the target metric would help align agent behavior with desired outcomes.
