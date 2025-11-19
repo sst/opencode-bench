@@ -216,10 +216,10 @@ const sampleExport: EvaluationRunExport[] = [
   {
     agent: "opencode",
     evaluation: {
-      identifier: "prismicio-community/course-fizzi-next@e90e3f4..2760114",
-      repo: "prismicio-community/course-fizzi-next",
-      from: "e90e3f4e07119d60e8822d4f474f6dfa5afe589f",
-      to: "2760114f2647ebec8f63e0ecc2dc87a8cd4096ac",
+      identifier: "DataDog/datadog-lambda-python@93d4a07..d776378",
+      repo: "DataDog/datadog-lambda-python",
+      from: "93d4a07fa61a4d4d2feec08e722505a9e0cc8657",
+      to: "d7763789f262b2da228f8210509e302e6e510d0a",
     },
     model: "opencode/claude-sonnet-4-5",
     jobUrl:
@@ -235,10 +235,10 @@ const sampleExport: EvaluationRunExport[] = [
   {
     agent: "opencode",
     evaluation: {
-      identifier: "prismicio-community/course-fizzi-next@e90e3f4..2760114",
-      repo: "prismicio-community/course-fizzi-next",
-      from: "e90e3f4e07119d60e8822d4f474f6dfa5afe589f",
-      to: "2760114f2647ebec8f63e0ecc2dc87a8cd4096ac",
+      identifier: "DataDog/datadog-lambda-python@93d4a07..d776378",
+      repo: "DataDog/datadog-lambda-python",
+      from: "93d4a07fa61a4d4d2feec08e722505a9e0cc8657",
+      to: "d7763789f262b2da228f8210509e302e6e510d0a",
     },
     model: "opencode/gpt-5-codex",
     jobUrl:

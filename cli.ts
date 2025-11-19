@@ -47,14 +47,14 @@ async function printHelp(): Promise<void> {
   console.log("");
   console.log("Examples:");
   console.log(
-    "  orvl opencode --model opencode/gpt-5-codex --eval noworneverev/graphrag-visualizer@1503744..2760114",
+    "  orvl opencode --model opencode/gpt-5-codex --eval DataDog/datadog-lambda-python@93d4a07..d776378",
   );
   console.log(
-    "  orvl opencode --model opencode/claude-sonnet-4-5 --eval prismicio-community/course-fizzi-next@1503744..2760114",
+    "  orvl opencode --model opencode/claude-sonnet-4-5 --eval DataDog/datadog-lambda-python@93d4a07..d776378",
   );
   console.log();
   console.log(
-    "  orvl opencode --model opencode/gpt-5-codex --eval prismicio-community/course-fizzi-next@1503744..2760114 --output results.json",
+    "  orvl opencode --model opencode/gpt-5-codex --eval DataDog/datadog-lambda-python@93d4a07..d776378 --output results.json",
   );
   console.log("");
   const agents = await listAgents();

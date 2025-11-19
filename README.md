@@ -32,7 +32,7 @@ bun run build
 Run a benchmark evaluation:
 
 ```bash
-orvl opencode --model opencode/claude-sonnet-4-5 --eval prismicio-community/course-fizzi-next
+orvl opencode --model opencode/claude-sonnet-4-5 --eval DataDog/datadog-lambda-python
 ```
 
 Export results to JSON:
