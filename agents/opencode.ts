@@ -54,14 +54,14 @@ const opencode = await createOpencode({
 const sessionCache = new Map<string, string>();
 
 export const models: string[] = [
-  "opencode/gpt-5-codex",
-  "opencode/gpt-5.1-codex",
-  "opencode/claude-sonnet-4-5",
-  "opencode/glm-4.6",
-  "opencode/gemini-3-pro",
-  "opencode/qwen3-coder",
+  // "opencode/gpt-5-codex",
+  // "opencode/gpt-5.1-codex",
+  // "opencode/claude-sonnet-4-5",
+  // "opencode/glm-4.6",
+  // "opencode/gemini-3-pro",
+  // "opencode/qwen3-coder",
   "opencode/kimi-k2",
-  "opencode/grok-code",
+  // "opencode/grok-code",
 ];
 
 function formatCommand(command: string, args: string[]): string {
@@ -191,14 +191,19 @@ const opencodeAgent: AgentDefinition = {
         throw error;
       }
 
-      usage.input = data.info.tokens.input || 0;
-      usage.output = data.info.tokens.output || 0;
+      const info = data.info;
+      usage.input = info?.tokens?.input ?? 0;
+      usage.output = info?.tokens?.output ?? 0;
 
-      actions.push(JSON.stringify(data.info));
+      if (info) {
+        actions.push(JSON.stringify(info));
+      }
 
       data.parts.forEach((part) => actions.push(JSON.stringify(part)));
 
-      logJson({ info: data.info }, options);
+      if (info) {
+        logJson({ info }, options);
+      }
       data.parts.forEach((part) => logJson(part, options));
     } catch (error) {
       console.error(
