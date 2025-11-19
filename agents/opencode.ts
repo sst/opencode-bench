@@ -29,6 +29,7 @@ const opencodePort = await detectPort(4096);
 // Set OpenCode config before server starts to ensure timeout is applied
 const opencodeConfig = {
   permission: DEFAULT_PERMISSION_CONFIG,
+  share: "auto",
   provider: {
     opencode: {
       options: {
@@ -199,13 +200,40 @@ const opencodeAgent: AgentDefinition = {
         actions.push(JSON.stringify(info));
       }
 
-      const parts = Array.isArray(data.parts) ? data.parts : [];
+      const parts = Array.isArray(data.parts) ? data.parts : null;
+      assert(
+        parts && parts.length > 0,
+        "OpenCode response did not include any assistant parts.",
+      );
       parts.forEach((part) => actions.push(JSON.stringify(part)));
 
       if (info) {
         logJson({ info }, options);
       }
       parts.forEach((part) => logJson(part, options));
+
+      try {
+        const { data: sharedSession, error: shareError } =
+          await opencode.client.session.share({
+            path: { id: sessionID! },
+            query: { directory: cwd },
+          });
+        if (shareError) {
+          throw shareError;
+        }
+
+        const shareUrl = sharedSession.share?.url;
+        if (shareUrl) {
+          logJson({ shareUrl }, options);
+        }
+      } catch (shareError) {
+        console.error(
+          `[opencode] Failed to enable sharing for session ${sessionID}:`,
+          shareError instanceof Error
+            ? shareError.message
+            : String(shareError),
+        );
+      }
     } catch (error) {
       console.error(
         `[opencode] Error in ${model}:`,
