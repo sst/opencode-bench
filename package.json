@@ -31,7 +31,7 @@
     "@anthropic-ai/claude-agent-sdk": "^0.1.0",
     "@octokit/request": "^10.0.5",
     "@openai/codex-sdk": "^0.47.0",
-    "@opencode-ai/sdk": "^1.0.68",
+    "@opencode-ai/sdk": "^1.0.92",
     "ai": "^5.0.64",
     "detect-port": "^2.1.0",
     "yaml": "^2.4.5",
