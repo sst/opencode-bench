@@ -7,10 +7,10 @@
         "@ai-sdk/anthropic": "^2.0.26",
         "@ai-sdk/openai": "^2.0.48",
         "@ai-sdk/openai-compatible": "^1.0.21",
-        "@anthropic-ai/claude-agent-sdk": "^0.1.0",
+        "@anthropic-ai/claude-agent-sdk": "^0.1.51",
         "@octokit/request": "^10.0.5",
-        "@openai/codex-sdk": "^0.47.0",
-        "@opencode-ai/sdk": "^1.0.92",
+        "@openai/codex-sdk": "^0.63.0",
+        "@opencode-ai/sdk": "^1.0.108",
         "ai": "^5.0.64",
         "detect-port": "^2.1.0",
         "yaml": "^2.4.5",
@@ -36,7 +36,7 @@
 
     "@ai-sdk/provider-utils": ["@ai-sdk/provider-utils@3.0.12", "", { "dependencies": { "@ai-sdk/provider": "2.0.0", "@standard-schema/spec": "^1.0.0", "eventsource-parser": "^3.0.5" }, "peerDependencies": { "zod": "^3.25.76 || ^4.1.8" } }, "sha512-ZtbdvYxdMoria+2SlNarEk6Hlgyf+zzcznlD55EAl+7VZvJaSg2sqPvwArY7L6TfDEDJsnCq0fdhBSkYo0Xqdg=="],
 
-    "@anthropic-ai/claude-agent-sdk": ["@anthropic-ai/claude-agent-sdk@0.1.26", "", { "optionalDependencies": { "@img/sharp-darwin-arm64": "^0.33.5", "@img/sharp-darwin-x64": "^0.33.5", "@img/sharp-linux-arm": "^0.33.5", "@img/sharp-linux-arm64": "^0.33.5", "@img/sharp-linux-x64": "^0.33.5", "@img/sharp-win32-x64": "^0.33.5" }, "peerDependencies": { "zod": "^3.24.1" } }, "sha512-daVGe5x6KOFy9DKyDojw15eljBP+tPx+spAyGll/Rp/B6t+NP0Oiwpaiib0afjbCRbqXkWEHUJPE3yDFrMcZlA=="],
+    "@anthropic-ai/claude-agent-sdk": ["@anthropic-ai/claude-agent-sdk@0.1.51", "", { "optionalDependencies": { "@img/sharp-darwin-arm64": "^0.33.5", "@img/sharp-darwin-x64": "^0.33.5", "@img/sharp-linux-arm": "^0.33.5", "@img/sharp-linux-arm64": "^0.33.5", "@img/sharp-linux-x64": "^0.33.5", "@img/sharp-win32-x64": "^0.33.5" }, "peerDependencies": { "zod": "^3.24.1" } }, "sha512-ob45qPyQxHXjr2xe6MmQb8QMs5LytNfzclKyDqckcrndAPg0jpZ8J0diCJlzHK5akPrCcQonSQfjVNezcBPkVA=="],
 
     "@img/sharp-darwin-arm64": ["@img/sharp-darwin-arm64@0.33.5", "", { "optionalDependencies": { "@img/sharp-libvips-darwin-arm64": "1.0.4" }, "os": "darwin", "cpu": "arm64" }, "sha512-UT4p+iz/2H4twwAoLCqfA9UH5pI6DggwKEGuaPy7nCVQ8ZsiY5PIcrRvD1DzuY3qYL07NtIQcWnBSY/heikIFQ=="],
 
@@ -70,9 +70,9 @@
 
     "@octokit/types": ["@octokit/types@15.0.1", "", { "dependencies": { "@octokit/openapi-types": "^26.0.0" } }, "sha512-sdiirM93IYJ9ODDCBgmRPIboLbSkpLa5i+WLuXH8b8Atg+YMLAyLvDDhNWLV4OYd08tlvYfVm/dw88cqHWtw1Q=="],
 
-    "@openai/codex-sdk": ["@openai/codex-sdk@0.47.0", "", {}, "sha512-GFmF0C7wkmX10omICL/5Gm1w+BvZtc41Rwuv7/pVO47ZbSq+9bJqn0XUpwoyrYQavg+BsKSuJAo9CYCn9JhkZA=="],
+    "@openai/codex-sdk": ["@openai/codex-sdk@0.63.0", "", {}, "sha512-5ZJpytgGG0xxfloJUvPWxsVMVeROXG1t1q03aejTgWLubTcgGFRx9zNBdZE/OvJ7NGtUBbhQkfkzaFp1kIA2Cg=="],
 
-    "@opencode-ai/sdk": ["@opencode-ai/sdk@1.0.92", "", {}, "sha512-QUorDhVJOqoZm950dWLu1fZsRqBZe9tTmKwziMx6N9kUTr+tGDkTfQnFSrK2x4S1W9vbBhhUQARa7og6r4AAqA=="],
+    "@opencode-ai/sdk": ["@opencode-ai/sdk@1.0.108", "", {}, "sha512-DrDS3NCmSXySO8YrbDLUkKcf/F2D6YLsZ6riusaXuNC3FpZM7BP8FAvB1vVc+sI85eEVBwQjeQ2FJ/xoNUDUng=="],
 
     "@opentelemetry/api": ["@opentelemetry/api@1.9.0", "", {}, "sha512-3giAOQvZiH5F9bMlMiv8+GSPMeqg0dbaeo58/0SlA9sxSqZhnUtxzX9/2FzyhS9sWQf5S0GJE0AKBrFqjpeYcg=="],
 

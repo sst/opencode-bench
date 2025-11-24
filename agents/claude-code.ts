@@ -13,6 +13,7 @@ const sessionCache = new Map<string, string>();
 
 export const models: string[] = [
   "claude-sonnet-4-5",
+  "claude-opus-4-5",
   // "claude-sonnet-4",
   // "claude-opus-4-1",
   // "claude-3-5-haiku",
