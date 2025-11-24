@@ -58,6 +58,7 @@ export const models: string[] = [
   "opencode/gpt-5-codex",
   "opencode/gpt-5.1-codex",
   "opencode/claude-sonnet-4-5",
+  "opencode/claude-opus-4-5",
   "opencode/glm-4.6",
   "opencode/gemini-3-pro",
   "opencode/qwen3-coder",
