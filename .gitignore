@@ -2,3 +2,4 @@ node_modules
 dist
 benchmark.json
 results/
+.DS_Store
