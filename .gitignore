@@ -3,3 +3,4 @@ dist
 benchmark.json
 results/
 .DS_Store
+.env
