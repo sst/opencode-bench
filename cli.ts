@@ -158,7 +158,9 @@ async function handlePrompts(args: string[]): Promise<void> {
     );
     console.log("");
     console.log("Examples:");
-    console.log("  orvl prompts --eval DataDog/datadog-lambda-python@93d4a07..d776378");
+    console.log(
+      "  orvl prompts --eval DataDog/datadog-lambda-python@93d4a07..d776378",
+    );
     return;
   }
 
@@ -312,7 +314,9 @@ async function main(): Promise<void> {
 
         try {
           console.log(
-            `${prefix} Starting episode (timeout: ${EPISODE_TIMEOUT_MS / 1000 / 60} min)...`,
+            `${prefix} Starting episode (timeout: ${
+              EPISODE_TIMEOUT_MS / 1000 / 60
+            } min)...`,
           );
           console.log(`${prefix} Cloning repository...`);
           cwd = cloneRepositoryAtCommit(evalDefinition, baselineCommit);
@@ -374,7 +378,9 @@ async function main(): Promise<void> {
 
                     if (attempt < retries) {
                       console.log(
-                        `${logPrefix} Retrying agent run (attempt ${attempt + 1}/${retries})...`,
+                        `${logPrefix} Retrying agent run (attempt ${
+                          attempt + 1
+                        }/${retries})...`,
                       );
                     }
                   },
@@ -433,7 +439,13 @@ async function main(): Promise<void> {
           );
 
           console.log(
-            `${prefix} Episode completed with final score ${aggregationSummary.finalScore.toFixed(3)} (base ${aggregationSummary.baseScore.toFixed(3)} - variance penalty ${aggregationSummary.variancePenalty.toFixed(3)})`,
+            `${prefix} Episode completed with final score ${aggregationSummary.finalScore.toFixed(
+              3,
+            )} (base ${aggregationSummary.baseScore.toFixed(
+              3,
+            )} - variance penalty ${aggregationSummary.variancePenalty.toFixed(
+              3,
+            )})`,
           );
 
           return {
@@ -456,7 +468,9 @@ async function main(): Promise<void> {
         Array.from({ length: EPISODES }, (_, offset) =>
           withTimeout(() => runEpisode(offset + 1), {
             timeoutMs: EPISODE_TIMEOUT_MS,
-            timeoutMessage: `Episode ${offset + 1} timed out after ${EPISODE_TIMEOUT_MS / 1000 / 60} minutes`,
+            timeoutMessage: `Episode ${offset + 1} timed out after ${
+              EPISODE_TIMEOUT_MS / 1000 / 60
+            } minutes`,
           }),
         ),
       );
@@ -479,7 +493,9 @@ async function main(): Promise<void> {
 
       if (episodeResults.length < EPISODES) {
         throw new Error(
-          `Expected ${EPISODES} episodes to complete, but only ${episodeResults.length} succeeded:\n${episodeFailures.join("\n")}`,
+          `Expected ${EPISODES} episodes to complete, but only ${
+            episodeResults.length
+          } succeeded:\n${episodeFailures.join("\n")}`,
         );
       }
 
@@ -568,12 +584,20 @@ async function main(): Promise<void> {
         console.log("[debug] Episode recap:");
         episodes.forEach((episode, index) => {
           console.log(
-            `[debug]   Episode ${index + 1}: final ${episode.finalScore.toFixed(3)} (base ${episode.baseScore.toFixed(3)} - penalty ${episode.variancePenalty.toFixed(3)})`,
+            `[debug]   Episode ${index + 1}: final ${episode.finalScore.toFixed(
+              3,
+            )} (base ${episode.baseScore.toFixed(
+              3,
+            )} - penalty ${episode.variancePenalty.toFixed(3)})`,
           );
         });
       }
       console.log(
-        `[debug] Aggregate final: ${finalScore.toFixed(3)} (base ${baseScore.toFixed(3)} - penalty ${variancePenalty.toFixed(3)})`,
+        `[debug] Aggregate final: ${finalScore.toFixed(
+          3,
+        )} (base ${baseScore.toFixed(3)} - penalty ${variancePenalty.toFixed(
+          3,
+        )})`,
       );
 
       // Generate and log radar chart URL
@@ -773,20 +797,30 @@ function summarizeAggregation(
 
   aggregation.perScore.forEach((entry) => {
     lines.push(
-      `  ${entry.assignment.name} → ${entry.averageScore.toFixed(3)} (weight ${formatRawWeight(entry.assignment.weight)}, normalized ${entry.normalizedWeight.toFixed(3)})`,
+      `  ${entry.assignment.name} → ${entry.averageScore.toFixed(
+        3,
+      )} (weight ${formatRawWeight(
+        entry.assignment.weight,
+      )}, normalized ${entry.normalizedWeight.toFixed(3)})`,
     );
     const raw = aggregationInputs.get(entry.assignment.name);
     if (raw) {
       raw.judgeResults.forEach((result) => {
         lines.push(
-          `    - ${result.judge.name}: ${result.score.toFixed(3)} → ${result.rationale}`,
+          `    - ${result.judge.name}: ${result.score.toFixed(3)} → ${
+            result.rationale
+          }`,
         );
       });
     }
   });
 
   lines.push(
-    `  Final aggregate score: ${aggregation.finalScore.toFixed(3)} (base ${aggregation.baseScore.toFixed(3)} - penalty ${aggregation.variancePenalty.toFixed(3)})\n`,
+    `  Final aggregate score: ${aggregation.finalScore.toFixed(
+      3,
+    )} (base ${aggregation.baseScore.toFixed(
+      3,
+    )} - penalty ${aggregation.variancePenalty.toFixed(3)})\n`,
   );
 
   const scoreExports = buildScoreExportsFromEpisodes(episodes);
