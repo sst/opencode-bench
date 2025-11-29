@@ -231,6 +231,8 @@ const sampleExport: EvaluationRunExport[] = [
     episodes: claudeEpisodes,
     usage: { input: 50000, output: 10100 },
     summary: "",
+    durationMs: 180000,
+    tokensPerSecond: 334.0,
   },
   {
     agent: "opencode",
@@ -250,6 +252,8 @@ const sampleExport: EvaluationRunExport[] = [
     episodes: gptEpisodes,
     usage: { input: 48167, output: 9633 },
     summary: "",
+    durationMs: 165000,
+    tokensPerSecond: 350.9,
   },
 ];
 
