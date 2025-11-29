@@ -1,20 +1,22 @@
 #!/usr/bin/env bun
+import { strict as assert } from "node:assert";
 import process from "node:process";
+
 import { execSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { tmpdir } from "node:os";
-import yargs from "yargs";
-import { hideBin } from "yargs/helpers";
-import { AgentRegistration, getAgent, listAgents } from "~/agents/index.js";
-import { scores as scoreRegistry } from "~/scores/index.js";
+import { getAgent, listAgents } from "~/agents/index.js";
+import type { AgentRegistration } from "~/agents/index.js";
+import { listScores, scores as scoreRegistry } from "~/scores/index.js";
 import { dataset } from "~/lib/dataset.js";
 import type { DatasetEval, ScoreAssignment } from "~/lib/dataset.js";
-import { generatePromptsForEval, Task } from "~/lib/prompts.js";
+import { generatePromptsForEval } from "~/lib/prompts.js";
 import {
   generateActionsSummary,
   type EpisodeActions,
 } from "~/lib/summarizer.js";
+import { finalizeAgentChanges } from "~/lib/finalizeAgentChanges.js";
 import { loadPromptsFile } from "~/lib/prompts.js";
 import { judges, getJudgeModelId } from "~/judges.js";
 import { aggregateScores } from "~/lib/utils/scoreAggregation.js";
@@ -29,468 +31,658 @@ import { buildRadarChartUrl } from "~/lib/charts.js";
 
 type ModelCombination = string;
 
-const evalIds = dataset
-  .map((entry) => entry.identifier)
-  .sort((a, b) => a.localeCompare(b));
-
-const cli = yargs(hideBin(process.argv))
-  .scriptName("orvl")
-  .wrap(null)
-  .version(false)
-  .help("help", "show help")
-  .alias("help", "h")
-  .example([
-    [
-      "$0 opencode --model opencode/gpt-5-codex --eval DataDog/datadog-lambda-python@93d4a07..d776378",
-    ],
-    [
-      "$0 opencode --model opencode/claude-sonnet-4-5 --eval DataDog/datadog-lambda-python@93d4a07..d776378 --output results.json",
-    ],
-  ])
-  .fail((msg) => {
-    console.error(msg);
-    process.exit(1);
-  })
-  .strict();
-
-cli.command(
-  "prompts",
-  "Generate prompts for a specific evaluation",
-  (yargs) =>
-    yargs
-      .option("eval", {
-        type: "string",
-        description: "eval to use in the format of repo@from..to",
-        choices: evalIds,
-      })
-      .example([
-        ["orvl prompts", "Generate prompts for all evaluations"],
-        [
-          "orvl prompts --eval DataDog/datadog-lambda-python@93d4a07..d776378",
-          "Generate prompts for a specific evaluation",
-        ],
-      ]),
-  async ({ eval: evalId }) => {
-    const evalDefs = (() => {
-      if (!evalId) return [...dataset];
-      const evalDef = dataset.find((entry) => entry.identifier === evalId);
-      if (!evalDef) throw new Error(`Evaluation not found: ${evalId}`);
-      return [evalDef];
-    })();
-
-    console.log(`Generating prompts for ${evalDefs.length} evaluation(s)...\n`);
-
-    await Promise.all(evalDefs.map(generatePromptsForEval));
-  },
-);
-
-cli.command(
-  "$0 [agent]",
-  "Run benchmark evaluation",
-  (yargs) =>
-    yargs
-      .positional("agent", {
-        type: "string",
-        description: "agent to use",
-        choices: listAgents().map((agent) => agent.name),
-        required: true,
-      })
-      .option("model", {
-        type: "string",
-        description: "model to use in the format of provider/model",
-        required: true,
-      })
-      .option("eval", {
-        type: "string",
-        description: "eval to use in the format of repo@from..to",
-        choices: dataset.map((entry) => entry.identifier),
-        required: true,
-      })
-      .option("episodes", {
-        type: "number",
-        description: "number of episodes to run",
-        min: 1,
-        default: 3,
-      })
-      .option("timeout", {
-        type: "number",
-        description: "timeout in minutes for each episode",
-        default: 40,
-      })
-      .option("output", {
-        type: "string",
-        description: "output file to save the results to",
-      }),
-  async ({
-    agent: agentName,
-    model: modelFilter,
-    eval: evalId,
-    episodes,
-    timeout: timeoutInMinutes,
-    output: outputPath,
-  }) => {
-    const agent = agentName ? await getAgent(agentName) : undefined;
-    if (!agent) throw new Error(`Unknown agent: ${agentName}`);
-    const model = agent.models.find((entry) => entry === modelFilter);
-    if (!model)
-      throw new Error(
-        `Model ${modelFilter} is not registered for agent ${agent.name}.`,
-      );
-    const evalDef = dataset.find((entry) => entry.identifier === evalId);
-    if (!evalDef) throw new Error(`Eval ${evalId ?? evalId} was not found.`);
-    if (!evalDef.scores.length)
-      throw new Error(
-        `Evaluation ${evalDef.repo} has no score assignments configured.`,
-      );
-
-    const tasks = loadPromptsFile(evalDef.prompts);
-    if (tasks.length === 0)
-      throw new Error(
-        `No prompts found in ${evalDef.prompts} for ${evalDef.repo}.`,
-      );
-
-    const combinationLabel = `${evalDef.repo} ${model}`;
-
-    // Run episodes
-    const episodeSettledResults = await Promise.allSettled(
-      Array.from({ length: episodes }, (_, offset) =>
-        withTimeout(
-          async () => {
-            const index = offset + 1;
-            const prefix = `[episode ${index}/${episodes}] [${combinationLabel}]`;
-            console.log(
-              `${prefix} Starting episode (timeout: ${timeoutInMinutes} min)...`,
-            );
-            const result = await runEpisode(
-              evalDef,
-              agent,
-              model,
-              tasks,
-              prefix,
-            );
-            return { index, ...result };
-          },
-          {
-            timeoutMs: timeoutInMinutes * 60 * 1000,
-            timeoutMessage: `Episode ${
-              offset + 1
-            } timed out after ${timeoutInMinutes} minutes`,
-          },
-        ),
-      ),
-    );
-
-    const episodeResults = [];
-    const episodeFailures = [];
-
-    for (const [idx, settled] of episodeSettledResults.entries()) {
-      if (settled.status === "fulfilled") {
-        episodeResults.push(settled.value);
-      } else {
-        const errorMessage =
-          settled.reason instanceof Error
-            ? settled.reason.message
-            : String(settled.reason);
-        episodeFailures.push(`Episode ${idx + 1} failed: ${errorMessage}`);
-        console.error(`[episode ${idx + 1}/${episodes}] ${errorMessage}`);
-      }
-    }
-
-    if (episodeResults.length < episodes) {
-      throw new Error(
-        `Expected ${episodes} episodes to complete, but only ${
-          episodeResults.length
-        } succeeded:\n${episodeFailures.join("\n")}`,
-      );
-    }
-
-    episodeResults.sort((a, b) => a.index - b.index);
-
-    const aggregatedInputs = new Map<string, ScoreAggregationInput>();
-    const episodeExports: Episode[] = [];
-    const allLogs: string[] = [];
-    const episodesActions: EpisodeActions[] = [];
-    const averageUsage = episodeResults.reduce(
-      (prev, { usage }) => ({
-        input: prev.input + usage.input / episodeResults.length,
-        output: prev.output + usage.output / episodeResults.length,
-      }),
-      { input: 0, output: 0 },
-    );
-
-    for (const result of episodeResults) {
-      mergeAggregationInputs(aggregatedInputs, result.aggregation);
-      episodeExports.push({
-        finalScore: result.aggregationSummary.finalScore,
-        baseScore: result.aggregationSummary.baseScore,
-        variancePenalty: result.aggregationSummary.variancePenalty,
-        scores: result.scoreExports,
-        usage: result.usage,
-      });
-
-      // Aggregate logs
-      if (result.logs && result.logs.length > 0) {
-        allLogs.push(...result.logs);
-      }
-
-      // Collect actions for summarization
-      episodesActions.push({
-        episodeIndex: result.index,
-        actions: result.actions,
-      });
-    }
-
-    // Generate summary from all episodes' actions
-    let summary = "";
-    try {
-      summary = await generateActionsSummary(evalDef, model, episodesActions);
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      console.error(
-        `[${combinationLabel}] Failed to generate summary: ${message}`,
-      );
-      summary = ""; // Keep empty string on failure
-    }
-
-    const evaluationResult = summarizeAggregation(
-      agent.name,
-      evalDef,
-      model,
-      combinationLabel,
-      aggregatedInputs,
-      episodeExports,
-      averageUsage,
-      summary,
-    );
-
-    printEvalResult(evaluationResult);
-    buildEvalChart(evaluationResult);
-    storeEvalResult(evaluationResult, outputPath);
-  },
-);
-
-try {
-  await cli.parse();
-} catch (error) {
-  console.error(error instanceof Error ? error.message : error);
-  process.exitCode = 1;
-} finally {
-  // Cleanup all loaded agents
-  const agents = listAgents();
-  for (const agent of agents) {
-    if (agent.definition.cleanup) {
-      await agent.definition.cleanup();
-    }
-  }
-  process.exit();
+interface ParsedCliOptions {
+  model: string;
+  eval: string;
+  outputPath?: string;
 }
 
-async function runEpisode(
-  evalDef: DatasetEval,
-  agent: AgentRegistration,
-  model: string,
-  tasks: Task[],
-  prefix: string,
-) {
-  const baselineCommit = evalDef.from;
-  let cwd: string | undefined;
+const EPISODES = 3;
+const EPISODE_TIMEOUT_MS = 40 * 60 * 1000; // 40 minutes per episode
 
-  try {
-    console.log(`${prefix} Cloning repository...`);
-    cwd = cloneRepositoryAtCommit(evalDef, baselineCommit);
+async function printHelp(): Promise<void> {
+  console.log(
+    "Usage: orvl <agent> --model <model> --eval <repo>@<from..to> [--output <file>]",
+  );
+  console.log("");
+  console.log("Examples:");
+  console.log(
+    "  orvl opencode --model opencode/gpt-5-codex --eval DataDog/datadog-lambda-python@93d4a07..d776378",
+  );
+  console.log(
+    "  orvl opencode --model opencode/claude-sonnet-4-5 --eval DataDog/datadog-lambda-python@93d4a07..d776378",
+  );
+  console.log();
+  console.log(
+    "  orvl opencode --model opencode/gpt-5-codex --eval DataDog/datadog-lambda-python@93d4a07..d776378 --output results.json",
+  );
+  console.log("");
+  const agents = await listAgents();
+  console.log(
+    "Available agents:",
+    agents.map((agent) => agent.name).join(", "),
+  );
+  console.log("Available scores:", listScores().join(", "));
+  console.log("Available evals:", listEvalIdentifiers().join(", "));
+}
 
-    const preparedScores = new Map<string, unknown>();
-    for (const assignment of evalDef.scores) {
-      const scoreDefinition = scoreRegistry[assignment.name];
-      if (!scoreDefinition)
-        throw new Error(
-          `${prefix} Score ${assignment.name} is not registered.`,
-        );
+function listEvalIdentifiers(): string[] {
+  return Array.from(new Set(dataset.map((entry) => entry.identifier))).sort(
+    (a, b) => a.localeCompare(b),
+  );
+}
 
-      try {
-        const prepared = await scoreDefinition.prepare({
-          evaluation: evalDef,
-          cwd,
-          config: assignment.args,
-        });
-        preparedScores.set(assignment.name, prepared);
-      } catch (error) {
-        const message = error instanceof Error ? error.message : String(error);
-        throw new Error(
-          `${prefix} Failed to prepare score ${assignment.name}: ${message}`,
-        );
-      }
+function parseOptions(tokens: string[]): ParsedCliOptions {
+  let model: string | undefined;
+  let evalId: string | undefined;
+  let outputPath: string | undefined;
+  const allowed = new Set<string>(["model", "eval", "output"]);
+
+  let index = 0;
+  while (index < tokens.length) {
+    const token = tokens[index];
+    assert(
+      token.startsWith("--"),
+      `Unexpected argument "${token}". Use --model/--eval options.`,
+    );
+
+    const option = token.slice(2);
+    const [rawKey, inlineValue] = option.split("=", 2);
+    assert(rawKey, "Invalid CLI option format.");
+    assert(allowed.has(rawKey), `Unknown option "--${rawKey}".`);
+
+    let value = inlineValue;
+    if (value === undefined) {
+      index += 1;
+      const next = tokens[index];
+      assert(
+        next !== undefined && !next.startsWith("--"),
+        `Option "--${rawKey}" requires a value.`,
+      );
+      value = tokens[index];
     }
 
-    let tasksExecuted = 0;
-    let usage: Usage = { input: 0, output: 0 };
-    const episodeActions: string[] = [];
+    assert(value, `Option "--${rawKey}" cannot be empty.`);
 
-    for (const task of tasks) {
-      const logPrefix = `${prefix} ${task.commit}`;
+    switch (rawKey) {
+      case "output":
+        assert(
+          outputPath === undefined,
+          'Option "--output" specified multiple times.',
+        );
+        outputPath = value;
+        break;
+      case "model":
+        assert(
+          model === undefined,
+          'Option "--model" specified multiple times.',
+        );
+        model = value;
+        break;
+      case "eval":
+        assert(
+          evalId === undefined,
+          'Option "--eval" specified multiple times.',
+        );
+        evalId = value;
+        break;
+      default:
+        assert(false, `Unknown option "--${rawKey}".`);
+    }
+    index += 1;
+  }
 
-      try {
-        const result = await withRetries(
-          async () => {
-            const result = await agent.definition.run(
-              model,
-              task.prompt,
-              cwd!,
-              {
-                onStart: (commandString: string) => {
-                  console.log(`${logPrefix} ${commandString.trim()}`);
-                },
-                logPrefix,
-              },
-            );
-            return result;
-          },
-          {
-            retries: 3,
-            onRetry(error, attempt, retries) {
-              const baseMessage =
+  assert(model, 'Required option "--model" is missing.');
+  assert(evalId, 'Required option "--eval" is missing.');
+
+  return {
+    model: model!,
+    eval: evalId!,
+    outputPath,
+  };
+}
+
+function isHelpRequest(arg: string | undefined): boolean {
+  return (
+    arg === undefined || arg === "--help" || arg === "-h" || arg === "help"
+  );
+}
+
+async function handlePrompts(args: string[]): Promise<void> {
+  if (args.length === 0 || args[0] === "--help" || args[0] === "-h") {
+    console.log("Usage: orvl prompts [--eval <repo>@<from..to>] ");
+    console.log("");
+    console.log("Options:");
+    console.log(
+      "  --eval <repo>@<from..to>  Generate prompts for a specific evaluation (e.g., DataDog/datadog-lambda-python@93d4a07..d776378)",
+    );
+    console.log("");
+    console.log("Examples:");
+    console.log(
+      "  orvl prompts --eval DataDog/datadog-lambda-python@93d4a07..d776378",
+    );
+    return;
+  }
+
+  let generateAll = true;
+  let targetEval: string | undefined;
+
+  for (let i = 0; i < args.length; i++) {
+    const arg = args[i];
+    if (arg === "--eval") {
+      generateAll = false;
+      i++;
+      targetEval = args[i];
+      assert(targetEval, "Option --eval requires a value");
+    } else {
+      console.error(`Unknown option: ${arg}`);
+      process.exitCode = 1;
+      return;
+    }
+  }
+
+  let evalsToGenerate: DatasetEval[] = [];
+
+  if (generateAll) {
+    evalsToGenerate = [...dataset];
+  } else if (targetEval) {
+    const evalDef = dataset.find((entry) => entry.identifier === targetEval);
+    if (!evalDef) {
+      console.error(`Evaluation not found: ${targetEval}`);
+      console.error("Available evaluations:");
+      dataset.forEach((entry) => console.error(`  - ${entry.identifier}`));
+      process.exitCode = 1;
+      return;
+    }
+    evalsToGenerate = [evalDef];
+  }
+
+  console.log(
+    `Generating prompts for ${evalsToGenerate.length} evaluation(s)...\n`,
+  );
+
+  await Promise.all(
+    evalsToGenerate.map((evalDef) => generatePromptsForEval(evalDef)),
+  );
+}
+
+async function main(): Promise<void> {
+  const args = process.argv.slice(2);
+  const agentName = args[0];
+
+  if (isHelpRequest(agentName)) {
+    await printHelp();
+    return;
+  }
+
+  // Handle special commands
+  if (agentName === "prompts") {
+    await handlePrompts(args.slice(1));
+    return;
+  }
+
+  let options: ParsedCliOptions;
+  try {
+    options = parseOptions(args.slice(1));
+  } catch (error) {
+    if (error instanceof Error) {
+      console.error(error.message);
+    }
+    process.exitCode = 1;
+    return;
+  }
+
+  const { model: modelFilter, eval: evalFilter, outputPath } = options;
+
+  const agent = await getAgent(agentName);
+  if (!agent) {
+    console.error(`Unknown agent: ${agentName}`);
+    await printHelp();
+    process.exitCode = 1;
+    return;
+  }
+
+  const model = agent.models.find((entry) => entry === modelFilter);
+
+  assert(
+    model,
+    `Model ${modelFilter} is not registered for agent ${agent.name}.`,
+  );
+
+  const evalDefinition = dataset.find(
+    (entry) => entry.identifier === evalFilter,
+  );
+
+  if (!evalDefinition) {
+    console.error(`Eval ${evalFilter ?? evalFilter} was not found.`);
+    process.exitCode = 1;
+    return;
+  }
+
+  const processEvaluation = async (
+    evalDefinition: DatasetEval,
+    agentRegistration: AgentRegistration,
+    agentLabel: string,
+  ): ReturnType<typeof executeCombination> => {
+    const scores: ScoreAssignment[] = evalDefinition.scores;
+    if (scores.length === 0) {
+      const message = `Evaluation ${evalDefinition.repo} has no score assignments configured.`;
+      console.error(message);
+      process.exitCode = 1;
+      assert(false, message);
+    }
+
+    const evalId = evalDefinition.repo;
+
+    const tasks = loadPromptsFile(evalDefinition.prompts);
+
+    assert(
+      tasks.length > 0,
+      `No prompts found in ${evalDefinition.prompts} for ${evalDefinition.repo}.`,
+    );
+
+    const executeCombination = async (): Promise<{
+      lines: string[];
+      exportData?: EvaluationRunExport;
+    }> => {
+      const combinationLabel = `${evalId} ${model}`;
+
+      interface EpisodeResult {
+        index: number;
+        aggregation: Map<string, ScoreAggregationInput>;
+        aggregationSummary: AggregationSummary;
+        scoreExports: EvaluationRunExport["scores"];
+        logs: string[];
+        actions: string[];
+        usage: Usage;
+        durationMs: number;
+      }
+
+      const runEpisode = async (
+        episodeIndex: number,
+      ): Promise<EpisodeResult> => {
+        const episodeStartTime = Date.now();
+        const episodeTag = `[episode ${episodeIndex}/${EPISODES}]`;
+        const baselineCommit = evalDefinition.from;
+        const prefix = `${episodeTag} [${combinationLabel}]`;
+        let cwd: string | undefined;
+
+        const fail = (message: string): never => {
+          const formatted = `${prefix} ${message}`;
+          console.error(formatted);
+          process.exitCode = 1;
+          throw new Error(formatted);
+        };
+
+        try {
+          console.log(
+            `${prefix} Starting episode (timeout: ${
+              EPISODE_TIMEOUT_MS / 1000 / 60
+            } min)...`,
+          );
+          console.log(`${prefix} Cloning repository...`);
+          cwd = cloneRepositoryAtCommit(evalDefinition, baselineCommit);
+
+          const preparedScores = new Map<string, unknown>();
+          for (const assignment of scores) {
+            const scoreDefinition = scoreRegistry[assignment.name];
+
+            if (!scoreDefinition) {
+              fail(`Score ${assignment.name} is not registered.`);
+            }
+
+            try {
+              const prepared = await scoreDefinition.prepare({
+                evaluation: evalDefinition,
+                cwd,
+                config: assignment.args,
+              });
+              preparedScores.set(assignment.name, prepared);
+            } catch (error) {
+              const message =
                 error instanceof Error ? error.message : String(error);
-              console.error(
-                `${logPrefix} Failed to render command for ${model} (attempt ${attempt}/${retries}): ${baseMessage}`,
+              fail(`Failed to prepare score ${assignment.name}: ${message}`);
+            }
+          }
+
+          let tasksExecuted = 0;
+
+          let usage: Usage = { input: 0, output: 0 };
+          const episodeActions: string[] = [];
+
+          for (const task of tasks) {
+            const logPrefix = `${prefix} ${task.commit}`;
+
+            try {
+              const result = await withRetries(
+                async () => {
+                  const result = await agentRegistration.definition.run(
+                    model,
+                    task.prompt,
+                    cwd!,
+                    {
+                      onStart: (commandString: string) => {
+                        console.log(`${logPrefix} ${commandString.trim()}`);
+                      },
+                      logPrefix,
+                    },
+                  );
+                  return result;
+                },
+                {
+                  retries: 3,
+                  onRetry(error, attempt, retries) {
+                    const baseMessage =
+                      error instanceof Error ? error.message : String(error);
+                    console.error(
+                      `${logPrefix} Failed to render command for ${model} (attempt ${attempt}/${retries}): ${baseMessage}`,
+                    );
+
+                    if (attempt < retries) {
+                      console.log(
+                        `${logPrefix} Retrying agent run (attempt ${
+                          attempt + 1
+                        }/${retries})...`,
+                      );
+                    }
+                  },
+                },
               );
 
-              if (attempt < retries) {
-                console.log(
-                  `${logPrefix} Retrying agent run (attempt ${
-                    attempt + 1
-                  }/${retries})...`,
-                );
-              }
-            },
-          },
-        );
+              // Only accumulate usage from the successful result
+              usage.input += result.usage.input;
+              usage.output += result.usage.output;
 
-        // Only accumulate usage from the successful result
-        usage.input += result.usage.input;
-        usage.output += result.usage.output;
+              // Collect actions from this task
+              episodeActions.push(...result.actions);
+            } catch (error) {
+              const message =
+                error instanceof Error ? error.message : String(error);
+              fail(
+                `Agent run failed for planner task ${task.commit}: ${message}`,
+              );
+            }
 
-        // Collect actions from this task
-        episodeActions.push(...result.actions);
-      } catch (error) {
-        const message = error instanceof Error ? error.message : String(error);
+            tasksExecuted += 1;
+          }
+
+          if (tasksExecuted === 0) {
+            fail("No planner tasks have been executed.");
+          }
+
+          const hasChanges = finalizeAgentChanges(
+            evalDefinition,
+            cwd,
+            baselineCommit,
+          );
+
+          // Even if no changes were written, continue to scoring so judges can
+          // compare the untouched baseline against the desired target.
+
+          const episodeAggregation = await collectAggregationInputsForRun(
+            evalDefinition,
+            scores,
+            model,
+            cwd,
+            preparedScores,
+          );
+
+          if (episodeAggregation.size === 0) {
+            fail("No score results were produced for this episode.");
+          }
+
+          const aggregationSummary = aggregateScores(
+            Array.from(episodeAggregation.values()),
+          );
+
+          const episodeScoreExports = buildScoreExportsFromAggregation(
+            episodeAggregation,
+            aggregationSummary,
+          );
+
+          console.log(
+            `${prefix} Episode completed with final score ${aggregationSummary.finalScore.toFixed(
+              3,
+            )} (base ${aggregationSummary.baseScore.toFixed(
+              3,
+            )} - variance penalty ${aggregationSummary.variancePenalty.toFixed(
+              3,
+            )})`,
+          );
+
+          return {
+            index: episodeIndex,
+            aggregation: episodeAggregation,
+            aggregationSummary,
+            scoreExports: episodeScoreExports,
+            logs: [],
+            actions: episodeActions,
+            usage,
+            durationMs: Date.now() - episodeStartTime,
+          };
+        } finally {
+          if (cwd) {
+            cleanupRepository(cwd, evalDefinition);
+          }
+        }
+      };
+
+      const episodeSettledResults = await Promise.allSettled(
+        Array.from({ length: EPISODES }, (_, offset) =>
+          withTimeout(() => runEpisode(offset + 1), {
+            timeoutMs: EPISODE_TIMEOUT_MS,
+            timeoutMessage: `Episode ${offset + 1} timed out after ${
+              EPISODE_TIMEOUT_MS / 1000 / 60
+            } minutes`,
+          }),
+        ),
+      );
+
+      const episodeResults: EpisodeResult[] = [];
+      const episodeFailures: string[] = [];
+
+      for (const [idx, settled] of episodeSettledResults.entries()) {
+        if (settled.status === "fulfilled") {
+          episodeResults.push(settled.value);
+        } else {
+          const errorMessage =
+            settled.reason instanceof Error
+              ? settled.reason.message
+              : String(settled.reason);
+          episodeFailures.push(`Episode ${idx + 1} failed: ${errorMessage}`);
+          console.error(`[episode ${idx + 1}/${EPISODES}] ${errorMessage}`);
+        }
+      }
+
+      if (episodeResults.length < EPISODES) {
         throw new Error(
-          `${prefix} Agent run failed for planner task ${task.commit}: ${message}`,
+          `Expected ${EPISODES} episodes to complete, but only ${
+            episodeResults.length
+          } succeeded:\n${episodeFailures.join("\n")}`,
         );
       }
 
-      tasksExecuted += 1;
-    }
+      episodeResults.sort((a, b) => a.index - b.index);
 
-    if (tasksExecuted === 0) {
-      throw new Error(`${prefix} No planner tasks have been executed.`);
-    }
-
-    // Even if no changes were written, continue to scoring so judges can
-    // compare the untouched baseline against the desired target.
-
-    const episodeAggregation = await collectAggregationInputsForRun(
-      evalDef,
-      model,
-      cwd,
-      preparedScores,
-    );
-
-    if (episodeAggregation.size === 0) {
-      throw new Error(
-        `${prefix} No score results were produced for this episode.`,
+      const aggregatedInputs = new Map<string, ScoreAggregationInput>();
+      const episodeExports: Episode[] = [];
+      const allLogs: string[] = [];
+      const episodesActions: EpisodeActions[] = [];
+      const averageUsage = episodeResults.reduce(
+        (prev, { usage }) => ({
+          input: prev.input + usage.input / episodeResults.length,
+          output: prev.output + usage.output / episodeResults.length,
+        }),
+        { input: 0, output: 0 },
       );
-    }
 
-    const aggregationSummary = aggregateScores(
-      Array.from(episodeAggregation.values()),
-    );
+      // Calculate total duration and tokens per second
+      const totalDurationMs = episodeResults.reduce(
+        (sum, result) => sum + result.durationMs,
+        0,
+      );
+      const totalTokens = averageUsage.input + averageUsage.output;
+      const durationSeconds = totalDurationMs / 1000;
+      const tokensPerSecond =
+        durationSeconds > 0 ? totalTokens / durationSeconds : 0;
 
-    const episodeScoreExports = buildScoreExportsFromAggregation(
-      episodeAggregation,
-      aggregationSummary,
-    );
+      for (const result of episodeResults) {
+        mergeAggregationInputs(aggregatedInputs, result.aggregation);
+        episodeExports.push({
+          finalScore: result.aggregationSummary.finalScore,
+          baseScore: result.aggregationSummary.baseScore,
+          variancePenalty: result.aggregationSummary.variancePenalty,
+          scores: result.scoreExports,
+          usage: result.usage,
+        });
 
-    console.log(
-      `${prefix} Episode completed with final score ${aggregationSummary.finalScore.toFixed(
-        3,
-      )} (base ${aggregationSummary.baseScore.toFixed(
-        3,
-      )} - variance penalty ${aggregationSummary.variancePenalty.toFixed(3)})`,
-    );
+        // Aggregate logs
+        if (result.logs && result.logs.length > 0) {
+          allLogs.push(...result.logs);
+        }
 
-    return {
-      aggregation: episodeAggregation,
-      aggregationSummary,
-      scoreExports: episodeScoreExports,
-      logs: [],
-      actions: episodeActions,
-      usage,
-    };
-  } finally {
-    if (cwd) {
-      cleanupRepository(cwd, evalDef);
-    }
-  }
-}
+        // Collect actions for summarization
+        episodesActions.push({
+          episodeIndex: result.index,
+          actions: result.actions,
+        });
+      }
 
-function printEvalResult(evalExport: ReturnType<typeof summarizeAggregation>) {
-  evalExport.lines.forEach(console.log);
-  if (evalExport.exportData) {
-    const { episodes, finalScore, baseScore, variancePenalty } =
-      evalExport.exportData;
-    if (episodes.length > 0) {
-      console.log("[debug] Episode recap:");
-      episodes.forEach((episode, index) => {
-        console.log(
-          `[debug]   Episode ${index + 1}: final ${episode.finalScore.toFixed(
-            3,
-          )} (base ${episode.baseScore.toFixed(
-            3,
-          )} - penalty ${episode.variancePenalty.toFixed(3)})`,
+      // Generate summary from all episodes' actions
+      let summary = "";
+      try {
+        summary = await generateActionsSummary(
+          evalDefinition,
+          model,
+          episodesActions,
         );
-      });
-    }
-    console.log(
-      `[debug] Aggregate final: ${finalScore.toFixed(
-        3,
-      )} (base ${baseScore.toFixed(3)} - penalty ${variancePenalty.toFixed(
-        3,
-      )})`,
-    );
-  }
-}
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        console.error(
+          `[${combinationLabel}] Failed to generate summary: ${message}`,
+        );
+        summary = ""; // Keep empty string on failure
+      }
 
-function buildEvalChart(evalExport: ReturnType<typeof summarizeAggregation>) {
-  const chartUrl = buildRadarChartUrl({
-    labels: evalExport.exportData.scores.map((s) => s.assignment.name),
-    values: evalExport.exportData.scores.map((s) =>
-      Number(s.averageScore.toFixed(3)),
-    ),
-    title: `${evalExport.exportData.evaluation.repo} • ${evalExport.exportData.model}`,
-    datasetLabel: evalExport.exportData.model,
-  });
-  console.log(`\nRadar Chart: ${chartUrl}\n`);
-}
+      return summarizeAggregation(
+        agentLabel,
+        evalDefinition,
+        model,
+        combinationLabel,
+        aggregatedInputs,
+        episodeExports,
+        averageUsage,
+        summary,
+        totalDurationMs,
+        tokensPerSecond,
+      );
+    };
 
-function storeEvalResult(
-  evalExport: ReturnType<typeof summarizeAggregation>,
-  outputPath?: string,
-) {
-  if (!outputPath) return;
+    return await executeCombination();
+  };
 
   try {
-    const directory = dirname(outputPath);
-    if (directory && directory !== ".") {
-      mkdirSync(directory, { recursive: true });
+    const evaluationResult = await processEvaluation(
+      evalDefinition,
+      agent,
+      agentName,
+    );
+
+    evaluationResult.lines.forEach((line) => {
+      console.log(line);
+    });
+
+    if (evaluationResult.exportData) {
+      const {
+        episodes,
+        finalScore,
+        baseScore,
+        variancePenalty,
+        durationMs,
+        tokensPerSecond,
+      } = evaluationResult.exportData;
+      if (episodes.length > 0) {
+        console.log("[debug] Episode recap:");
+        episodes.forEach((episode, index) => {
+          console.log(
+            `[debug]   Episode ${index + 1}: final ${episode.finalScore.toFixed(
+              3,
+            )} (base ${episode.baseScore.toFixed(
+              3,
+            )} - penalty ${episode.variancePenalty.toFixed(3)})`,
+          );
+        });
+      }
+      console.log(
+        `[debug] Aggregate final: ${finalScore.toFixed(
+          3,
+        )} (base ${baseScore.toFixed(3)} - penalty ${variancePenalty.toFixed(
+          3,
+        )})`,
+      );
+      console.log(
+        `[debug] Performance: ${(durationMs / 1000).toFixed(1)}s, ${tokensPerSecond.toFixed(1)} tokens/sec`,
+      );
+
+      // Generate and log radar chart URL
+      const chartUrl = buildRadarChartUrl({
+        labels: evaluationResult.exportData.scores.map(
+          (s) => s.assignment.name,
+        ),
+        values: evaluationResult.exportData.scores.map((s) =>
+          Number(s.averageScore.toFixed(3)),
+        ),
+        title: `${evalDefinition.repo} • ${evaluationResult.exportData.model}`,
+        datasetLabel: evaluationResult.exportData.model,
+      });
+      console.log(`\nRadar Chart: ${chartUrl}\n`);
     }
 
-    writeFileSync(outputPath, JSON.stringify(evalExport.exportData, null, 2));
-  } catch (error) {
-    const message =
-      error instanceof Error ? error.message : "Unknown error writing output.";
-    throw new Error(`Failed to write export to ${outputPath}: ${message}`);
+    if (outputPath) {
+      try {
+        const directory = dirname(outputPath);
+        if (directory && directory !== ".") {
+          mkdirSync(directory, { recursive: true });
+        }
+
+        writeFileSync(
+          outputPath,
+          JSON.stringify(evaluationResult.exportData, null, 2),
+        );
+      } catch (error) {
+        const message =
+          error instanceof Error
+            ? error.message
+            : "Unknown error writing output.";
+        console.error(`Failed to write export to ${outputPath}: ${message}`);
+        process.exitCode = 1;
+        return;
+      }
+    }
+  } catch {
+    return;
   }
 }
+
+main()
+  .catch((error) => {
+    if (error instanceof Error) {
+      console.error(error);
+    } else {
+      console.error(new Error(String(error)));
+    }
+    process.exitCode = 1;
+  })
+  .finally(async () => {
+    // Cleanup all loaded agents
+    const agents = await listAgents();
+    for (const agent of agents) {
+      if (agent.definition.cleanup) {
+        await agent.definition.cleanup();
+      }
+    }
+    process.exit();
+  });
 
 function cleanupRepository(tempDir: string, entry: DatasetEval): void {
   try {
@@ -540,6 +732,7 @@ function cloneRepositoryAtCommit(
 
 async function collectAggregationInputsForRun(
   datasetEval: DatasetEval,
+  scores: ScoreAssignment[],
   model: ModelCombination,
   cwd: string,
   preparedReferences: Map<string, unknown>,
@@ -547,7 +740,7 @@ async function collectAggregationInputsForRun(
   const aggregationInputs = new Map<string, ScoreAggregationInput>();
 
   for (const judge of judges) {
-    for (const assignment of datasetEval.scores) {
+    for (const assignment of scores) {
       const scoreDefinition = scoreRegistry[assignment.name];
 
       if (!scoreDefinition) {
@@ -611,6 +804,8 @@ function summarizeAggregation(
   episodes: Episode[],
   usage: Usage,
   summary: string,
+  durationMs: number,
+  tokensPerSecond: number,
 ): { lines: string[]; exportData: EvaluationRunExport } {
   const evalId = datasetEval.repo;
   const runContext = contextLabel ? `${evalId} [${contextLabel}]` : evalId;
@@ -673,6 +868,8 @@ function summarizeAggregation(
     episodes,
     usage,
     summary,
+    durationMs,
+    tokensPerSecond,
   };
 
   return { lines, exportData };

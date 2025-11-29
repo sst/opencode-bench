@@ -54,4 +54,6 @@ export interface EvaluationRunExport {
   episodes: Episode[];
   usage: Usage;
   summary: string;
+  durationMs: number;
+  tokensPerSecond: number;
 }
