@@ -44,6 +44,6 @@ export async function getAgent(
   return agents[name];
 }
 
-export async function listAgents(): Promise<AgentRegistration[]> {
+export function listAgents() {
   return Object.values(agents);
 }
