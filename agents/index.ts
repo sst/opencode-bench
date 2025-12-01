@@ -2,21 +2,21 @@ import { strict as assert } from "node:assert";
 
 import type { AgentDefinition } from "~/lib/createAgent.js";
 
-export interface AgentRegistration {
+export interface AgentRegistration<TModel extends string = string> {
   name: string;
-  definition: AgentDefinition;
-  models: string[];
+  definition: AgentDefinition<TModel>;
+  models: ReadonlyArray<TModel>;
 }
 
-interface AgentModuleShape {
-  default?: AgentDefinition;
-  models?: string[];
+interface AgentModuleShape<TModel extends string = string> {
+  default?: AgentDefinition<TModel>;
+  models?: ReadonlyArray<TModel>;
 }
 
-function createAgentRegistration(
+function createAgentRegistration<TModel extends string>(
   name: string,
-  module: AgentModuleShape,
-): AgentRegistration {
+  module: AgentModuleShape<TModel>,
+): AgentRegistration<TModel> {
   const definition = module.default;
   const models = module.models;
 
@@ -26,7 +26,7 @@ function createAgentRegistration(
   return { name, definition, models };
 }
 
-const agents: Record<string, AgentRegistration> = {
+const agents: Record<string, AgentRegistration<any>> = {
   codex: createAgentRegistration("codex", await import("~/agents/codex.js")),
   opencode: createAgentRegistration(
     "opencode",

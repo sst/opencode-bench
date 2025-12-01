@@ -134,21 +134,21 @@ const claudeEpisodes: Episode[] = [
     baseScore: 0.912,
     variancePenalty: 0.003,
     scores: cloneScores(claudeScores, 0.002, -0.005),
-    usage: { input: 50000, output: 10000 },
+    usage: { input: 50000, output: 10000, cost: 0 },
   },
   {
     finalScore: 0.901,
     baseScore: 0.905,
     variancePenalty: 0.004,
     scores: cloneScores(claudeScores, 0, 0),
-    usage: { input: 51000, output: 10500 },
+    usage: { input: 51000, output: 10500, cost: 0 },
   },
   {
     finalScore: 0.896,
     baseScore: 0.902,
     variancePenalty: 0.006,
     scores: cloneScores(claudeScores, -0.002, 0.004),
-    usage: { input: 49000, output: 9800 },
+    usage: { input: 49000, output: 9800, cost: 0 },
   },
 ];
 
@@ -194,21 +194,21 @@ const gptEpisodes: Episode[] = [
     baseScore: 0.907,
     variancePenalty: 0.004,
     scores: cloneScores(gptScores, 0.003, -0.006),
-    usage: { input: 48000, output: 9500 },
+    usage: { input: 48000, output: 9500, cost: 0 },
   },
   {
     finalScore: 0.894,
     baseScore: 0.898,
     variancePenalty: 0.004,
     scores: cloneScores(gptScores, -0.002, 0.002),
-    usage: { input: 49000, output: 9800 },
+    usage: { input: 49000, output: 9800, cost: 0 },
   },
   {
     finalScore: 0.892,
     baseScore: 0.897,
     variancePenalty: 0.005,
     scores: cloneScores(gptScores, -0.003, 0.004),
-    usage: { input: 47500, output: 9400 },
+    usage: { input: 47500, output: 9400, cost: 0 },
   },
 ];
 
@@ -229,10 +229,9 @@ const sampleExport: EvaluationRunExport[] = [
     variancePenalty: 0.003,
     scores: claudeScores,
     episodes: claudeEpisodes,
-    usage: { input: 50000, output: 10100 },
+    usage: { input: 50000, output: 10100, cost: 12.34 },
     summary: "",
-    durationMs: 180000,
-    tokensPerSecond: 334.0,
+    duration: 180000,
   },
   {
     agent: "opencode",
@@ -250,10 +249,9 @@ const sampleExport: EvaluationRunExport[] = [
     variancePenalty: 0.004,
     scores: gptScores,
     episodes: gptEpisodes,
-    usage: { input: 48167, output: 9633 },
+    usage: { input: 48167, output: 9633, cost: 15.67 },
     summary: "",
-    durationMs: 165000,
-    tokensPerSecond: 350.9,
+    duration: 165000,
   },
 ];
 

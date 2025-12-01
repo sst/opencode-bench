@@ -169,11 +169,12 @@ const opencodeAgent: AgentDefinition = {
       sessionCache.set(cacheKey, sessionID);
     }
 
-    const actions: string[] = [];
-    const usage = {
-      input: 0,
-      output: 0,
-    };
+  const actions: string[] = [];
+  const usage = {
+    input: 0,
+    output: 0,
+    cost: 0,
+  };
     try {
       const [providerID, modelID] = model.split("/");
 
@@ -196,6 +197,7 @@ const opencodeAgent: AgentDefinition = {
       const info = data.info;
       usage.input = info?.tokens?.input ?? 0;
       usage.output = info?.tokens?.output ?? 0;
+      usage.cost = info?.cost ?? 0;
 
       if (info) {
         actions.push(JSON.stringify(info));

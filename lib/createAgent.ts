@@ -13,9 +13,9 @@ export type AgentExecutor = (
   prompt: AgentPrompt,
 ) => AgentCommandSpec | Promise<AgentCommandSpec>;
 
-export interface AgentDefinition {
+export interface AgentDefinition<TModel extends string = string> {
   run: (
-    model: string,
+    model: TModel,
     prompt: AgentPrompt,
     cwd: string,
     options?: AgentRunOptions,
@@ -29,6 +29,7 @@ export interface AgentRunResult {
   usage: {
     input: number;
     output: number;
+    cost: number;
   };
 }
 
