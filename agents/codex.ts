@@ -137,24 +137,15 @@ const codexAgent: AgentDefinition<(typeof models)[number]> = {
       const turn = await thread.run(prompt);
       assert(turn.usage, "The agent did not emit the usage information.");
       usage = turn.usage;
-      if (!pricing) {
-        if (!missingPricing.has(pricingKey)) {
-          missingPricing.add(pricingKey);
-          console.warn(
-            `[codex] Pricing not found for ${pricingKey}; using $0 for cost calculation.`,
-          );
-        }
-      } else {
-        const billableInput =
-          (usage.input_tokens ?? 0) - (usage.cached_input_tokens ?? 0);
-        const cachedInput = usage.cached_input_tokens ?? 0;
-        const output = usage.output_tokens ?? 0;
-        cost =
-          (billableInput * pricing.input +
-            output * pricing.output +
-            cachedInput * pricing.cache_read) /
-          1_000_000;
-      }
+      const billableInput =
+        (usage.input_tokens ?? 0) - (usage.cached_input_tokens ?? 0);
+      const cachedInput = usage.cached_input_tokens ?? 0;
+      const output = usage.output_tokens ?? 0;
+      cost =
+        (billableInput * pricing.input +
+          output * pricing.output +
+          cachedInput * pricing.cache_read) /
+        1_000_000;
 
       actions.push(...turn.items.map((item) => JSON.stringify(item)));
       logTurnItems(turn.items, options);
@@ -192,5 +183,3 @@ const openai = (await response.json())["openai"] as {
     }
   }>
 }
-
-const missingPricing = new Set<string>();
