@@ -1,4 +1,4 @@
-import { spawnSync } from "node:child_process";
+import { spawn } from "node:child_process";
 import { strict as assert } from "node:assert";
 
 import { generateObject } from "ai";
@@ -125,22 +125,21 @@ const COMMAND_TIMEOUT_MS = 5 * 60 * 1000;
 type ChecksConfig = z.infer<typeof commandConfigSchema>;
 
 export default createScore<PreparedCheck[], ChecksConfig>({
-  prepare: ({ cwd, evaluation, config }) => {
+  prepare: async ({ cwd, evaluation, config }) => {
     const parsedConfig = commandConfigSchema.parse(config ?? {});
 
-    parsedConfig.setup.forEach((command) => {
-      const result = runCommand(command, cwd);
+    for (const command of parsedConfig.setup) {
+      const result = await runCommand(command, cwd);
       logSetupExecution(command, result);
-    });
+    }
 
-    const results: PreparedCheck[] = parsedConfig.commands.map((command) => {
-      const baseline = runCommand(command, cwd);
+    const results: PreparedCheck[] = [];
+
+    for (const command of parsedConfig.commands) {
+      const baseline = await runCommand(command, cwd);
       logExecution("baseline", command, baseline);
-      return {
-        command,
-        baseline,
-      };
-    });
+      results.push({ command, baseline });
+    }
 
     assert(
       results.length > 0,
@@ -152,12 +151,12 @@ export default createScore<PreparedCheck[], ChecksConfig>({
   evaluate: async ({ evaluation, cwd, judge, reference, config: _config }) => {
     finalizeAgentChanges(evaluation, cwd, evaluation.from);
 
-    reference.forEach((entry) => {
+    for (const entry of reference) {
       if (!entry.after) {
-        entry.after = runCommand(entry.command, cwd);
+        entry.after = await runCommand(entry.command, cwd);
         logExecution("after", entry.command, entry.after);
       }
-    });
+    }
 
     const prompt = buildJudgePrompt(reference);
 
@@ -181,46 +180,67 @@ export default createScore<PreparedCheck[], ChecksConfig>({
   },
 });
 
-function runCommand(command: string, cwd: string): CommandExecution {
+async function runCommand(command: string, cwd: string): Promise<CommandExecution> {
   const start = Date.now();
-  const result = spawnSync(command, {
-    cwd,
-    shell: true,
-    encoding: "utf8",
-    timeout: COMMAND_TIMEOUT_MS,
-    env: {
-      ...process.env,
-      CI: process.env.CI ?? "1",
-    },
+
+  return await new Promise<CommandExecution>((resolve) => {
+    const child = spawn(command, {
+      cwd,
+      shell: true,
+      env: {
+        ...process.env,
+        CI: process.env.CI ?? "1",
+      },
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+
+    let stdout = "";
+    let stderr = "";
+    let errorMessage: string | undefined;
+    let timeout: NodeJS.Timeout | undefined;
+    let settled = false;
+
+    const finalize = (exitCode: number | null) => {
+      if (settled) return;
+      settled = true;
+      if (timeout) clearTimeout(timeout);
+
+      const runtimeMs = Date.now() - start;
+      const success = exitCode === 0 && !errorMessage;
+
+      resolve({
+        command,
+        success,
+        exitCode,
+        stdout,
+        stderr,
+        runtimeMs,
+        errorMessage,
+      });
+    };
+
+    timeout = setTimeout(() => {
+      errorMessage = `Timed out after ${COMMAND_TIMEOUT_MS}ms`;
+      child.kill("SIGKILL");
+    }, COMMAND_TIMEOUT_MS);
+
+    child.stdout?.on("data", (chunk) => {
+      stdout += chunk.toString();
+    });
+
+    child.stderr?.on("data", (chunk) => {
+      stderr += chunk.toString();
+    });
+
+    child.on("error", (error) => {
+      errorMessage = error.message;
+    });
+
+    child.on("close", (code) => {
+      const exitCode = typeof code === "number" ? code : null;
+      finalize(exitCode);
+    });
   });
-
-  const runtimeMs = Date.now() - start;
-  const stdout = (result.stdout ?? "").toString();
-  const stderr = (result.stderr ?? "").toString();
-
-  let exitCode: number | null = null;
-  let success = false;
-  let errorMessage: string | undefined;
-
-  if (typeof result.status === "number") {
-    exitCode = result.status;
-    success = exitCode === 0;
-  }
-
-  if (result.error) {
-    success = false;
-    errorMessage = result.error.message;
-  }
-
-  return {
-    command,
-    success,
-    exitCode,
-    stdout,
-    stderr,
-    runtimeMs,
-    errorMessage,
-  };
 }
 
 function buildJudgePrompt(entries: PreparedCheck[]): string {

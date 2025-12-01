@@ -41,7 +41,7 @@
         setup:
           - cargo fetch
         commands:
-          - cargo fmt --all -- --check
+          - cargo fmt --all -- --check --quiet
 - repo: HelixDB/helix-db
   from: 35a9e733c659762487ba03ee68184f91639b912a
   to: 12ebac2e330aa4dfd5509852653508de51be4186
@@ -68,7 +68,7 @@
         setup:
           - cargo fetch
         commands:
-          - cargo fmt --all -- --check
+          - cargo fmt --all -- --check --quiet
 - repo: getsentry/sentry
   from: 62c4c6573f53f39b2f5b73356e26f330a501e7ea
   to: b950f7636b79d9431b800d6fbe7c166f3ff00d29

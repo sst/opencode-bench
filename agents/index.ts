@@ -27,15 +27,16 @@ function createAgentRegistration<TModel extends string>(
 }
 
 const agents: Record<string, AgentRegistration<any>> = {
-  codex: createAgentRegistration("codex", await import("~/agents/codex.js")),
+  // Only keep opencode active while debugging timeouts for specific models.
   opencode: createAgentRegistration(
     "opencode",
     await import("~/agents/opencode.js"),
   ),
-  "claude-code": createAgentRegistration(
-    "claude-code",
-    await import("~/agents/claude-code.js"),
-  ),
+  // codex: createAgentRegistration("codex", await import("~/agents/codex.js")),
+  // "claude-code": createAgentRegistration(
+  //   "claude-code",
+  //   await import("~/agents/claude-code.js"),
+  // ),
 };
 
 export async function getAgent(
