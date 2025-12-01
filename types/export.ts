@@ -40,6 +40,7 @@ export interface EvaluationMetadataExport {
 export interface Usage {
   input: number;
   output: number;
+  cost: number;
 }
 
 export interface EvaluationRunExport {
@@ -54,6 +55,5 @@ export interface EvaluationRunExport {
   episodes: Episode[];
   usage: Usage;
   summary: string;
-  durationMs: number;
-  tokensPerSecond: number;
+  duration: number;
 }

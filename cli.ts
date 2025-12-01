@@ -37,7 +37,7 @@ interface EpisodeResult {
   logs: string[];
   actions: string[];
   usage: Usage;
-  durationMs: number;
+  duration: number;
 }
 
 const evalIds = dataset
@@ -172,7 +172,6 @@ cli.command(
             console.log(
               `${prefix} Starting episode (timeout: ${timeoutInMinutes} min)...`,
             );
-            const startedAt = Date.now();
             const result = await runEpisode(
               evalDef,
               agent,
@@ -180,7 +179,7 @@ cli.command(
               tasks,
               prefix,
             );
-            return { index, durationMs: Date.now() - startedAt, ...result };
+            return { index, ...result };
           },
           {
             timeoutMs: timeoutInMinutes * 60 * 1000,
@@ -226,17 +225,15 @@ cli.command(
       (prev, { usage }) => ({
         input: prev.input + usage.input / episodeResults.length,
         output: prev.output + usage.output / episodeResults.length,
+        cost: prev.cost + usage.cost / episodeResults.length,
       }),
-      { input: 0, output: 0 },
+      { input: 0, output: 0, cost: 0 },
     );
 
-    const totalDurationMs = episodeResults.reduce(
-      (prev, { durationMs }) => prev + durationMs,
+    const totalDuration = episodeResults.reduce(
+      (prev, { duration }) => prev + duration,
       0,
     );
-    const totalTokens = averageUsage.input + averageUsage.output;
-    const tokensPerSecond =
-      totalDurationMs > 0 ? totalTokens / (totalDurationMs / 1000) : 0;
 
     for (const result of episodeResults) {
       mergeAggregationInputs(aggregatedInputs, result.aggregation);
@@ -281,8 +278,7 @@ cli.command(
       episodeExports,
       averageUsage,
       summary,
-      totalDurationMs,
-      tokensPerSecond,
+      totalDuration,
     );
 
     printEvalResult(evaluationResult);
@@ -316,6 +312,7 @@ async function runEpisode(
 ) {
   const baselineCommit = evalDef.from;
   let cwd: string | undefined;
+  let episodeDuration = 0;
 
   try {
     console.log(`${prefix} Cloning repository...`);
@@ -345,15 +342,20 @@ async function runEpisode(
     }
 
     let tasksExecuted = 0;
-    let usage: Usage = { input: 0, output: 0 };
+    let usage: Usage = { input: 0, output: 0, cost: 0 };
     const episodeActions: string[] = [];
+    let episodeDuration = 0;
 
     for (const task of tasks) {
       const logPrefix = `${prefix} ${task.commit}`;
 
       try {
+        let successfulRunDuration = 0;
+        // TODO: retrying the agent runs here means if the agent did half of the work, the next agent would come up and continue those changes which is not correct.
+        // the agent should start from a clean state again and do the work. so the whole loop should be restarted.
         const result = await withRetries(
           async () => {
+            const startedAt = Date.now();
             const result = await agent.definition.run(
               model,
               task.prompt,
@@ -365,6 +367,7 @@ async function runEpisode(
                 logPrefix,
               },
             );
+            successfulRunDuration = Date.now() - startedAt;
             return result;
           },
           {
@@ -386,10 +389,12 @@ async function runEpisode(
             },
           },
         );
+        episodeDuration += successfulRunDuration;
 
         // Only accumulate usage from the successful result
         usage.input += result.usage.input;
         usage.output += result.usage.output;
+        usage.cost += result.usage.cost;
 
         // Collect actions from this task
         episodeActions.push(...result.actions);
@@ -447,6 +452,7 @@ async function runEpisode(
       logs: [],
       actions: episodeActions,
       usage,
+      duration: episodeDuration,
     };
   } finally {
     if (cwd) {
@@ -633,8 +639,7 @@ function summarizeAggregation(
   episodes: Episode[],
   usage: Usage,
   summary: string,
-  durationMs: number,
-  tokensPerSecond: number,
+  duration: number,
 ): { lines: string[]; exportData: EvaluationRunExport } {
   const evalId = datasetEval.repo;
   const runContext = contextLabel ? `${evalId} [${contextLabel}]` : evalId;
@@ -697,8 +702,7 @@ function summarizeAggregation(
     episodes,
     usage,
     summary,
-    durationMs,
-    tokensPerSecond,
+    duration,
   };
 
   return { lines, exportData };

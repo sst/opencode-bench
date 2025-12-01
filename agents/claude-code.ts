@@ -107,11 +107,12 @@ const claudeCodeAgent: AgentDefinition = {
     const cacheKey = sessionKey(cwd, model);
     const existingSessionID = sessionCache.get(cacheKey);
 
-    const actions: string[] = [];
-    const usage = {
-      input: 0,
-      output: 0,
-    };
+  const actions: string[] = [];
+  const usage = {
+    input: 0,
+    output: 0,
+    cost: 0,
+  };
 
     try {
       const result = query({
@@ -134,6 +135,7 @@ const claudeCodeAgent: AgentDefinition = {
         if (message.type === "result" && "usage" in message) {
           usage.input += message.usage.input_tokens || 0;
           usage.output += message.usage.output_tokens || 0;
+          usage.cost += message.total_cost_usd || 0;
         }
 
         actions.push(JSON.stringify(message));
