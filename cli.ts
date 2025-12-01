@@ -361,6 +361,7 @@ async function runEpisodeAttempt(
           evaluation: evalDef,
           cwd,
           config: assignment.args,
+          logPrefix: prefix,
         });
         preparedScores.set(assignment.name, prepared);
       } catch (error) {
@@ -422,6 +423,7 @@ async function runEpisodeAttempt(
       model,
       cwd,
       preparedScores,
+      prefix,
     );
 
     if (episodeAggregation.size === 0) {
@@ -573,6 +575,7 @@ async function collectAggregationInputsForRun(
   model: ModelCombination,
   cwd: string,
   preparedReferences: Map<string, unknown>,
+  logPrefix?: string,
 ): Promise<Map<string, ScoreAggregationInput>> {
   const aggregationInputs = new Map<string, ScoreAggregationInput>();
 
@@ -603,6 +606,7 @@ async function collectAggregationInputsForRun(
           evaluation: datasetEval,
           cwd,
           config: assignment.args,
+          logPrefix,
         });
 
         ensureAggregationEntry(aggregationInputs, assignment).judgeResults.push(

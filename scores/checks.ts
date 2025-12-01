@@ -125,19 +125,19 @@ const COMMAND_TIMEOUT_MS = 5 * 60 * 1000;
 type ChecksConfig = z.infer<typeof commandConfigSchema>;
 
 export default createScore<PreparedCheck[], ChecksConfig>({
-  prepare: async ({ cwd, evaluation, config }) => {
+  prepare: async ({ cwd, evaluation, config, logPrefix }) => {
     const parsedConfig = commandConfigSchema.parse(config ?? {});
 
     for (const command of parsedConfig.setup) {
       const result = await runCommand(command, cwd);
-      logSetupExecution(command, result);
+      logSetupExecution(command, result, logPrefix);
     }
 
     const results: PreparedCheck[] = [];
 
     for (const command of parsedConfig.commands) {
       const baseline = await runCommand(command, cwd);
-      logExecution("baseline", command, baseline);
+      logExecution("baseline", command, baseline, logPrefix);
       results.push({ command, baseline });
     }
 
@@ -148,13 +148,20 @@ export default createScore<PreparedCheck[], ChecksConfig>({
 
     return results;
   },
-  evaluate: async ({ evaluation, cwd, judge, reference, config: _config }) => {
+  evaluate: async ({
+    evaluation,
+    cwd,
+    judge,
+    reference,
+    config: _config,
+    logPrefix,
+  }) => {
     finalizeAgentChanges(evaluation, cwd, evaluation.from);
 
     for (const entry of reference) {
       if (!entry.after) {
         entry.after = await runCommand(entry.command, cwd);
-        logExecution("after", entry.command, entry.after);
+        logExecution("after", entry.command, entry.after, logPrefix);
       }
     }
 
@@ -273,68 +280,49 @@ function formatExecution(execution: CommandExecution): string {
   return `${status} (${exitInfo}, ${duration})${error}\nstdout: ${stdout.length > 0 ? stdout : "<empty>"}\nstderr: ${stderr.length > 0 ? stderr : "<empty>"}`;
 }
 
+function formatExecutionForLog(execution: CommandExecution): string {
+  const status = execution.success ? "PASS" : "FAIL";
+  const exitInfo =
+    execution.exitCode !== null ? `exit ${execution.exitCode}` : "no exit code";
+  const duration = `${execution.runtimeMs}ms`;
+  const error = execution.errorMessage
+    ? ` error: ${execution.errorMessage}`
+    : "";
+
+  return `${status} (${exitInfo}, ${duration})${error}`;
+}
+
 function logExecution(
   stage: "baseline" | "after",
   command: string,
   execution: CommandExecution,
+  logPrefix?: string,
 ): void {
   const header =
     stage === "baseline" ? "[checks] Baseline" : "[checks] After agent";
-  const formatted = formatExecution(execution);
-  console.log(`${header} ${command}\n${formatted}\n`);
-
-  if (!execution.success) {
-    const stdoutLabel =
-      stage === "baseline"
-        ? "[checks] Baseline stdout"
-        : "[checks] After agent stdout";
-    const stderrLabel =
-      stage === "baseline"
-        ? "[checks] Baseline stderr"
-        : "[checks] After agent stderr";
-
-    const rawStdout = execution.stdout?.trim() ?? "";
-    const rawStderr = execution.stderr?.trim() ?? "";
-
-    console.log(
-      `${stdoutLabel} ${command}\n${rawStdout.length > 0 ? rawStdout : "<empty>"}\n`,
-    );
-    console.log(
-      `${stderrLabel} ${command}\n${rawStderr.length > 0 ? rawStderr : "<empty>"}\n`,
-    );
-
-    if (execution.errorMessage) {
-      const errorLabel =
-        stage === "baseline"
-          ? "[checks] Baseline error"
-          : "[checks] After agent error";
-      console.log(`${errorLabel} ${command}\n${execution.errorMessage}\n`);
-    }
-  }
+  const formatted = formatExecutionForLog(execution);
+  logLines(logPrefix, `${header} ${command}`);
+  logLines(logPrefix, formatted);
 }
 
-function logSetupExecution(command: string, execution: CommandExecution): void {
-  const formatted = formatExecution(execution);
-  console.log(`[checks] Setup ${command}\n${formatted}\n`);
+function logSetupExecution(
+  command: string,
+  execution: CommandExecution,
+  logPrefix?: string,
+): void {
+  const formatted = formatExecutionForLog(execution);
+  logLines(logPrefix, `[checks] Setup ${command}`);
+  logLines(logPrefix, formatted);
+}
 
-  if (!execution.success) {
-    const stdoutLabel = `[checks] Setup stdout`;
-    const stderrLabel = `[checks] Setup stderr`;
-
-    const rawStdout = execution.stdout?.trim() ?? "";
-    const rawStderr = execution.stderr?.trim() ?? "";
-
-    console.log(
-      `${stdoutLabel} ${command}\n${rawStdout.length > 0 ? rawStdout : "<empty>"}\n`,
-    );
-    console.log(
-      `${stderrLabel} ${command}\n${rawStderr.length > 0 ? rawStderr : "<empty>"}\n`,
-    );
-
-    if (execution.errorMessage) {
-      console.log(
-        `[checks] Setup error ${command}\n${execution.errorMessage}\n`,
-      );
+function logLines(logPrefix: string | undefined, message: string): void {
+  const lines = message.split("\n");
+  for (const line of lines) {
+    if (line.length === 0) continue;
+    if (logPrefix) {
+      console.log(`${logPrefix} ${line}`);
+    } else {
+      console.log(line);
     }
   }
 }

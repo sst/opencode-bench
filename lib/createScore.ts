@@ -16,6 +16,7 @@ export interface ScorePreparationContext<Config = unknown> {
   evaluation: DatasetEval;
   cwd: string;
   config: Config;
+  logPrefix?: string;
 }
 
 export interface ScoreEvaluationContext<Reference, Config = unknown> {
@@ -24,6 +25,7 @@ export interface ScoreEvaluationContext<Reference, Config = unknown> {
   config: Config;
   judge: Judge;
   reference: Reference;
+  logPrefix?: string;
 }
 
 export interface ScoreResult {
