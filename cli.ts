@@ -310,6 +310,36 @@ async function runEpisode(
   tasks: Task[],
   prefix: string,
 ) {
+  return withRetries(
+    () => runEpisodeAttempt(evalDef, agent, model, tasks, prefix),
+    {
+      retries: 3,
+      onRetry(error, attempt, retries) {
+        const baseMessage =
+          error instanceof Error ? error.message : String(error);
+        console.error(
+          `${prefix} Episode attempt ${attempt}/${retries} failed: ${baseMessage}`,
+        );
+
+        if (attempt < retries) {
+          console.log(
+            `${prefix} Restarting episode from a clean state (attempt ${
+              attempt + 1
+            }/${retries})...`,
+          );
+        }
+      },
+    },
+  );
+}
+
+async function runEpisodeAttempt(
+  evalDef: DatasetEval,
+  agent: AgentRegistration,
+  model: string,
+  tasks: Task[],
+  prefix: string,
+) {
   const baselineCommit = evalDef.from;
   let cwd: string | undefined;
   let episodeDuration = 0;
@@ -344,52 +374,24 @@ async function runEpisode(
     let tasksExecuted = 0;
     let usage: Usage = { input: 0, output: 0, cost: 0 };
     const episodeActions: string[] = [];
-    let episodeDuration = 0;
 
     for (const task of tasks) {
       const logPrefix = `${prefix} ${task.commit}`;
 
       try {
-        let successfulRunDuration = 0;
-        // TODO: retrying the agent runs here means if the agent did half of the work, the next agent would come up and continue those changes which is not correct.
-        // the agent should start from a clean state again and do the work. so the whole loop should be restarted.
-        const result = await withRetries(
-          async () => {
-            const startedAt = Date.now();
-            const result = await agent.definition.run(
-              model,
-              task.prompt,
-              cwd!,
-              {
-                onStart: (commandString: string) => {
-                  console.log(`${logPrefix} ${commandString.trim()}`);
-                },
-                logPrefix,
-              },
-            );
-            successfulRunDuration = Date.now() - startedAt;
-            return result;
-          },
+        const startedAt = Date.now();
+        const result = await agent.definition.run(
+          model,
+          task.prompt,
+          cwd!,
           {
-            retries: 3,
-            onRetry(error, attempt, retries) {
-              const baseMessage =
-                error instanceof Error ? error.message : String(error);
-              console.error(
-                `${logPrefix} Failed to render command for ${model} (attempt ${attempt}/${retries}): ${baseMessage}`,
-              );
-
-              if (attempt < retries) {
-                console.log(
-                  `${logPrefix} Retrying agent run (attempt ${
-                    attempt + 1
-                  }/${retries})...`,
-                );
-              }
+            onStart: (commandString: string) => {
+              console.log(`${logPrefix} ${commandString.trim()}`);
             },
+            logPrefix,
           },
         );
-        episodeDuration += successfulRunDuration;
+        episodeDuration += Date.now() - startedAt;
 
         // Only accumulate usage from the successful result
         usage.input += result.usage.input;
