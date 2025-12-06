@@ -5,16 +5,11 @@ import detectPort from "detect-port";
 
 import {
   createOpencode,
-  type AssistantMessage,
   type Config as OpencodeConfig,
-  type Part,
 } from "@opencode-ai/sdk";
 
-import type {
-  AgentDefinition,
-  AgentRunOptions,
-  AgentRunResult,
-} from "~/lib/createAgent.js";
+import type { Agent } from "~/agents/index.js";
+import { Logger } from "~/lib/logger.js";
 
 const DEFAULT_PERMISSION_CONFIG: NonNullable<OpencodeConfig["permission"]> = {
   edit: "allow",
@@ -81,40 +76,36 @@ function formatCommand(command: string, args: string[]): string {
 function writeLog(
   output: NodeJS.WriteStream,
   message: string,
-  prefix: string | undefined,
-): void {
-  if (prefix) {
-    output.write(`[${prefix}] ${message}\n`);
-  } else {
-    output.write(`${message}\n`);
-  }
+  logger: Logger.Instance,
+) {
+  output.write(`${logger.format(message)}\n`);
 }
 
-function logJson(value: unknown, options: AgentRunOptions | undefined): void {
+function logJson(value: unknown, options: Agent.RunOptions): void {
   try {
     const message = JSON.stringify(value);
-    writeLog(process.stdout, message, options?.logPrefix);
+    writeLog(process.stdout, message, options.logger);
   } catch (error) {
     const reason = error instanceof Error ? error.message : String(error);
     const errorMessage = JSON.stringify({
       error: "serialization_failed",
       reason,
     });
-    writeLog(process.stdout, errorMessage, options?.logPrefix);
+    writeLog(process.stdout, errorMessage, options.logger);
   }
 }
 
-function logError(value: unknown, options: AgentRunOptions | undefined): void {
+function logError(value: unknown, options: Agent.RunOptions): void {
   try {
     const message = JSON.stringify(value);
-    writeLog(process.stderr, message, options?.logPrefix);
+    writeLog(process.stderr, message, options.logger);
   } catch (error) {
     const reason = error instanceof Error ? error.message : String(error);
     const errorMessage = JSON.stringify({
       error: "serialization_failed",
       reason,
     });
-    writeLog(process.stderr, errorMessage, options?.logPrefix);
+    writeLog(process.stderr, errorMessage, options.logger);
   }
 }
 
@@ -137,13 +128,8 @@ function sessionKey(cwd: string, model: string): string {
   return `${cwd}::${model}`;
 }
 
-const opencodeAgent: AgentDefinition = {
-  async run(
-    model: string,
-    prompt: string,
-    cwd: string,
-    options?: AgentRunOptions,
-  ): Promise<AgentRunResult> {
+const opencodeAgent: Agent.Definition = {
+  async run(model, prompt, cwd, options) {
     assert(
       typeof prompt === "string",
       "Opencode agent requires a prompt string.",
@@ -155,7 +141,7 @@ const opencodeAgent: AgentDefinition = {
       prompt,
     ]);
 
-    options?.onStart?.(displayCommand);
+    options.logger.log(displayCommand);
 
     const cacheKey = sessionKey(cwd, model);
 
@@ -169,12 +155,12 @@ const opencodeAgent: AgentDefinition = {
       sessionCache.set(cacheKey, sessionID);
     }
 
-  const actions: string[] = [];
-  const usage = {
-    input: 0,
-    output: 0,
-    cost: 0,
-  };
+    const actions: string[] = [];
+    const usage = {
+      input: 0,
+      output: 0,
+      cost: 0,
+    };
     try {
       const [providerID, modelID] = model.split("/");
 
@@ -232,9 +218,7 @@ const opencodeAgent: AgentDefinition = {
       } catch (shareError) {
         console.error(
           `[opencode] Failed to enable sharing for session ${sessionID}:`,
-          shareError instanceof Error
-            ? shareError.message
-            : String(shareError),
+          shareError instanceof Error ? shareError.message : String(shareError),
         );
       }
     } catch (error) {

@@ -1,8 +1,8 @@
 #!/usr/bin/env bun
-import { listAgents } from "~/agents/index.js";
+import { Agent } from "~/agents/index.js";
 import { dataset } from "~/lib/dataset.js";
 
-const agents = await listAgents();
+const agents = Agent.list();
 if (agents.length === 0) {
   process.stderr.write("No agents registered.\n");
   process.exit(1);

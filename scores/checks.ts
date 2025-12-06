@@ -6,6 +6,7 @@ import { z } from "zod";
 
 import { createScore, scoreResultSchema } from "~/lib/createScore.js";
 import { finalizeAgentChanges } from "~/lib/finalizeAgentChanges.js";
+import { Logger } from "~/lib/logger.js";
 
 const commandConfigSchema = z.object({
   setup: z.array(z.string().min(1)).default([]),
@@ -125,19 +126,19 @@ const COMMAND_TIMEOUT_MS = 5 * 60 * 1000;
 type ChecksConfig = z.infer<typeof commandConfigSchema>;
 
 export default createScore<PreparedCheck[], ChecksConfig>({
-  prepare: async ({ cwd, evaluation, config, logPrefix }) => {
+  prepare: async ({ cwd, evaluation, config, logger }) => {
     const parsedConfig = commandConfigSchema.parse(config ?? {});
 
     for (const command of parsedConfig.setup) {
       const result = await runCommand(command, cwd);
-      logSetupExecution(command, result, logPrefix);
+      logSetupExecution(command, result, logger);
     }
 
     const results: PreparedCheck[] = [];
 
     for (const command of parsedConfig.commands) {
       const baseline = await runCommand(command, cwd);
-      logExecution("baseline", command, baseline, logPrefix);
+      logExecution("baseline", command, baseline, logger);
       results.push({ command, baseline });
     }
 
@@ -154,14 +155,14 @@ export default createScore<PreparedCheck[], ChecksConfig>({
     judge,
     reference,
     config: _config,
-    logPrefix,
+    logger,
   }) => {
     finalizeAgentChanges(evaluation, cwd, evaluation.from);
 
     for (const entry of reference) {
       if (!entry.after) {
         entry.after = await runCommand(entry.command, cwd);
-        logExecution("after", entry.command, entry.after, logPrefix);
+        logExecution("after", entry.command, entry.after, logger);
       }
     }
 
@@ -187,7 +188,10 @@ export default createScore<PreparedCheck[], ChecksConfig>({
   },
 });
 
-async function runCommand(command: string, cwd: string): Promise<CommandExecution> {
+async function runCommand(
+  command: string,
+  cwd: string,
+): Promise<CommandExecution> {
   const start = Date.now();
 
   return await new Promise<CommandExecution>((resolve) => {
@@ -277,7 +281,9 @@ function formatExecution(execution: CommandExecution): string {
     ? ` error: ${execution.errorMessage}`
     : "";
 
-  return `${status} (${exitInfo}, ${duration})${error}\nstdout: ${stdout.length > 0 ? stdout : "<empty>"}\nstderr: ${stderr.length > 0 ? stderr : "<empty>"}`;
+  return `${status} (${exitInfo}, ${duration})${error}\nstdout: ${
+    stdout.length > 0 ? stdout : "<empty>"
+  }\nstderr: ${stderr.length > 0 ? stderr : "<empty>"}`;
 }
 
 function formatExecutionForLog(execution: CommandExecution): string {
@@ -296,33 +302,29 @@ function logExecution(
   stage: "baseline" | "after",
   command: string,
   execution: CommandExecution,
-  logPrefix?: string,
+  logger: Logger.Instance,
 ): void {
   const header =
     stage === "baseline" ? "[checks] Baseline" : "[checks] After agent";
   const formatted = formatExecutionForLog(execution);
-  logLines(logPrefix, `${header} ${command}`);
-  logLines(logPrefix, formatted);
+  logLines(logger, `${header} ${command}`);
+  logLines(logger, formatted);
 }
 
 function logSetupExecution(
   command: string,
   execution: CommandExecution,
-  logPrefix?: string,
+  logger: Logger.Instance,
 ): void {
   const formatted = formatExecutionForLog(execution);
-  logLines(logPrefix, `[checks] Setup ${command}`);
-  logLines(logPrefix, formatted);
+  logLines(logger, `[checks] Setup ${command}`);
+  logLines(logger, formatted);
 }
 
-function logLines(logPrefix: string | undefined, message: string): void {
+function logLines(logger: Logger.Instance, message: string): void {
   const lines = message.split("\n");
   for (const line of lines) {
     if (line.length === 0) continue;
-    if (logPrefix) {
-      console.log(`${logPrefix} ${line}`);
-    } else {
-      console.log(line);
-    }
+    logger.log(line);
   }
 }

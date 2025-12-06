@@ -4,6 +4,7 @@ import { z } from "zod";
 
 import type { DatasetEval } from "~/lib/dataset.js";
 import type { Judge } from "~/lib/judgeTypes.js";
+import { Logger } from "./logger.js";
 
 export const scoreResultSchema = z.object({
   score: z.number().refine((val) => val === 0 || val === 1, {
@@ -16,7 +17,7 @@ export interface ScorePreparationContext<Config = unknown> {
   evaluation: DatasetEval;
   cwd: string;
   config: Config;
-  logPrefix?: string;
+  logger: Logger.Instance;
 }
 
 export interface ScoreEvaluationContext<Reference, Config = unknown> {
@@ -25,7 +26,7 @@ export interface ScoreEvaluationContext<Reference, Config = unknown> {
   config: Config;
   judge: Judge;
   reference: Reference;
-  logPrefix?: string;
+  logger: Logger.Instance;
 }
 
 export interface ScoreResult {
@@ -52,9 +53,7 @@ export interface ScoreDefinition<Reference = unknown, Config = unknown> {
 export function createScore<Reference = unknown, Config = unknown>(
   hooks: ScoreHooks<Reference, Config>,
 ): ScoreDefinition<Reference, Config> {
-  const prepareHook =
-    hooks.prepare ??
-    (async () => undefined as Reference);
+  const prepareHook = hooks.prepare ?? (async () => undefined as Reference);
 
   return {
     async prepare(

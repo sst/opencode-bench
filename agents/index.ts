@@ -1,50 +1,83 @@
 import { strict as assert } from "node:assert";
+import * as opencodeAgent from "~/agents/opencode.js";
+import * as codexAgent from "~/agents/codex.js";
+import * as claudeCodeAgent from "~/agents/claude-code.js";
+import { Logger } from "~/lib/logger.js";
 
-import type { AgentDefinition } from "~/lib/createAgent.js";
+export namespace Agent {
+  export type Prompt = string;
 
-export interface AgentRegistration<TModel extends string = string> {
-  name: string;
-  definition: AgentDefinition<TModel>;
-  models: ReadonlyArray<TModel>;
-}
+  export type CommandSpec =
+    | string
+    | {
+        command: string;
+        args?: string[];
+        shell?: boolean;
+      };
 
-interface AgentModuleShape<TModel extends string = string> {
-  default?: AgentDefinition<TModel>;
-  models?: ReadonlyArray<TModel>;
-}
+  export type Executor = (
+    model: string,
+    prompt: Prompt,
+  ) => CommandSpec | Promise<CommandSpec>;
 
-function createAgentRegistration<TModel extends string>(
-  name: string,
-  module: AgentModuleShape<TModel>,
-): AgentRegistration<TModel> {
-  const definition = module.default;
-  const models = module.models;
+  export interface Definition<TModel extends string = string> {
+    run: (
+      model: TModel,
+      prompt: Prompt,
+      cwd: string,
+      options: RunOptions,
+    ) => Promise<RunResult>;
+    cleanup?: () => void | Promise<void>;
+  }
 
-  assert(definition, `Agent module ${name} is missing a default export.`);
-  assert(models, `Agent module ${name} is missing the exported models list.`);
+  export interface RunResult {
+    command: string;
+    actions: string[];
+    usage: {
+      input: number;
+      output: number;
+      cost: number;
+    };
+  }
 
-  return { name, definition, models };
-}
+  export interface RunOptions {
+    logger: Logger.Instance;
+  }
 
-const agents: Record<string, AgentRegistration<any>> = {
-  // Only keep opencode active while debugging timeouts for specific models.
-  opencode: createAgentRegistration(
-    "opencode",
-    await import("~/agents/opencode.js"),
-  ),
-  // codex: createAgentRegistration("codex", await import("~/agents/codex.js")),
-  // "claude-code": createAgentRegistration(
-  //   "claude-code",
-  //   await import("~/agents/claude-code.js"),
-  // ),
-};
+  export interface Registration<TModel extends string = string> {
+    name: string;
+    definition: Definition<TModel>;
+    models: ReadonlyArray<TModel>;
+  }
 
-export async function getAgent(
-  name: string,
-): Promise<AgentRegistration | undefined> {
-  return agents[name];
-}
+  const agents: Record<string, Registration<any>> = {
+    // Only keep opencode active while debugging timeouts for specific models.
+    opencode: createRegistration("opencode", opencodeAgent),
+    //codex: createRegistration("codex", codexAgent),
+    //"claude-code": createRegistration("claude-code", claudeCodeAgent),
+  };
 
-export function listAgents() {
-  return Object.values(agents);
+  function createRegistration<TModel extends string>(
+    name: string,
+    module: {
+      default?: Definition<TModel>;
+      models?: ReadonlyArray<TModel>;
+    },
+  ): Registration<TModel> {
+    const definition = module.default;
+    const models = module.models;
+
+    assert(definition, `Agent module ${name} is missing a default export.`);
+    assert(models, `Agent module ${name} is missing the exported models list.`);
+
+    return { name, definition, models };
+  }
+
+  export function get(name: string): Registration | undefined {
+    return agents[name];
+  }
+
+  export function list() {
+    return Object.values(agents);
+  }
 }

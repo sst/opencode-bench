@@ -3,11 +3,8 @@ import process from "node:process";
 
 import { query } from "@anthropic-ai/claude-agent-sdk";
 
-import type {
-  AgentDefinition,
-  AgentRunOptions,
-  AgentRunResult,
-} from "~/lib/createAgent.js";
+import type { Agent } from "~/agents/index.js";
+import { Logger } from "~/lib/logger.js";
 
 const sessionCache = new Map<string, string>();
 
@@ -38,37 +35,33 @@ function formatCommand(command: string, args: string[]): string {
 function writeLog(
   output: NodeJS.WriteStream,
   message: string,
-  prefix: string | undefined,
+  logger?: Logger.Instance,
 ): void {
-  if (prefix) {
-    output.write(`[${prefix}] ${message}\n`);
-  } else {
-    output.write(`${message}\n`);
-  }
+  output.write(`${logger?.format(message) ?? message}\n`);
 }
 
-function logJson(value: unknown, options: AgentRunOptions | undefined): void {
+function logJson(value: unknown, options: Agent.RunOptions): void {
   try {
-    writeLog(process.stdout, JSON.stringify(value), options?.logPrefix);
+    writeLog(process.stdout, JSON.stringify(value), options.logger);
   } catch (error) {
     const reason = error instanceof Error ? error.message : String(error);
     writeLog(
       process.stdout,
       JSON.stringify({ error: "serialization_failed", reason }),
-      options?.logPrefix,
+      options.logger,
     );
   }
 }
 
-function logError(value: unknown, options: AgentRunOptions | undefined): void {
+function logError(value: unknown, options: Agent.RunOptions): void {
   try {
-    writeLog(process.stderr, JSON.stringify(value), options?.logPrefix);
+    writeLog(process.stderr, JSON.stringify(value), options.logger);
   } catch (error) {
     const reason = error instanceof Error ? error.message : String(error);
     writeLog(
       process.stderr,
       JSON.stringify({ error: "serialization_failed", reason }),
-      options?.logPrefix,
+      options.logger,
     );
   }
 }
@@ -84,13 +77,8 @@ function serializeError(error: unknown): Record<string, unknown> {
   return { value: String(error) };
 }
 
-const claudeCodeAgent: AgentDefinition = {
-  async run(
-    model: string,
-    prompt: string,
-    cwd: string,
-    options?: AgentRunOptions,
-  ): Promise<AgentRunResult> {
+const claudeCodeAgent: Agent.Definition = {
+  async run(model, prompt, cwd, options) {
     assert(
       typeof prompt === "string",
       "Claude Code agent requires a prompt string.",
@@ -102,17 +90,17 @@ const claudeCodeAgent: AgentDefinition = {
       prompt,
     ]);
 
-    options?.onStart?.(displayCommand);
+    options.logger.log(displayCommand);
 
     const cacheKey = sessionKey(cwd, model);
     const existingSessionID = sessionCache.get(cacheKey);
 
-  const actions: string[] = [];
-  const usage = {
-    input: 0,
-    output: 0,
-    cost: 0,
-  };
+    const actions: string[] = [];
+    const usage = {
+      input: 0,
+      output: 0,
+      cost: 0,
+    };
 
     try {
       const result = query({

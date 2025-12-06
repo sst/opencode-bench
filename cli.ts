@@ -6,7 +6,7 @@ import { dirname, join } from "node:path";
 import { tmpdir } from "node:os";
 import yargs from "yargs";
 import { hideBin } from "yargs/helpers";
-import { AgentRegistration, getAgent, listAgents } from "~/agents/index.js";
+import { Agent } from "~/agents/index.js";
 import { scores as scoreRegistry } from "~/scores/index.js";
 import { dataset } from "~/lib/dataset.js";
 import type { DatasetEval, ScoreAssignment } from "~/lib/dataset.js";
@@ -26,6 +26,7 @@ import type {
 import type { Episode, EvaluationRunExport, Usage } from "~/types/export.js";
 import { withRetries, withTimeout } from "~/lib/utils/retry.js";
 import { buildRadarChartUrl } from "~/lib/charts.js";
+import { Logger } from "./lib/logger.js";
 
 type ModelCombination = string;
 
@@ -103,7 +104,7 @@ cli.command(
       .positional("agent", {
         type: "string",
         description: "agent to use",
-        choices: listAgents().map((agent) => agent.name),
+        choices: Agent.list().map((agent) => agent.name),
         required: true,
       })
       .option("model", {
@@ -140,44 +141,28 @@ cli.command(
     timeout: timeoutInMinutes,
     output: outputPath,
   }) => {
-    const agent = agentName ? await getAgent(agentName) : undefined;
-    if (!agent) throw new Error(`Unknown agent: ${agentName}`);
-    const model = agent.models.find((entry) => entry === modelFilter);
-    if (!model)
-      throw new Error(
-        `Model ${modelFilter} is not registered for agent ${agent.name}.`,
-      );
-    const evalDef = dataset.find((entry) => entry.identifier === evalId);
-    if (!evalDef) throw new Error(`Eval ${evalId ?? evalId} was not found.`);
-    if (!evalDef.scores.length)
-      throw new Error(
-        `Evaluation ${evalDef.repo} has no score assignments configured.`,
-      );
-
-    const tasks = loadPromptsFile(evalDef.prompts);
-    if (tasks.length === 0)
-      throw new Error(
-        `No prompts found in ${evalDef.prompts} for ${evalDef.repo}.`,
-      );
-
-    const combinationLabel = `${evalDef.repo} ${model}`;
+    const agent = getAgent(agentName);
+    const model = getModel(agent, modelFilter);
+    const evalDef = getEval(evalId);
+    const tasks = getTasks(evalDef);
+    const logger = Logger.create(`[${evalDef.repo} ${model}]`);
 
     // Run episodes
     const episodeSettledResults = await Promise.allSettled(
-      Array.from({ length: episodes }, (_, offset) =>
-        withTimeout(
+      Array.from({ length: episodes }, (_, offset) => {
+        return withTimeout(
           async () => {
             const index = offset + 1;
-            const prefix = `[episode ${index}/${episodes}] [${combinationLabel}]`;
-            console.log(
-              `${prefix} Starting episode (timeout: ${timeoutInMinutes} min)...`,
+            const childLogger = logger.child(`[episode ${index}/${episodes}]`);
+            childLogger.log(
+              `Starting episode (timeout: ${timeoutInMinutes} min)...`,
             );
             const result = await runEpisode(
               evalDef,
               agent,
               model,
               tasks,
-              prefix,
+              childLogger,
             );
             return { index, ...result };
           },
@@ -187,8 +172,8 @@ cli.command(
               offset + 1
             } timed out after ${timeoutInMinutes} minutes`,
           },
-        ),
-      ),
+        );
+      }),
     );
 
     const episodeResults: EpisodeResult[] = [];
@@ -263,9 +248,7 @@ cli.command(
       summary = await generateActionsSummary(evalDef, model, episodesActions);
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
-      console.error(
-        `[${combinationLabel}] Failed to generate summary: ${message}`,
-      );
+      logger.error(`Failed to generate summary: ${message}`);
       summary = ""; // Keep empty string on failure
     }
 
@@ -273,7 +256,6 @@ cli.command(
       agent.name,
       evalDef,
       model,
-      combinationLabel,
       aggregatedInputs,
       episodeExports,
       averageUsage,
@@ -294,7 +276,7 @@ try {
   process.exitCode = 1;
 } finally {
   // Cleanup all loaded agents
-  const agents = listAgents();
+  const agents = Agent.list();
   for (const agent of agents) {
     if (agent.definition.cleanup) {
       await agent.definition.cleanup();
@@ -303,27 +285,61 @@ try {
   process.exit();
 }
 
+function getAgent(agentName?: string) {
+  const agent = agentName ? Agent.get(agentName) : undefined;
+  if (!agent) throw new Error(`Unknown agent: ${agentName}`);
+  return agent;
+}
+
+function getModel(agent: Agent.Registration, modelFilter: string) {
+  const model = agent.models.find((entry) => entry === modelFilter);
+  if (!model)
+    throw new Error(
+      `Model ${modelFilter} is not registered for agent ${agent.name}.`,
+    );
+  return model;
+}
+
+function getEval(evalId: string) {
+  const evalDef = dataset.find((entry) => entry.identifier === evalId);
+  if (!evalDef) throw new Error(`Eval ${evalId} was not found.`);
+  if (!evalDef.scores.length)
+    throw new Error(
+      `Evaluation ${evalDef.repo} has no score assignments configured.`,
+    );
+  return evalDef;
+}
+
+function getTasks(evalDef: DatasetEval) {
+  const tasks = loadPromptsFile(evalDef.prompts);
+  if (tasks.length === 0)
+    throw new Error(
+      `No prompts found in ${evalDef.prompts} for ${evalDef.repo}.`,
+    );
+  return tasks;
+}
+
 async function runEpisode(
   evalDef: DatasetEval,
-  agent: AgentRegistration,
+  agent: Agent.Registration,
   model: string,
   tasks: Task[],
-  prefix: string,
+  logger: Logger.Instance,
 ) {
   return withRetries(
-    () => runEpisodeAttempt(evalDef, agent, model, tasks, prefix),
+    () => runEpisodeAttempt(evalDef, agent, model, tasks, logger),
     {
       retries: 3,
       onRetry(error, attempt, retries) {
         const baseMessage =
           error instanceof Error ? error.message : String(error);
-        console.error(
-          `${prefix} Episode attempt ${attempt}/${retries} failed: ${baseMessage}`,
+        logger.error(
+          `Episode attempt ${attempt}/${retries} failed: ${baseMessage}`,
         );
 
         if (attempt < retries) {
-          console.log(
-            `${prefix} Restarting episode from a clean state (attempt ${
+          logger.log(
+            `Restarting episode from a clean state (attempt ${
               attempt + 1
             }/${retries})...`,
           );
@@ -335,17 +351,17 @@ async function runEpisode(
 
 async function runEpisodeAttempt(
   evalDef: DatasetEval,
-  agent: AgentRegistration,
+  agent: Agent.Registration,
   model: string,
   tasks: Task[],
-  prefix: string,
+  logger: Logger.Instance,
 ) {
   const baselineCommit = evalDef.from;
   let cwd: string | undefined;
   let episodeDuration = 0;
 
   try {
-    console.log(`${prefix} Cloning repository...`);
+    logger.log(`Cloning repository...`);
     cwd = cloneRepositoryAtCommit(evalDef, baselineCommit);
 
     const preparedScores = new Map<string, unknown>();
@@ -353,7 +369,7 @@ async function runEpisodeAttempt(
       const scoreDefinition = scoreRegistry[assignment.name];
       if (!scoreDefinition)
         throw new Error(
-          `${prefix} Score ${assignment.name} is not registered.`,
+          logger.format(`Score ${assignment.name} is not registered.`),
         );
 
       try {
@@ -361,13 +377,15 @@ async function runEpisodeAttempt(
           evaluation: evalDef,
           cwd,
           config: assignment.args,
-          logPrefix: prefix,
+          logger,
         });
         preparedScores.set(assignment.name, prepared);
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
         throw new Error(
-          `${prefix} Failed to prepare score ${assignment.name}: ${message}`,
+          logger.format(
+            `Failed to prepare score ${assignment.name}: ${message}`,
+          ),
         );
       }
     }
@@ -377,21 +395,13 @@ async function runEpisodeAttempt(
     const episodeActions: string[] = [];
 
     for (const task of tasks) {
-      const logPrefix = `${prefix} ${task.commit}`;
+      const childLogger = logger.child(`[task ${task.commit}]`);
 
       try {
         const startedAt = Date.now();
-        const result = await agent.definition.run(
-          model,
-          task.prompt,
-          cwd!,
-          {
-            onStart: (commandString: string) => {
-              console.log(`${logPrefix} ${commandString.trim()}`);
-            },
-            logPrefix,
-          },
-        );
+        const result = await agent.definition.run(model, task.prompt, cwd!, {
+          logger: childLogger,
+        });
         episodeDuration += Date.now() - startedAt;
 
         // Only accumulate usage from the successful result
@@ -404,7 +414,9 @@ async function runEpisodeAttempt(
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
         throw new Error(
-          `${prefix} Agent run failed for planner task ${task.commit}: ${message}`,
+          childLogger.format(
+            `Agent run failed for planner task ${task.commit}: ${message}`,
+          ),
         );
       }
 
@@ -412,7 +424,7 @@ async function runEpisodeAttempt(
     }
 
     if (tasksExecuted === 0) {
-      throw new Error(`${prefix} No planner tasks have been executed.`);
+      throw new Error(logger.format(`No planner tasks have been executed.`));
     }
 
     // Even if no changes were written, continue to scoring so judges can
@@ -423,12 +435,12 @@ async function runEpisodeAttempt(
       model,
       cwd,
       preparedScores,
-      prefix,
+      logger,
     );
 
     if (episodeAggregation.size === 0) {
       throw new Error(
-        `${prefix} No score results were produced for this episode.`,
+        logger.format(`No score results were produced for this episode.`),
       );
     }
 
@@ -441,8 +453,8 @@ async function runEpisodeAttempt(
       aggregationSummary,
     );
 
-    console.log(
-      `${prefix} Episode completed with final score ${aggregationSummary.finalScore.toFixed(
+    logger.log(
+      `Episode completed with final score ${aggregationSummary.finalScore.toFixed(
         3,
       )} (base ${aggregationSummary.baseScore.toFixed(
         3,
@@ -575,7 +587,7 @@ async function collectAggregationInputsForRun(
   model: ModelCombination,
   cwd: string,
   preparedReferences: Map<string, unknown>,
-  logPrefix?: string,
+  logger: Logger.Instance,
 ): Promise<Map<string, ScoreAggregationInput>> {
   const aggregationInputs = new Map<string, ScoreAggregationInput>();
 
@@ -584,14 +596,14 @@ async function collectAggregationInputsForRun(
       const scoreDefinition = scoreRegistry[assignment.name];
 
       if (!scoreDefinition) {
-        console.error(
+        logger.error(
           `Score ${assignment.name} is not registered (model ${model}).`,
         );
         continue;
       }
 
       if (!preparedReferences.has(assignment.name)) {
-        console.error(
+        logger.error(
           `Score ${assignment.name} did not provide prepared references for model ${model}.`,
         );
         continue;
@@ -606,7 +618,7 @@ async function collectAggregationInputsForRun(
           evaluation: datasetEval,
           cwd,
           config: assignment.args,
-          logPrefix,
+          logger,
         });
 
         ensureAggregationEntry(aggregationInputs, assignment).judgeResults.push(
@@ -640,7 +652,6 @@ function summarizeAggregation(
   agentName: string,
   datasetEval: DatasetEval,
   model: ModelCombination,
-  contextLabel: string | undefined,
   aggregationInputs: Map<string, ScoreAggregationInput>,
   episodes: Episode[],
   usage: Usage,
@@ -648,12 +659,11 @@ function summarizeAggregation(
   duration: number,
 ): { lines: string[]; exportData: EvaluationRunExport } {
   const evalId = datasetEval.repo;
-  const runContext = contextLabel ? `${evalId} [${contextLabel}]` : evalId;
 
   const aggregation = aggregateScores(Array.from(aggregationInputs.values()));
 
   const lines: string[] = [];
-  lines.push(`\nScore breakdown for ${model} on ${runContext}:`);
+  lines.push(`\nScore breakdown for ${model} on ${evalId}:`);
   const formatRawWeight = (value: number): string => {
     if (Number.isInteger(value)) {
       return value.toString();

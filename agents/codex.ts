@@ -10,11 +10,8 @@ import {
   type ThreadItem,
 } from "@openai/codex-sdk";
 
-import type {
-  AgentDefinition,
-  AgentRunOptions,
-  AgentRunResult,
-} from "~/lib/createAgent.js";
+import type { Agent } from "~/agents/index.js";
+import { Logger } from "~/lib/logger.js";
 
 const DEFAULT_SANDBOX: SandboxMode = "workspace-write";
 
@@ -48,13 +45,9 @@ function formatCommand(command: string, args: string[]): string {
 function writeLog(
   output: NodeJS.WriteStream,
   message: string,
-  prefix: string | undefined,
+  logger?: Logger.Instance,
 ): void {
-  if (prefix) {
-    output.write(`[${prefix}] ${message}\n`);
-  } else {
-    output.write(`${message}\n`);
-  }
+  output.write(`${logger?.format(message) ?? message}\n`);
 }
 
 function isCommandExecutionItem(
@@ -63,27 +56,20 @@ function isCommandExecutionItem(
   return item.type === "command_execution";
 }
 
-function logTurnItems(
-  items: ThreadItem[],
-  options: AgentRunOptions | undefined,
-): void {
+function logTurnItems(items: ThreadItem[], options: Agent.RunOptions): void {
   for (const item of items) {
     try {
-      writeLog(process.stdout, JSON.stringify(item), options?.logPrefix);
+      writeLog(process.stdout, JSON.stringify(item), options.logger);
     } catch (error) {
       const sanitizedItem = isCommandExecutionItem(item)
         ? { ...item, aggregated_output: "<omitted>" }
         : item;
-      writeLog(
-        process.stdout,
-        JSON.stringify(sanitizedItem),
-        options?.logPrefix,
-      );
+      writeLog(process.stdout, JSON.stringify(sanitizedItem), options.logger);
       if (error instanceof Error) {
         writeLog(
           process.stderr,
           `Failed to serialize Codex item: ${error.message}`,
-          options?.logPrefix,
+          options.logger,
         );
       }
     }
@@ -106,13 +92,8 @@ function getOrCreateThread(model: string, cwd: string): Thread {
   return thread;
 }
 
-const codexAgent: AgentDefinition<(typeof models)[number]> = {
-  async run(
-    model: (typeof models)[number],
-    prompt: string,
-    cwd: string,
-    options?: AgentRunOptions,
-  ): Promise<AgentRunResult> {
+const codexAgent: Agent.Definition<(typeof models)[number]> = {
+  async run(model, prompt, cwd, options) {
     assert(typeof prompt === "string", "Codex agent requires a prompt string.");
 
     const displayCommand = formatCommand("codex-sdk", [
@@ -123,7 +104,7 @@ const codexAgent: AgentDefinition<(typeof models)[number]> = {
       prompt,
     ]);
 
-    options?.onStart?.(displayCommand);
+    options.logger.log(displayCommand);
 
     const key = sessionKey(model, cwd);
     const thread = getOrCreateThread(model, cwd);
@@ -168,18 +149,20 @@ const codexAgent: AgentDefinition<(typeof models)[number]> = {
 
 export default codexAgent;
 
-
 const response = await fetch("https://models.dev/api.json");
 if (!response.ok) {
   throw new Error(`models.dev responded with ${response.status}`);
 }
 
 const openai = (await response.json())["openai"] as {
-  models: Record<string, {
-    cost: {
-      input: number,
-      output: number,
-      cache_read: number
+  models: Record<
+    string,
+    {
+      cost: {
+        input: number;
+        output: number;
+        cache_read: number;
+      };
     }
-  }>
-}
+  >;
+};

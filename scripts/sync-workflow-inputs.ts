@@ -8,7 +8,7 @@
  */
 
 import { readFileSync, writeFileSync } from "node:fs";
-import { listAgents } from "~/agents/index.js";
+import { Agent } from "~/agents/index.js";
 import YAML from "yaml";
 
 interface WorkflowInput {
@@ -23,9 +23,7 @@ interface WorkflowInputs {
 
 // Convert agent:model to workflow input ID
 function toInputId(agent: string, model: string): string {
-  return `${agent}_${model}`
-    .replace(/\//g, "_")
-    .replace(/-/g, "_");
+  return `${agent}_${model}`.replace(/\//g, "_").replace(/-/g, "_");
 }
 
 // Convert agent:model to display description
@@ -41,7 +39,7 @@ async function main(): Promise<void> {
   const workflow = YAML.parse(workflowContent);
 
   // Get all available agent:model combinations
-  const agents = await listAgents();
+  const agents = Agent.list();
   const combinations: Array<{ agent: string; model: string }> = [];
 
   for (const agent of agents) {
@@ -79,13 +77,19 @@ async function main(): Promise<void> {
   // Write back to file
   writeFileSync(workflowPath, yamlOutput, "utf8");
 
-  console.log(`✓ Updated ${workflowPath} with ${combinations.length} agent:model combinations:`);
+  console.log(
+    `✓ Updated ${workflowPath} with ${combinations.length} agent:model combinations:`,
+  );
   for (const { agent, model } of combinations) {
     console.log(`  - ${agent}:${model} (ID: ${toInputId(agent, model)})`);
   }
 
-  console.log("\n✓ The build-workflow-matrix.ts script will automatically recognize these combinations.");
-  console.log("  No manual updates needed - everything is dynamically generated!");
+  console.log(
+    "\n✓ The build-workflow-matrix.ts script will automatically recognize these combinations.",
+  );
+  console.log(
+    "  No manual updates needed - everything is dynamically generated!",
+  );
 }
 
 await main();
