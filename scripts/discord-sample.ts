@@ -228,7 +228,6 @@ const sampleExport: EvaluationRunExport[] = [
     baseScore: 0.905,
     variancePenalty: 0.003,
     scores: claudeScores,
-    episodes: claudeEpisodes,
     usage: { input: 50000, output: 10100, cost: 12.34 },
     summary: "",
     duration: 180000,
@@ -248,7 +247,6 @@ const sampleExport: EvaluationRunExport[] = [
     baseScore: 0.903,
     variancePenalty: 0.004,
     scores: gptScores,
-    episodes: gptEpisodes,
     usage: { input: 48167, output: 9633, cost: 15.67 },
     summary: "",
     duration: 165000,
@@ -320,7 +318,7 @@ function toEvalSummaries(exportData: EvaluationRunExport[]): EvalSummary[] {
         final: run.finalScore,
         jobUrl: run.jobUrl,
         rows: modelRows,
-        episodes: run.episodes,
+        episodes: modelId.includes("claude") ? claudeEpisodes : gptEpisodes,
       });
     });
 
@@ -481,10 +479,7 @@ function buildPayloads(
       };
     });
 
-    const averageChartUrl = buildAverageChartUrl(
-      summary.label,
-      summary.models,
-    );
+    const averageChartUrl = buildAverageChartUrl(summary.label, summary.models);
 
     const analysisLink = analysisLinks.get(summary.eval);
     assert(

@@ -1,34 +1,23 @@
-import { strict as assert } from "node:assert";
 import process from "node:process";
-
 import detectPort from "detect-port";
-
 import {
   createOpencode,
   type Config as OpencodeConfig,
 } from "@opencode-ai/sdk";
-
 import type { Agent } from "~/agents/index.js";
-import { Logger } from "~/lib/logger.js";
-
-const DEFAULT_PERMISSION_CONFIG: NonNullable<OpencodeConfig["permission"]> = {
-  edit: "allow",
-  bash: "allow",
-  webfetch: "allow",
-};
-
-const DEFAULT_FETCH_TIMEOUT_MS = 45 * 60 * 1000; // 40 minute episode limit + 5 minute buffer
-
-const opencodePort = await detectPort(4096);
 
 // Set OpenCode config before server starts to ensure timeout is applied
 const opencodeConfig = {
-  permission: DEFAULT_PERMISSION_CONFIG,
+  permission: {
+    edit: "allow",
+    bash: "allow",
+    webfetch: "allow",
+  },
   share: "auto",
   provider: {
     opencode: {
       options: {
-        timeout: false as false, // Disable timeout for OpenCode provider requests
+        timeout: false, // disable timeout for OpenCode provider requests
       },
     },
   },
@@ -36,13 +25,10 @@ const opencodeConfig = {
 
 // CRITICAL: Set via environment variable BEFORE importing/creating anything
 // The SDK reads this when spawning the server process
-const configJson = JSON.stringify(opencodeConfig);
-process.env.OPENCODE_CONFIG_CONTENT = configJson;
-
-console.error(`[opencode] Setting config: ${configJson}`);
+process.env.OPENCODE_CONFIG_CONTENT = JSON.stringify(opencodeConfig);
 
 const opencode = await createOpencode({
-  port: opencodePort,
+  port: await detectPort(4096),
   timeout: 1_500_000, // 25 minutes timeout for server startup
   config: opencodeConfig,
 });
@@ -61,90 +47,17 @@ export const models: string[] = [
   "opencode/grok-code",
 ];
 
-function formatCommand(command: string, args: string[]): string {
-  if (args.length === 0) {
-    return command;
-  }
-
-  const rendered = args.map((arg) =>
-    /[\s"']/.test(arg) ? JSON.stringify(arg) : arg,
-  );
-
-  return `${command} ${rendered.join(" ")}`;
-}
-
-function writeLog(
-  output: NodeJS.WriteStream,
-  message: string,
-  logger: Logger.Instance,
-) {
-  output.write(`${logger.format(message)}\n`);
-}
-
-function logJson(value: unknown, options: Agent.RunOptions): void {
-  try {
-    const message = JSON.stringify(value);
-    writeLog(process.stdout, message, options.logger);
-  } catch (error) {
-    const reason = error instanceof Error ? error.message : String(error);
-    const errorMessage = JSON.stringify({
-      error: "serialization_failed",
-      reason,
-    });
-    writeLog(process.stdout, errorMessage, options.logger);
-  }
-}
-
-function logError(value: unknown, options: Agent.RunOptions): void {
-  try {
-    const message = JSON.stringify(value);
-    writeLog(process.stderr, message, options.logger);
-  } catch (error) {
-    const reason = error instanceof Error ? error.message : String(error);
-    const errorMessage = JSON.stringify({
-      error: "serialization_failed",
-      reason,
-    });
-    writeLog(process.stderr, errorMessage, options.logger);
-  }
-}
-
-function serializeError(error: unknown): Record<string, unknown> {
-  if (error instanceof Error) {
-    return {
-      name: error.name,
-      message: error.message,
-      stack: error.stack,
-      cause: error.cause ? serializeError(error.cause) : undefined,
-    };
-  }
-  if (typeof error === "object" && error !== null) {
-    return { ...error };
-  }
-  return { value: String(error) };
-}
-
 function sessionKey(cwd: string, model: string): string {
   return `${cwd}::${model}`;
 }
 
 const opencodeAgent: Agent.Definition = {
   async run(model, prompt, cwd, options) {
-    assert(
-      typeof prompt === "string",
-      "Opencode agent requires a prompt string.",
-    );
-
-    const displayCommand = formatCommand("opencode", [
-      "--model",
-      model,
-      prompt,
-    ]);
-
-    options.logger.log(displayCommand);
+    options.logger.log(`opencode --model ${model} ${prompt}`);
 
     const cacheKey = sessionKey(cwd, model);
 
+    options.logger.log(`Creating session...`);
     let sessionID = sessionCache.get(cacheKey);
     if (!sessionID) {
       const { data: session } = await opencode.client.session.create({
@@ -155,6 +68,25 @@ const opencodeAgent: Agent.Definition = {
       sessionCache.set(cacheKey, sessionID);
     }
 
+    options.logger.log(`Sharing session ${sessionID}...`);
+    try {
+      const { data, error } = await opencode.client.session.share({
+        path: { id: sessionID! },
+        query: { directory: cwd },
+      });
+      if (error) throw error;
+
+      const shareUrl = data.share?.url;
+      options.logger.log(`Share URL: ${shareUrl}`);
+    } catch (error: any) {
+      options.logger.error(
+        `Failed to enable sharing for session ${sessionID}:`,
+        error,
+      );
+    }
+
+    options.logger.log(`Prompting session ${sessionID}...`);
+    const [providerID, modelID] = model.split("/");
     const actions: string[] = [];
     const usage = {
       input: 0,
@@ -162,8 +94,6 @@ const opencodeAgent: Agent.Definition = {
       cost: 0,
     };
     try {
-      const [providerID, modelID] = model.split("/");
-
       const { data, error } = await opencode.client.session.prompt({
         path: { id: sessionID! },
         query: { directory: cwd },
@@ -176,68 +106,29 @@ const opencodeAgent: Agent.Definition = {
         },
       });
 
-      if (error) {
-        throw error;
-      }
+      if (error) throw error;
+      options.logger.debug(`Data: ${JSON.stringify(data)}`);
 
       const info = data.info;
+      if (info) actions.push(JSON.stringify(info));
       usage.input = info?.tokens?.input ?? 0;
       usage.output = info?.tokens?.output ?? 0;
       usage.cost = info?.cost ?? 0;
+      options.logger.debug(`Usage: ${JSON.stringify(usage)}`);
 
-      if (info) {
-        actions.push(JSON.stringify(info));
-      }
-
-      const parts = Array.isArray(data.parts) ? data.parts : null;
-      assert(
-        parts && parts.length > 0,
-        "OpenCode response did not include any assistant parts.",
-      );
-      parts.forEach((part) => actions.push(JSON.stringify(part)));
-
-      if (info) {
-        logJson({ info }, options);
-      }
-      parts.forEach((part) => logJson(part, options));
-
-      try {
-        const { data: sharedSession, error: shareError } =
-          await opencode.client.session.share({
-            path: { id: sessionID! },
-            query: { directory: cwd },
-          });
-        if (shareError) {
-          throw shareError;
-        }
-
-        const shareUrl = sharedSession.share?.url;
-        if (shareUrl) {
-          logJson({ shareUrl }, options);
-        }
-      } catch (shareError) {
-        console.error(
-          `[opencode] Failed to enable sharing for session ${sessionID}:`,
-          shareError instanceof Error ? shareError.message : String(shareError),
+      if (!data.parts.length)
+        throw new Error(
+          options.logger.format("Response did not include assistant parts."),
         );
-      }
-    } catch (error) {
-      console.error(
-        `[opencode] Error in ${model}:`,
-        error instanceof Error ? error.message : String(error),
-      );
+      data.parts.forEach((part) => actions.push(JSON.stringify(part)));
+      options.logger.debug(`Actions: ${JSON.stringify(actions)}`);
+    } catch (error: any) {
       sessionCache.delete(cacheKey);
-      logError(
-        {
-          error: "opencode_prompt_failed",
-          details: serializeError(error),
-        },
-        options,
-      );
+      options.logger.error("Error in opencode agent: ", error);
       throw error;
     }
 
-    return { command: displayCommand, actions, usage };
+    return { actions, usage };
   },
   cleanup() {
     opencode.server.close();

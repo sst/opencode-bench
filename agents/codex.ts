@@ -4,14 +4,12 @@ import process from "node:process";
 import {
   Codex,
   Usage,
-  type CommandExecutionItem,
   type SandboxMode,
   type Thread,
   type ThreadItem,
 } from "@openai/codex-sdk";
 
 import type { Agent } from "~/agents/index.js";
-import { Logger } from "~/lib/logger.js";
 
 const DEFAULT_SANDBOX: SandboxMode = "workspace-write";
 
@@ -30,46 +28,23 @@ function sessionKey(cwd: string, model: string): string {
   return `${cwd}::${model}`;
 }
 
-function formatCommand(command: string, args: string[]): string {
-  if (args.length === 0) {
-    return command;
-  }
-
-  const renderedArgs = args.map((arg) =>
-    /[\s"']/.test(arg) ? JSON.stringify(arg) : arg,
-  );
-
-  return `${command} ${renderedArgs.join(" ")}`;
-}
-
-function writeLog(
-  output: NodeJS.WriteStream,
-  message: string,
-  logger?: Logger.Instance,
-): void {
-  output.write(`${logger?.format(message) ?? message}\n`);
-}
-
-function isCommandExecutionItem(
-  item: ThreadItem,
-): item is CommandExecutionItem {
-  return item.type === "command_execution";
-}
-
 function logTurnItems(items: ThreadItem[], options: Agent.RunOptions): void {
   for (const item of items) {
     try {
-      writeLog(process.stdout, JSON.stringify(item), options.logger);
+      process.stdout.write(`${options.logger.format(JSON.stringify(item))}\n`);
     } catch (error) {
-      const sanitizedItem = isCommandExecutionItem(item)
-        ? { ...item, aggregated_output: "<omitted>" }
-        : item;
-      writeLog(process.stdout, JSON.stringify(sanitizedItem), options.logger);
+      const sanitizedItem =
+        item.type === "command_execution"
+          ? { ...item, aggregated_output: "<omitted>" }
+          : item;
+      process.stdout.write(
+        `${options.logger.format(JSON.stringify(sanitizedItem))}\n`,
+      );
       if (error instanceof Error) {
-        writeLog(
-          process.stderr,
-          `Failed to serialize Codex item: ${error.message}`,
-          options.logger,
+        process.stderr.write(
+          `${options.logger.format(
+            `Failed to serialize Codex item: ${error.message}`,
+          )}\n`,
         );
       }
     }
@@ -94,17 +69,9 @@ function getOrCreateThread(model: string, cwd: string): Thread {
 
 const codexAgent: Agent.Definition<(typeof models)[number]> = {
   async run(model, prompt, cwd, options) {
-    assert(typeof prompt === "string", "Codex agent requires a prompt string.");
-
-    const displayCommand = formatCommand("codex-sdk", [
-      "--model",
-      model,
-      "--sandbox",
-      DEFAULT_SANDBOX,
-      prompt,
-    ]);
-
-    options.logger.log(displayCommand);
+    options.logger.log(
+      `codex-sdk --model ${model} --sandbox ${DEFAULT_SANDBOX} ${prompt}`,
+    );
 
     const key = sessionKey(model, cwd);
     const thread = getOrCreateThread(model, cwd);
@@ -136,7 +103,6 @@ const codexAgent: Agent.Definition<(typeof models)[number]> = {
     }
 
     return {
-      command: displayCommand,
       actions,
       usage: {
         input: usage.input_tokens,

@@ -2,19 +2,20 @@ export namespace Logger {
   export type Instance = ReturnType<typeof create>;
 
   export function create(prefix: string) {
-    const format = (...messages: string[]) => {
+    const format = (...messages: any[]) => {
       return `${prefix} ${messages.join(" ")}`;
     };
+    const date = () => new Date().toISOString();
     return {
-      debug: (...messages: string[]) => {
+      debug: (...messages: any[]) => {
         if (process.env.DEBUG !== "true") return;
-        console.debug(format(...messages));
+        console.debug(date(), format(...messages));
       },
-      log: (...messages: string[]) => {
-        console.log(format(...messages));
+      log: (...messages: any[]) => {
+        console.log(date(), format(...messages));
       },
-      error: (...messages: string[]) => {
-        console.error(format(...messages));
+      error: (...messages: any[]) => {
+        console.error(date(), format(...messages));
       },
       format,
       child: (childPrefix: string) => create(`${prefix} ${childPrefix}`),

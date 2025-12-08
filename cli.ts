@@ -24,22 +24,11 @@ import type {
   ScoreAggregationInput,
 } from "~/lib/utils/scoreAggregation.js";
 import type { Episode, EvaluationRunExport, Usage } from "~/types/export.js";
-import { withRetries, withTimeout } from "~/lib/utils/retry.js";
+import { withRetries } from "~/lib/utils/retry.js";
 import { buildRadarChartUrl } from "~/lib/charts.js";
 import { Logger } from "./lib/logger.js";
 
 type ModelCombination = string;
-
-interface EpisodeResult {
-  index: number;
-  aggregation: Map<string, ScoreAggregationInput>;
-  aggregationSummary: AggregationSummary;
-  scoreExports: EvaluationRunExport["scores"];
-  logs: string[];
-  actions: string[];
-  usage: Usage;
-  duration: number;
-}
 
 const evalIds = dataset
   .map((entry) => entry.identifier)
@@ -138,90 +127,51 @@ cli.command(
     model: modelFilter,
     eval: evalId,
     episodes,
-    timeout: timeoutInMinutes,
+    timeout: timeoutMins,
     output: outputPath,
   }) => {
     const agent = getAgent(agentName);
     const model = getModel(agent, modelFilter);
     const evalDef = getEval(evalId);
     const tasks = getTasks(evalDef);
-    const logger = Logger.create(`[${evalDef.repo} ${model}]`);
+    const logger = Logger.create(`[model ${model}]`);
 
     // Run episodes
-    const episodeSettledResults = await Promise.allSettled(
+    const settled = await Promise.allSettled(
       Array.from({ length: episodes }, (_, offset) => {
-        return withTimeout(
-          async () => {
-            const index = offset + 1;
-            const childLogger = logger.child(`[episode ${index}/${episodes}]`);
-            childLogger.log(
-              `Starting episode (timeout: ${timeoutInMinutes} min)...`,
-            );
-            const result = await runEpisode(
-              evalDef,
-              agent,
-              model,
-              tasks,
-              childLogger,
-            );
-            return { index, ...result };
-          },
+        const index = offset + 1;
+        const childLogger = logger.child(`[episode ${index}/${episodes}]`);
+        childLogger.log(`Starting episode with ${timeoutMins}min timeout...`);
+        return withRetries(
+          () => runEpisode(evalDef, agent, model, tasks, childLogger),
           {
-            timeoutMs: timeoutInMinutes * 60 * 1000,
-            timeoutMessage: `Episode ${
-              offset + 1
-            } timed out after ${timeoutInMinutes} minutes`,
+            retries: 3,
+            timeoutMs: timeoutMins * 60 * 1000,
+            logger: childLogger,
           },
-        );
+        ).then((result) => ({ index, ...result }));
       }),
     );
 
-    const episodeResults: EpisodeResult[] = [];
-    const episodeFailures: string[] = [];
+    const results = settled
+      .filter((result) => result.status === "fulfilled")
+      .map((result) => result.value)
+      .sort((a, b) => a.index - b.index);
 
-    for (const [idx, settled] of episodeSettledResults.entries()) {
-      if (settled.status === "fulfilled") {
-        episodeResults.push(settled.value);
-      } else {
-        const errorMessage =
-          settled.reason instanceof Error
-            ? settled.reason.message
-            : String(settled.reason);
-        episodeFailures.push(`Episode ${idx + 1} failed: ${errorMessage}`);
-        console.error(`[episode ${idx + 1}/${episodes}] ${errorMessage}`);
-      }
-    }
-
-    if (episodeResults.length < episodes) {
+    if (results.length < episodes) {
       throw new Error(
-        `Expected ${episodes} episodes to complete, but only ${
-          episodeResults.length
-        } succeeded:\n${episodeFailures.join("\n")}`,
+        logger.format(`Only ${results.length}/${episodes} episodes succeeded`),
       );
     }
 
-    episodeResults.sort((a, b) => a.index - b.index);
-
+    // Merge results
+    let totalDuration = 0;
+    const averageUsage = { input: 0, output: 0, cost: 0 };
     const aggregatedInputs = new Map<string, ScoreAggregationInput>();
     const episodeExports: Episode[] = [];
-    const allLogs: string[] = [];
     const episodesActions: EpisodeActions[] = [];
-    const averageUsage = episodeResults.reduce(
-      (prev, { usage }) => ({
-        input: prev.input + usage.input / episodeResults.length,
-        output: prev.output + usage.output / episodeResults.length,
-        cost: prev.cost + usage.cost / episodeResults.length,
-      }),
-      { input: 0, output: 0, cost: 0 },
-    );
-
-    const totalDuration = episodeResults.reduce(
-      (prev, { duration }) => prev + duration,
-      0,
-    );
-
-    for (const result of episodeResults) {
-      mergeAggregationInputs(aggregatedInputs, result.aggregation);
+    results.forEach((result) => {
+      totalDuration += result.duration;
       episodeExports.push({
         finalScore: result.aggregationSummary.finalScore,
         baseScore: result.aggregationSummary.baseScore,
@@ -229,28 +179,29 @@ cli.command(
         scores: result.scoreExports,
         usage: result.usage,
       });
-
-      // Aggregate logs
-      if (result.logs && result.logs.length > 0) {
-        allLogs.push(...result.logs);
-      }
-
-      // Collect actions for summarization
       episodesActions.push({
         episodeIndex: result.index,
         actions: result.actions,
       });
-    }
+      averageUsage.input += result.usage.input / results.length;
+      averageUsage.output += result.usage.output / results.length;
+      averageUsage.cost += result.usage.cost / results.length;
+
+      for (const input of result.aggregation.values()) {
+        const entry = ensureAggregationEntry(
+          aggregatedInputs,
+          input.assignment,
+        );
+        entry.judgeResults.push(...input.judgeResults);
+      }
+    });
 
     // Generate summary from all episodes' actions
-    let summary = "";
-    try {
-      summary = await generateActionsSummary(evalDef, model, episodesActions);
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      logger.error(`Failed to generate summary: ${message}`);
-      summary = ""; // Keep empty string on failure
-    }
+    const summary = await generateActionsSummary(
+      evalDef,
+      model,
+      episodesActions,
+    );
 
     const evaluationResult = summarizeAggregation(
       agent.name,
@@ -263,7 +214,7 @@ cli.command(
       totalDuration,
     );
 
-    printEvalResult(evaluationResult);
+    printEvalResult(episodeExports, evaluationResult, logger);
     buildEvalChart(evaluationResult);
     storeEvalResult(evaluationResult, outputPath);
   },
@@ -326,43 +277,11 @@ async function runEpisode(
   tasks: Task[],
   logger: Logger.Instance,
 ) {
-  return withRetries(
-    () => runEpisodeAttempt(evalDef, agent, model, tasks, logger),
-    {
-      retries: 3,
-      onRetry(error, attempt, retries) {
-        const baseMessage =
-          error instanceof Error ? error.message : String(error);
-        logger.error(
-          `Episode attempt ${attempt}/${retries} failed: ${baseMessage}`,
-        );
-
-        if (attempt < retries) {
-          logger.log(
-            `Restarting episode from a clean state (attempt ${
-              attempt + 1
-            }/${retries})...`,
-          );
-        }
-      },
-    },
-  );
-}
-
-async function runEpisodeAttempt(
-  evalDef: DatasetEval,
-  agent: Agent.Registration,
-  model: string,
-  tasks: Task[],
-  logger: Logger.Instance,
-) {
-  const baselineCommit = evalDef.from;
-  let cwd: string | undefined;
-  let episodeDuration = 0;
+  const cwd = mkdtempSync(join(tmpdir(), "openreval-"));
 
   try {
     logger.log(`Cloning repository...`);
-    cwd = cloneRepositoryAtCommit(evalDef, baselineCommit);
+    cloneRepositoryAtCommit(cwd, evalDef.repo, evalDef.from);
 
     const preparedScores = new Map<string, unknown>();
     for (const assignment of evalDef.scores) {
@@ -390,19 +309,22 @@ async function runEpisodeAttempt(
       }
     }
 
-    let tasksExecuted = 0;
-    let usage: Usage = { input: 0, output: 0, cost: 0 };
+    logger.log(`Running tasks...`);
+    let duration = 0;
+    const usage = { input: 0, output: 0, cost: 0 };
     const episodeActions: string[] = [];
 
     for (const task of tasks) {
-      const childLogger = logger.child(`[task ${task.commit}]`);
+      const childLogger = logger.child(
+        `[task ${evalDef.repo.split("/")[1]}@${task.commit.slice(0, 7)}]`,
+      );
 
       try {
         const startedAt = Date.now();
         const result = await agent.definition.run(model, task.prompt, cwd!, {
           logger: childLogger,
         });
-        episodeDuration += Date.now() - startedAt;
+        duration += Date.now() - startedAt;
 
         // Only accumulate usage from the successful result
         usage.input += result.usage.input;
@@ -419,14 +341,9 @@ async function runEpisodeAttempt(
           ),
         );
       }
-
-      tasksExecuted += 1;
     }
 
-    if (tasksExecuted === 0) {
-      throw new Error(logger.format(`No planner tasks have been executed.`));
-    }
-
+    logger.log(`Scoring...`);
     // Even if no changes were written, continue to scoring so judges can
     // compare the untouched baseline against the desired target.
 
@@ -465,43 +382,39 @@ async function runEpisodeAttempt(
       aggregation: episodeAggregation,
       aggregationSummary,
       scoreExports: episodeScoreExports,
-      logs: [],
       actions: episodeActions,
       usage,
-      duration: episodeDuration,
+      duration,
     };
   } finally {
-    if (cwd) {
-      cleanupRepository(cwd, evalDef);
-    }
+    cleanupRepository(cwd, logger);
   }
 }
 
-function printEvalResult(evalExport: ReturnType<typeof summarizeAggregation>) {
-  evalExport.lines.forEach(console.log);
-  if (evalExport.exportData) {
-    const { episodes, finalScore, baseScore, variancePenalty } =
-      evalExport.exportData;
-    if (episodes.length > 0) {
-      console.log("[debug] Episode recap:");
-      episodes.forEach((episode, index) => {
-        console.log(
-          `[debug]   Episode ${index + 1}: final ${episode.finalScore.toFixed(
-            3,
-          )} (base ${episode.baseScore.toFixed(
-            3,
-          )} - penalty ${episode.variancePenalty.toFixed(3)})`,
-        );
-      });
-    }
-    console.log(
-      `[debug] Aggregate final: ${finalScore.toFixed(
-        3,
-      )} (base ${baseScore.toFixed(3)} - penalty ${variancePenalty.toFixed(
-        3,
-      )})`,
-    );
-  }
+function printEvalResult(
+  episodes: Episode[],
+  evalExport: ReturnType<typeof summarizeAggregation>,
+  logger: Logger.Instance,
+) {
+  evalExport.lines.forEach(logger.log);
+
+  if (!evalExport.exportData) return;
+
+  const { finalScore, baseScore, variancePenalty } = evalExport.exportData;
+  logger.log(
+    "Episode recap:",
+    episodes.map(
+      (episode, index) =>
+        `  Episode ${index + 1}: final ${episode.finalScore.toFixed(
+          3,
+        )} (base ${episode.baseScore.toFixed(
+          3,
+        )} - penalty ${episode.variancePenalty.toFixed(3)})`,
+    ),
+    `Aggregate final: ${finalScore.toFixed(3)} (base ${baseScore.toFixed(
+      3,
+    )} - penalty ${variancePenalty.toFixed(3)})`,
+  );
 }
 
 function buildEvalChart(evalExport: ReturnType<typeof summarizeAggregation>) {
@@ -536,49 +449,23 @@ function storeEvalResult(
   }
 }
 
-function cleanupRepository(tempDir: string, entry: DatasetEval): void {
-  try {
-    rmSync(tempDir, { recursive: true, force: true });
-  } catch (cleanupError) {
-    console.error(
-      `Failed to clean up temporary repo for ${entry.repo}:`,
-      cleanupError instanceof Error
-        ? cleanupError.message
-        : String(cleanupError),
-    );
-  }
+function cloneRepositoryAtCommit(cwd: string, repo: string, commitSha: string) {
+  const opts = { cwd, stdio: "ignore" as const };
+  execSync(`git init`, opts);
+  execSync(`git remote add origin https://github.com/${repo}.git`, opts);
+  execSync(`git fetch --depth 1 origin ${commitSha}`, opts);
+  execSync(`git checkout --detach FETCH_HEAD`, opts);
+  execSync(`git reset --hard FETCH_HEAD`, opts);
 }
 
-function cloneRepositoryAtCommit(
-  entry: DatasetEval,
-  commitSha: string,
-): string {
-  const remoteUrl = `https://github.com/${entry.repo}.git`;
-  const tempDir = mkdtempSync(join(tmpdir(), "openreval-"));
-
+function cleanupRepository(cwd: string, logger: Logger.Instance): void {
   try {
-    execSync(`git init`, { cwd: tempDir, stdio: "ignore" });
-    execSync(`git remote add origin ${remoteUrl}`, {
-      cwd: tempDir,
-      stdio: "ignore",
-    });
-    execSync(`git fetch --depth 1 origin ${commitSha}`, {
-      cwd: tempDir,
-      stdio: "ignore",
-    });
-    execSync(`git checkout --detach FETCH_HEAD`, {
-      cwd: tempDir,
-      stdio: "ignore",
-    });
-    execSync(`git reset --hard FETCH_HEAD`, {
-      cwd: tempDir,
-      stdio: "ignore",
-    });
-
-    return tempDir;
-  } catch (error) {
-    cleanupRepository(tempDir, entry);
-    throw error;
+    rmSync(cwd, { recursive: true, force: true });
+  } catch (e) {
+    logger.error(
+      `Failed to clean up temporary repo:`,
+      e instanceof Error ? e.message : String(e),
+    );
   }
 }
 
@@ -715,23 +602,12 @@ function summarizeAggregation(
     baseScore: aggregation.baseScore,
     variancePenalty: aggregation.variancePenalty,
     scores: scoreExports,
-    episodes,
     usage,
     summary,
     duration,
   };
 
   return { lines, exportData };
-}
-
-function mergeAggregationInputs(
-  target: Map<string, ScoreAggregationInput>,
-  source: Map<string, ScoreAggregationInput>,
-): void {
-  for (const input of source.values()) {
-    const entry = ensureAggregationEntry(target, input.assignment);
-    entry.judgeResults.push(...input.judgeResults);
-  }
 }
 
 function buildScoreExportsFromAggregation(

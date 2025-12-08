@@ -52,7 +52,6 @@ export interface EvaluationRunExport {
   baseScore: number;
   variancePenalty: number;
   scores: ScoreResultExport[];
-  episodes: Episode[];
   usage: Usage;
   summary: string;
   duration: number;

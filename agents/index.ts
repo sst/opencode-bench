@@ -31,7 +31,6 @@ export namespace Agent {
   }
 
   export interface RunResult {
-    command: string;
     actions: string[];
     usage: {
       input: number;

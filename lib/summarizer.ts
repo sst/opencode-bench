@@ -1,5 +1,4 @@
 import { generateText } from "ai";
-import { z } from "zod";
 
 import type { DatasetEval } from "~/lib/dataset.js";
 import { getZenLanguageModel } from "~/lib/zenModels.js";
@@ -68,7 +67,10 @@ ${sample.join("\n")}${truncated}`;
 
   const prompt = `Repository: ${evaluation.repo}
 Model: ${model}
-Task: Implement changes from ${evaluation.from.slice(0, 7)} to ${evaluation.to.slice(0, 7)}
+Task: Implement changes from ${evaluation.from.slice(
+    0,
+    7,
+  )} to ${evaluation.to.slice(0, 7)}
 
 ${episodesSummary}
 
