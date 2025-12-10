@@ -1,0 +1,103 @@
+{
+  "commit": "ea446df3c3284cf6be379486a9807d0c48ef7d78",
+  "workflowRun": {
+    "id": 19057352801,
+    "name": "Publish and Benchmark Preview Packages",
+    "status": "completed",
+    "conclusion": "success",
+    "createdAt": "2025-11-04T04:00:56Z"
+  },
+  "artifacts": [
+    {
+      "name": "benchmark-opencode-opencode-claude-sonnet-4-5-prismicio-community-course-fizzi-next",
+      "size": 26565,
+      "createdAt": "2025-11-04T04:08:55Z",
+      "expired": false
+    },
+    {
+      "name": "benchmark-opencode-opencode-big-pickle-prismicio-community-course-fizzi-next",
+      "size": 25993,
+      "createdAt": "2025-11-04T04:09:14Z",
+      "expired": false
+    },
+    {
+      "name": "benchmark-claude-code-claude-sonnet-4-5-prismicio-community-course-fizzi-next",
+      "size": 26304,
+      "createdAt": "2025-11-04T04:10:19Z",
+      "expired": false
+    },
+    {
+      "name": "benchmark-opencode-opencode-claude-sonnet-4-5-AlaminPu1007-algorithm-visualizer",
+      "size": 23269,
+      "createdAt": "2025-11-04T04:14:20Z",
+      "expired": false
+    },
+    {
+      "name": "benchmark-opencode-opencode-claude-sonnet-4-5-DataDog-datadog-lambda-python",
+      "size": 30274,
+      "createdAt": "2025-11-04T04:14:42Z",
+      "expired": false
+    },
+    {
+      "name": "benchmark-claude-code-claude-sonnet-4-5-DataDog-datadog-lambda-python",
+      "size": 28373,
+      "createdAt": "2025-11-04T04:14:42Z",
+      "expired": false
+    },
+    {
+      "name": "benchmark-claude-code-claude-sonnet-4-5-AlaminPu1007-algorithm-visualizer",
+      "size": 23459,
+      "createdAt": "2025-11-04T04:15:24Z",
+      "expired": false
+    },
+    {
+      "name": "benchmark-codex-gpt-5-codex-prismicio-community-course-fizzi-next",
+      "size": 29271,
+      "createdAt": "2025-11-04T04:18:16Z",
+      "expired": false
+    },
+    {
+      "name": "benchmark-opencode-opencode-big-pickle-DataDog-datadog-lambda-python",
+      "size": 29333,
+      "createdAt": "2025-11-04T04:20:20Z",
+      "expired": false
+    },
+    {
+      "name": "benchmark-codex-gpt-5-codex-AlaminPu1007-algorithm-visualizer",
+      "size": 23788,
+      "createdAt": "2025-11-04T04:20:36Z",
+      "expired": false
+    },
+    {
+      "name": "benchmark-codex-gpt-5-codex-DataDog-datadog-lambda-python",
+      "size": 31499,
+      "createdAt": "2025-11-04T04:31:43Z",
+      "expired": false
+    },
+    {
+      "name": "benchmark-opencode-opencode-big-pickle-AlaminPu1007-algorithm-visualizer",
+      "size": 24652,
+      "createdAt": "2025-11-04T04:36:54Z",
+      "expired": false
+    },
+    {
+      "name": "analysis-AlaminPu1007-algorithm-visualizer",
+      "size": 3194,
+      "createdAt": "2025-11-04T04:37:47Z",
+      "expired": false
+    },
+    {
+      "name": "analysis-prismicio-community-course-fizzi-next",
+      "size": 3560,
+      "createdAt": "2025-11-04T04:37:55Z",
+      "expired": false
+    },
+    {
+      "name": "analysis-DataDog-datadog-lambda-python",
+      "size": 4148,
+      "createdAt": "2025-11-04T04:38:01Z",
+      "expired": false
+    }
+  ],
+  "fetchedAt": "2025-11-05T17:57:20.022Z"
+}
