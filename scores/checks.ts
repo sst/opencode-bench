@@ -126,7 +126,7 @@ const COMMAND_TIMEOUT_MS = 5 * 60 * 1000;
 type ChecksConfig = z.infer<typeof commandConfigSchema>;
 
 export default createScore<PreparedCheck[], ChecksConfig>({
-  prepare: async ({ cwd, evaluation, config, logger }) => {
+  prepare: async ({ cwd, ev: evaluation, config, logger }) => {
     const parsedConfig = commandConfigSchema.parse(config ?? {});
 
     for (const command of parsedConfig.setup) {
@@ -150,7 +150,7 @@ export default createScore<PreparedCheck[], ChecksConfig>({
     return results;
   },
   evaluate: async ({
-    evaluation,
+    ev: evaluation,
     cwd,
     judge,
     reference,

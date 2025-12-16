@@ -4,7 +4,6 @@ import { strict as assert } from "node:assert";
 import { generateObject } from "ai";
 
 import { createScore, scoreResultSchema } from "~/lib/createScore.js";
-import { fetchComparisonDiff } from "~/lib/github.js";
 import { finalizeAgentChanges } from "~/lib/finalizeAgentChanges.js";
 
 export const systemPrompt = `You are evaluating whether an autonomous agent reproduced the logical behavior from a reference git commit.
@@ -222,28 +221,12 @@ export function createUserPrompt(
 }
 
 export default createScore({
-  prepare: async ({ evaluation }) => {
-    try {
-      const diff = await fetchComparisonDiff(evaluation);
-
-      assert(
-        diff.trim().length > 0,
-        `Logic equivalence score requires a non-empty reference diff for ${evaluation.repo}.`,
-      );
-
-      return diff;
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      throw new Error(
-        `Logic equivalence reference diff preparation failed: ${message}`,
-      );
-    }
-  },
-  evaluate: async ({ evaluation, cwd, judge, reference }) => {
-    finalizeAgentChanges(evaluation, cwd, evaluation.from);
+  prepare: async ({ ev }) => ev.diff,
+  evaluate: async ({ ev, cwd, judge, reference }) => {
+    finalizeAgentChanges(ev, cwd, ev.from);
     let candidateDiff: string;
     try {
-      candidateDiff = execSync(`git diff --unified=5 ${evaluation.from} HEAD`, {
+      candidateDiff = execSync(`git diff --unified=5 ${ev.from} HEAD`, {
         cwd,
         encoding: "utf8",
       });

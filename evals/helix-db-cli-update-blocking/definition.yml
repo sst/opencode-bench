@@ -1,0 +1,26 @@
+repo: HelixDB/helix-db
+from: 35a9e733c659762487ba03ee68184f91639b912a
+to: 12ebac2e330aa4dfd5509852653508de51be4186
+issues: []
+context: >
+  Maintainer note: keep the prompt high-level. Mention only that the async CLI
+  calls a blocking update routine and that this mismatch causes crashes; do not
+  reference specific crates, APIs, stack traces, or error strings. Focus on
+  instructing the agent to move the blocking work off the async path while
+  preserving existing behavior.
+scores:
+  - name: api-signature
+    weight: 0.2
+  - name: logic-equivalence
+    weight: 0.3
+  - name: integration-points
+    weight: 0.2
+  - name: test-coverage
+    weight: 0.2
+  - name: checks
+    weight: 0.1
+    args:
+      setup:
+        - cargo fetch
+      commands:
+        - cargo fmt --all -- --check --quiet

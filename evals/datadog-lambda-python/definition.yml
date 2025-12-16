@@ -1,0 +1,22 @@
+repo: DataDog/datadog-lambda-python
+from: 93d4a07fa61a4d4d2feec08e722505a9e0cc8657
+to: d7763789f262b2da228f8210509e302e6e510d0a
+issues: []
+scores:
+  - name: api-signature
+    weight: 0.2
+  - name: logic-equivalence
+    weight: 0.3
+  - name: integration-points
+    weight: 0.2
+  - name: test-coverage
+    weight: 0.2
+  - name: checks
+    weight: 0.1
+    args:
+      setup:
+        - python3 -m venv .venv
+        - ./.venv/bin/python -m pip install ".[dev]"
+      commands:
+        - ./.venv/bin/pytest -vv
+        - ./.venv/bin/flake8 datadog_lambda/

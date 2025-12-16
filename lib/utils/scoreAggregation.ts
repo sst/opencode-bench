@@ -1,7 +1,7 @@
 import { strict as assert } from "node:assert";
 
 import type { Judge } from "~/lib/judgeTypes.js";
-import type { ScoreAssignment } from "~/lib/dataset.js";
+import type { Eval } from "~/evals/index.js";
 
 /*
   Formulas (mirrors README explanation):
@@ -17,12 +17,12 @@ export interface JudgeScoreResult {
 }
 
 export interface ScoreAggregationInput {
-  assignment: ScoreAssignment;
+  assignment: Eval.Instance["scores"][number];
   judgeResults: JudgeScoreResult[];
 }
 
 export interface AggregatedScore {
-  assignment: ScoreAssignment;
+  assignment: Eval.Instance["scores"][number];
   averageScore: number;
   normalizedWeight: number;
   variance: number;
@@ -48,10 +48,15 @@ interface JudgeStatistics {
   judgeCount: number;
 }
 
-function computeJudgeStatistics(judgeResults: JudgeScoreResult[]): JudgeStatistics {
+function computeJudgeStatistics(
+  judgeResults: JudgeScoreResult[],
+): JudgeStatistics {
   const validScores = judgeResults
     .map((result) => result.score)
-    .filter((score): score is number => typeof score === "number" && Number.isFinite(score));
+    .filter(
+      (score): score is number =>
+        typeof score === "number" && Number.isFinite(score),
+    );
 
   const judgeCount = validScores.length;
 
@@ -59,11 +64,12 @@ function computeJudgeStatistics(judgeResults: JudgeScoreResult[]): JudgeStatisti
     return { averageScore: 0, variance: 0, judgeCount: 0 };
   }
 
-  const averageScore = validScores.reduce((sum, score) => sum + score, 0) / judgeCount;
+  const averageScore =
+    validScores.reduce((sum, score) => sum + score, 0) / judgeCount;
 
   assert(
     Number.isFinite(averageScore) && averageScore >= 0 && averageScore <= 1,
-    "Average judge score must be between 0 and 1."
+    "Average judge score must be between 0 and 1.",
   );
 
   const uniformWeight = 1 / judgeCount;
@@ -82,14 +88,17 @@ export function normalizeWeight(weight: number, totalWeight: number): number {
 
 export function aggregateScores(
   inputs: ScoreAggregationInput[],
-  options?: { disagreementPenalty?: number }
+  options?: { disagreementPenalty?: number },
 ): AggregationSummary {
   if (inputs.length === 0) {
     return { perScore: [], finalScore: 0, baseScore: 0, variancePenalty: 0 };
   }
 
-  const totalWeight = inputs.reduce((sum, { assignment }) => sum + assignment.weight, 0) || inputs.length;
-  const penaltyLambda = options?.disagreementPenalty ?? DEFAULT_DISAGREEMENT_PENALTY;
+  const totalWeight =
+    inputs.reduce((sum, { assignment }) => sum + assignment.weight, 0) ||
+    inputs.length;
+  const penaltyLambda =
+    options?.disagreementPenalty ?? DEFAULT_DISAGREEMENT_PENALTY;
 
   const perScore = inputs.map(({ assignment, judgeResults }) => {
     const { averageScore, variance } = computeJudgeStatistics(judgeResults);
@@ -99,14 +108,14 @@ export function aggregateScores(
       assignment,
       averageScore,
       normalizedWeight,
-      variance
+      variance,
     } satisfies AggregatedScore;
   });
 
   const baseScore = weightedSum(perScore);
   const weightedVariance = perScore.reduce(
     (sum, entry) => sum + entry.normalizedWeight * entry.variance,
-    0
+    0,
   );
   const variancePenalty = penaltyLambda * weightedVariance;
   const finalScore = Math.max(0, baseScore - variancePenalty);
@@ -119,5 +128,8 @@ export function weightedSum(entries: AggregatedScore[]): number {
     return 0;
   }
 
-  return entries.reduce((sum, entry) => sum + entry.averageScore * entry.normalizedWeight, 0);
+  return entries.reduce(
+    (sum, entry) => sum + entry.averageScore * entry.normalizedWeight,
+    0,
+  );
 }

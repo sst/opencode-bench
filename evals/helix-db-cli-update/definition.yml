@@ -1,0 +1,20 @@
+repo: HelixDB/helix-db
+from: ac6d036abe9d921aeecb5f8a84a6766903b2beef
+to: 651aef390cb11ac712ddd299e050752b601b4864
+issues: []
+scores:
+  - name: api-signature
+    weight: 0.2
+  - name: logic-equivalence
+    weight: 0.3
+  - name: integration-points
+    weight: 0.2
+  - name: test-coverage
+    weight: 0.2
+  - name: checks
+    weight: 0.1
+    args:
+      setup:
+        - cargo fetch
+      commands:
+        - cargo fmt --all -- --check --quiet

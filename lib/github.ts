@@ -3,7 +3,7 @@ import { strict as assert } from "node:assert";
 import { request as octokitRequest } from "@octokit/request";
 import type { RequestInterface } from "@octokit/types";
 
-import type { DatasetEval } from "~/lib/dataset.js";
+import type { Eval } from "~/evals/index.js";
 
 const DIFF_ACCEPT_HEADER = "application/vnd.github.v3.diff";
 
@@ -30,23 +30,21 @@ function getRequestClient(): RequestInterface {
   return requestClient;
 }
 
-function splitRepo(entry: DatasetEval): { owner: string; repo: string } {
-  const [owner, repo] = entry.repo.split("/", 2);
-  assert(owner && repo, `Invalid repo identifier: ${entry.repo}`);
-  return { owner, repo };
-}
-
-export async function fetchComparisonDiff(entry: DatasetEval): Promise<string> {
+export async function fetchComparisonDiff(
+  owner: string,
+  repo: string,
+  from: string,
+  to: string,
+): Promise<string> {
   const client = getRequestClient();
-  const { owner, repo } = splitRepo(entry);
 
   const response = await client(
     "GET /repos/{owner}/{repo}/compare/{base}...{head}",
     {
       owner,
       repo,
-      base: entry.from,
-      head: entry.to,
+      base: from,
+      head: to,
       headers: {
         accept: DIFF_ACCEPT_HEADER,
       },
@@ -57,7 +55,7 @@ export async function fetchComparisonDiff(entry: DatasetEval): Promise<string> {
 
   assert(
     diff.trim().length > 0,
-    `GitHub comparison diff for ${entry.repo} between ${entry.from} and ${entry.to} was empty.`,
+    `GitHub comparison diff for ${owner}/${repo} between ${from} and ${to} was empty.`,
   );
 
   return diff;
@@ -69,19 +67,21 @@ export interface CommitDiff {
   diff: string;
 }
 
-export async function fetchCommitDiffs(
-  entry: DatasetEval,
-): Promise<CommitDiff[]> {
+export async function fetchCommits(
+  owner: string,
+  repo: string,
+  from: string,
+  to: string,
+) {
   const client = getRequestClient();
-  const { owner, repo } = splitRepo(entry);
 
   const comparison = await client(
     "GET /repos/{owner}/{repo}/compare/{base}...{head}",
     {
       owner,
       repo,
-      base: entry.from,
-      head: entry.to,
+      base: from,
+      head: to,
     },
   );
 
@@ -125,14 +125,10 @@ export async function fetchCommitDiffs(
           return null;
         }
 
-        return {
-          sha,
-          title,
-          diff,
-        } satisfies CommitDiff;
+        return { sha, title, diff };
       } catch (error) {
         console.error(
-          `Failed to fetch diff for commit ${sha} in ${entry.repo}:`,
+          `Failed to fetch diff for commit ${sha} in ${owner}/${repo}:`,
           error instanceof Error ? error.message : error,
         );
         return null;

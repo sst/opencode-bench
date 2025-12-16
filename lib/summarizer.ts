@@ -1,6 +1,6 @@
 import { generateText } from "ai";
 
-import type { DatasetEval } from "~/lib/dataset.js";
+import type { Eval } from "~/evals/index.js";
 import { getZenLanguageModel } from "~/lib/zenModels.js";
 
 export interface EpisodeActions {
@@ -42,7 +42,7 @@ Guidelines:
 const summarizerModelId = "opencode/claude-sonnet-4-5";
 
 export async function generateActionsSummary(
-  evaluation: DatasetEval,
+  ev: Eval.Instance,
   model: string,
   episodesActions: EpisodeActions[],
 ): Promise<string> {
@@ -65,12 +65,9 @@ ${sample.join("\n")}${truncated}`;
     })
     .join("\n\n");
 
-  const prompt = `Repository: ${evaluation.repo}
+  const prompt = `Repository: ${ev.repo}
 Model: ${model}
-Task: Implement changes from ${evaluation.from.slice(
-    0,
-    7,
-  )} to ${evaluation.to.slice(0, 7)}
+Task: Implement changes from ${ev.from.slice(0, 7)} to ${ev.to.slice(0, 7)}
 
 ${episodesSummary}
 

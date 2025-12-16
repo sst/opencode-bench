@@ -7,7 +7,7 @@ import {
   weightedSum,
   type ScoreAggregationInput,
 } from "~/lib/utils/scoreAggregation.js";
-import type { ScoreAssignment } from "~/lib/dataset.js";
+import type { Eval } from "~/evals/index.js";
 import type { Judge, JudgeName } from "~/lib/judgeTypes.js";
 
 /*
@@ -67,7 +67,7 @@ describe("aggregateScores", () => {
   });
 
   it("computes weighted final score according to README formula", () => {
-    const assignments: ScoreAssignment[] = [
+    const assignments = [
       { name: "ui", weight: 4 },
       { name: "code-quality", weight: 3 },
       { name: "integration-points", weight: 3 },
@@ -119,7 +119,7 @@ describe("aggregateScores", () => {
   });
 
   it("returns zero scores when no judge results are available", () => {
-    const assignments: ScoreAssignment[] = [
+    const assignments = [
       { name: "ui", weight: 1 },
       { name: "code-quality", weight: 1 },
     ];

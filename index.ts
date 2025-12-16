@@ -7,5 +7,4 @@ export type {
   ScorePreparationContext,
   ScoreResult,
 } from "~/lib/createScore.js";
-export { dataset } from "~/lib/dataset.js";
-export type { DatasetEval } from "~/lib/dataset.js";
+export { Eval } from "~/evals/index.js";

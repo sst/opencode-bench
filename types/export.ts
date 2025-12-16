@@ -1,11 +1,5 @@
-import type { DatasetEval, ScoreAssignment } from "~/lib/dataset.js";
+import type { Eval } from "~/evals/index.js";
 import type { Judge } from "~/lib/judgeTypes.js";
-
-export interface ScoreAssignmentExport {
-  name: ScoreAssignment["name"];
-  weight: ScoreAssignment["weight"];
-  args: ScoreAssignment["args"];
-}
 
 export interface JudgeResultExport {
   name: Judge["name"];
@@ -15,7 +9,7 @@ export interface JudgeResultExport {
 }
 
 export interface ScoreResultExport {
-  assignment: ScoreAssignmentExport;
+  assignment: Eval.Instance["scores"][number];
   averageScore: number;
   normalizedWeight: number;
   variance: number;
@@ -31,10 +25,10 @@ export interface Episode {
 }
 
 export interface EvaluationMetadataExport {
-  identifier: DatasetEval["identifier"];
-  repo: DatasetEval["repo"];
-  from: DatasetEval["from"];
-  to: DatasetEval["to"];
+  identifier: Eval.Instance["id"];
+  repo: Eval.Instance["repo"];
+  from: Eval.Instance["from"];
+  to: Eval.Instance["to"];
 }
 
 export interface Usage {

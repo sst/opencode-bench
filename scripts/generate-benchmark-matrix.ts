@@ -1,6 +1,6 @@
 #!/usr/bin/env bun
 import { Agent } from "~/agents/index.js";
-import { dataset } from "~/lib/dataset.js";
+import { Eval } from "~/evals/index.js";
 
 const agents = Agent.list();
 if (agents.length === 0) {
@@ -8,10 +8,11 @@ if (agents.length === 0) {
   process.exit(1);
 }
 
-const include = dataset.flatMap((entry) =>
+const evals = await Eval.load();
+const include = evals.flatMap((ev) =>
   agents.flatMap((agent) =>
     agent.models.map((model) => ({
-      eval: entry.identifier,
+      eval: ev.id,
       model,
       agent: agent.name,
     })),

@@ -1,9 +1,9 @@
 import { execSync } from "node:child_process";
 
-import type { DatasetEval } from "~/lib/dataset.js";
+import type { Eval } from "~/evals/index.js";
 
 export function finalizeAgentChanges(
-  entry: DatasetEval,
+  ev: Eval.Instance,
   cwd: string,
   baselineCommit: string,
 ): boolean {

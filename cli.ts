@@ -8,14 +8,11 @@ import yargs from "yargs";
 import { hideBin } from "yargs/helpers";
 import { Agent } from "~/agents/index.js";
 import { scores as scoreRegistry } from "~/scores/index.js";
-import { dataset } from "~/lib/dataset.js";
-import type { DatasetEval, ScoreAssignment } from "~/lib/dataset.js";
-import { generatePromptsForEval, Task } from "~/lib/prompts.js";
+import { Eval } from "~/evals/index.js";
 import {
   generateActionsSummary,
   type EpisodeActions,
 } from "~/lib/summarizer.js";
-import { loadPromptsFile } from "~/lib/prompts.js";
 import { judges, getJudgeModelId } from "~/judges.js";
 import { aggregateScores } from "~/lib/utils/scoreAggregation.js";
 import type { Judge } from "~/lib/judgeTypes.js";
@@ -29,10 +26,6 @@ import { buildRadarChartUrl } from "~/lib/charts.js";
 import { Logger } from "./lib/logger.js";
 
 type ModelCombination = string;
-
-const evalIds = dataset
-  .map((entry) => entry.identifier)
-  .sort((a, b) => a.localeCompare(b));
 
 const cli = yargs(hideBin(process.argv))
   .scriptName("orvl")
@@ -55,40 +48,22 @@ const cli = yargs(hideBin(process.argv))
   .strict();
 
 cli.command(
-  "prompts",
-  "Generate prompts for a specific evaluation",
-  (yargs) =>
-    yargs
-      .option("eval", {
-        type: "string",
-        description: "eval to use in the format of repo@from..to",
-        choices: evalIds,
-      })
-      .example([
-        ["orvl prompts", "Generate prompts for all evaluations"],
-        [
-          "orvl prompts --eval DataDog/datadog-lambda-python@93d4a07..d776378",
-          "Generate prompts for a specific evaluation",
-        ],
-      ]),
+  "generate",
+  "Generate dataset for all evaluations",
+  async (yargs) =>
+    yargs.example([["orvl generate", "Generate dataset for all evaluations"]]),
   async ({ eval: evalId }) => {
-    const evalDefs = (() => {
-      if (!evalId) return [...dataset];
-      const evalDef = dataset.find((entry) => entry.identifier === evalId);
-      if (!evalDef) throw new Error(`Evaluation not found: ${evalId}`);
-      return [evalDef];
-    })();
+    const logger = Logger.create();
+    logger.log(`Generating dataset...`);
 
-    console.log(`Generating prompts for ${evalDefs.length} evaluation(s)...\n`);
-
-    await Promise.all(evalDefs.map(generatePromptsForEval));
+    await Eval.generate({ logger });
   },
 );
 
 cli.command(
   "$0 [agent]",
   "Run benchmark evaluation",
-  (yargs) =>
+  async (yargs) =>
     yargs
       .positional("agent", {
         type: "string",
@@ -104,7 +79,6 @@ cli.command(
       .option("eval", {
         type: "string",
         description: "eval to use in the format of repo@from..to",
-        choices: dataset.map((entry) => entry.identifier),
         required: true,
       })
       .option("episodes", {
@@ -130,10 +104,10 @@ cli.command(
     timeout: timeoutMins,
     output: outputPath,
   }) => {
+    const evals = await Eval.load();
     const agent = getAgent(agentName);
     const model = getModel(agent, modelFilter);
-    const evalDef = getEval(evalId);
-    const tasks = getTasks(evalDef);
+    const evalDef = getEval(evals, evalId);
     const logger = Logger.create(`[model ${model}]`);
 
     // Run episodes
@@ -143,7 +117,7 @@ cli.command(
         const childLogger = logger.child(`[episode ${index}/${episodes}]`);
         childLogger.log(`Starting episode with ${timeoutMins}min timeout...`);
         return withRetries(
-          () => runEpisode(evalDef, agent, model, tasks, childLogger),
+          () => runEpisode(evalDef, agent, model, childLogger),
           {
             retries: 3,
             timeoutMs: timeoutMins * 60 * 1000,
@@ -152,6 +126,9 @@ cli.command(
         ).then((result) => ({ index, ...result }));
       }),
     );
+
+    // TODO
+    console.log(JSON.stringify(settled, null, 2));
 
     const results = settled
       .filter((result) => result.status === "fulfilled")
@@ -215,8 +192,8 @@ cli.command(
     );
 
     printEvalResult(episodeExports, evaluationResult, logger);
-    buildEvalChart(evaluationResult);
-    storeEvalResult(evaluationResult, outputPath);
+    buildEvalChart(evaluationResult, logger);
+    storeEvalResult(evaluationResult, outputPath, logger);
   },
 );
 
@@ -251,8 +228,8 @@ function getModel(agent: Agent.Registration, modelFilter: string) {
   return model;
 }
 
-function getEval(evalId: string) {
-  const evalDef = dataset.find((entry) => entry.identifier === evalId);
+function getEval(evals: Eval.Instance[], evalId: string) {
+  const evalDef = evals.find((ev) => ev.id === evalId);
   if (!evalDef) throw new Error(`Eval ${evalId} was not found.`);
   if (!evalDef.scores.length)
     throw new Error(
@@ -261,50 +238,42 @@ function getEval(evalId: string) {
   return evalDef;
 }
 
-function getTasks(evalDef: DatasetEval) {
-  const tasks = loadPromptsFile(evalDef.prompts);
-  if (tasks.length === 0)
-    throw new Error(
-      `No prompts found in ${evalDef.prompts} for ${evalDef.repo}.`,
-    );
-  return tasks;
-}
-
 async function runEpisode(
-  evalDef: DatasetEval,
+  ev: Eval.Instance,
   agent: Agent.Registration,
   model: string,
-  tasks: Task[],
   logger: Logger.Instance,
 ) {
   const cwd = mkdtempSync(join(tmpdir(), "openreval-"));
 
+  // validate prompts
+  if (ev.prompts.length === 0)
+    throw new Error(`No prompts found in ${ev.prompts} for ${ev.repo}.`);
+
   try {
     logger.log(`Cloning repository...`);
-    cloneRepositoryAtCommit(cwd, evalDef.repo, evalDef.from);
+    cloneRepositoryAtCommit(cwd, ev.repo, ev.from);
 
     const preparedScores = new Map<string, unknown>();
-    for (const assignment of evalDef.scores) {
-      const scoreDefinition = scoreRegistry[assignment.name];
+    for (const score of ev.scores) {
+      const scoreDefinition = scoreRegistry[score.name];
       if (!scoreDefinition)
         throw new Error(
-          logger.format(`Score ${assignment.name} is not registered.`),
+          logger.format(`Score ${score.name} is not registered.`),
         );
 
       try {
         const prepared = await scoreDefinition.prepare({
-          evaluation: evalDef,
+          ev: ev,
           cwd,
-          config: assignment.args,
+          config: score.args,
           logger,
         });
-        preparedScores.set(assignment.name, prepared);
+        preparedScores.set(score.name, prepared);
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
         throw new Error(
-          logger.format(
-            `Failed to prepare score ${assignment.name}: ${message}`,
-          ),
+          logger.format(`Failed to prepare score ${score.name}: ${message}`),
         );
       }
     }
@@ -314,14 +283,14 @@ async function runEpisode(
     const usage = { input: 0, output: 0, cost: 0 };
     const episodeActions: string[] = [];
 
-    for (const task of tasks) {
+    for (const prompt of ev.prompts) {
       const childLogger = logger.child(
-        `[task ${evalDef.repo.split("/")[1]}@${task.commit.slice(0, 7)}]`,
+        `[prompt ${ev.repo.split("/")[1]}@${prompt.commit.slice(0, 7)}]`,
       );
 
       try {
         const startedAt = Date.now();
-        const result = await agent.definition.run(model, task.prompt, cwd!, {
+        const result = await agent.definition.run(model, prompt.prompt, cwd!, {
           logger: childLogger,
         });
         duration += Date.now() - startedAt;
@@ -337,7 +306,7 @@ async function runEpisode(
         const message = error instanceof Error ? error.message : String(error);
         throw new Error(
           childLogger.format(
-            `Agent run failed for planner task ${task.commit}: ${message}`,
+            `Agent run failed for planner task ${prompt.commit}: ${message}`,
           ),
         );
       }
@@ -348,7 +317,7 @@ async function runEpisode(
     // compare the untouched baseline against the desired target.
 
     const episodeAggregation = await collectAggregationInputsForRun(
-      evalDef,
+      ev,
       model,
       cwd,
       preparedScores,
@@ -400,24 +369,33 @@ function printEvalResult(
 
   if (!evalExport.exportData) return;
 
-  const { finalScore, baseScore, variancePenalty } = evalExport.exportData;
+  const formatEpisode = (final: number, base: number, penalty: number) =>
+    `final ${final.toFixed(3)} (base ${base.toFixed(
+      3,
+    )} - penalty ${penalty.toFixed(3)})`;
+
   logger.log(
     "Episode recap:",
-    episodes.map(
-      (episode, index) =>
-        `  Episode ${index + 1}: final ${episode.finalScore.toFixed(
-          3,
-        )} (base ${episode.baseScore.toFixed(
-          3,
-        )} - penalty ${episode.variancePenalty.toFixed(3)})`,
+    ...episodes.map(
+      (episode, i) =>
+        `  Episode ${i + 1}: ${formatEpisode(
+          episode.finalScore,
+          episode.baseScore,
+          episode.variancePenalty,
+        )}`,
     ),
-    `Aggregate final: ${finalScore.toFixed(3)} (base ${baseScore.toFixed(
-      3,
-    )} - penalty ${variancePenalty.toFixed(3)})`,
+    `Aggregate final: ${formatEpisode(
+      evalExport.exportData.finalScore,
+      evalExport.exportData.baseScore,
+      evalExport.exportData.variancePenalty,
+    )}`,
   );
 }
 
-function buildEvalChart(evalExport: ReturnType<typeof summarizeAggregation>) {
+function buildEvalChart(
+  evalExport: ReturnType<typeof summarizeAggregation>,
+  logger: Logger.Instance,
+) {
   const chartUrl = buildRadarChartUrl({
     labels: evalExport.exportData.scores.map((s) => s.assignment.name),
     values: evalExport.exportData.scores.map((s) =>
@@ -426,12 +404,13 @@ function buildEvalChart(evalExport: ReturnType<typeof summarizeAggregation>) {
     title: `${evalExport.exportData.evaluation.repo} • ${evalExport.exportData.model}`,
     datasetLabel: evalExport.exportData.model,
   });
-  console.log(`\nRadar Chart: ${chartUrl}\n`);
+  logger.log(`Radar Chart: ${chartUrl}\n`);
 }
 
 function storeEvalResult(
   evalExport: ReturnType<typeof summarizeAggregation>,
-  outputPath?: string,
+  outputPath: string | undefined,
+  logger: Logger.Instance,
 ) {
   if (!outputPath) return;
 
@@ -443,9 +422,9 @@ function storeEvalResult(
 
     writeFileSync(outputPath, JSON.stringify(evalExport.exportData, null, 2));
   } catch (error) {
-    const message =
-      error instanceof Error ? error.message : "Unknown error writing output.";
-    throw new Error(`Failed to write export to ${outputPath}: ${message}`);
+    throw new Error(
+      logger.format(`Failed to write export to ${outputPath}:`, error),
+    );
   }
 }
 
@@ -470,7 +449,7 @@ function cleanupRepository(cwd: string, logger: Logger.Instance): void {
 }
 
 async function collectAggregationInputsForRun(
-  datasetEval: DatasetEval,
+  ev: Eval.Instance,
   model: ModelCombination,
   cwd: string,
   preparedReferences: Map<string, unknown>,
@@ -479,7 +458,7 @@ async function collectAggregationInputsForRun(
   const aggregationInputs = new Map<string, ScoreAggregationInput>();
 
   for (const judge of judges) {
-    for (const assignment of datasetEval.scores) {
+    for (const assignment of ev.scores) {
       const scoreDefinition = scoreRegistry[assignment.name];
 
       if (!scoreDefinition) {
@@ -502,7 +481,7 @@ async function collectAggregationInputsForRun(
         const result = await scoreDefinition.evaluate({
           judge,
           reference,
-          evaluation: datasetEval,
+          ev: ev,
           cwd,
           config: assignment.args,
           logger,
@@ -537,15 +516,15 @@ async function collectAggregationInputsForRun(
 
 function summarizeAggregation(
   agentName: string,
-  datasetEval: DatasetEval,
+  ev: Eval.Instance,
   model: ModelCombination,
   aggregationInputs: Map<string, ScoreAggregationInput>,
   episodes: Episode[],
   usage: Usage,
   summary: string,
   duration: number,
-): { lines: string[]; exportData: EvaluationRunExport } {
-  const evalId = datasetEval.repo;
+) {
+  const evalId = ev.repo;
 
   const aggregation = aggregateScores(Array.from(aggregationInputs.values()));
 
@@ -591,10 +570,10 @@ function summarizeAggregation(
   const exportData: EvaluationRunExport = {
     agent: agentName,
     evaluation: {
-      identifier: datasetEval.identifier,
-      repo: datasetEval.repo,
-      from: datasetEval.from,
-      to: datasetEval.to,
+      identifier: ev.id,
+      repo: ev.repo,
+      from: ev.from,
+      to: ev.to,
     },
     model,
     jobUrl: process.env.GITHUB_BENCHMARK_JOB_URL!,
@@ -649,12 +628,7 @@ function buildScoreExportsFromEpisodes(
 
   episodes.forEach((episode) => {
     episode.scores.forEach((score) => {
-      const assignment: ScoreAssignment = {
-        name: score.assignment.name,
-        weight: score.assignment.weight,
-        args: score.assignment.args,
-      };
-      const entry = ensureAggregationEntry(aggregationInputs, assignment);
+      const entry = ensureAggregationEntry(aggregationInputs, score.assignment);
 
       score.judges.forEach((judgeResult) => {
         const judge: Judge = {
@@ -677,7 +651,7 @@ function buildScoreExportsFromEpisodes(
 
 function ensureAggregationEntry(
   map: Map<string, ScoreAggregationInput>,
-  assignment: ScoreAssignment,
+  assignment: Eval.Instance["scores"][number],
 ): ScoreAggregationInput {
   if (!map.has(assignment.name)) {
     map.set(assignment.name, {

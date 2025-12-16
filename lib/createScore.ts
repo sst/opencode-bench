@@ -2,7 +2,7 @@ import { strict as assert } from "node:assert";
 
 import { z } from "zod";
 
-import type { DatasetEval } from "~/lib/dataset.js";
+import type { Eval } from "~/evals/index.js";
 import type { Judge } from "~/lib/judgeTypes.js";
 import { Logger } from "./logger.js";
 
@@ -14,14 +14,14 @@ export const scoreResultSchema = z.object({
 });
 
 export interface ScorePreparationContext<Config = unknown> {
-  evaluation: DatasetEval;
+  ev: Eval.Instance;
   cwd: string;
   config: Config;
   logger: Logger.Instance;
 }
 
 export interface ScoreEvaluationContext<Reference, Config = unknown> {
-  evaluation: DatasetEval;
+  ev: Eval.Instance;
   cwd: string;
   config: Config;
   judge: Judge;
