@@ -25,7 +25,7 @@
     "tests/**/*.ts",
     "types/**/*.ts",
     "types/**/*.d.ts",
-    "dataset/**/*.ts"
+    "evals/**/*.ts"
   ],
   "exclude": ["dist", "node_modules"]
 }

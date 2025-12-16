@@ -1,0 +1,142 @@
+diff --git a/static/gsApp/components/productTrial/productTrialAlert.spec.tsx b/static/gsApp/components/productTrial/productTrialAlert.spec.tsx
+index 3ab7117d94fa21..5475b5674ce475 100644
+--- a/static/gsApp/components/productTrial/productTrialAlert.spec.tsx
++++ b/static/gsApp/components/productTrial/productTrialAlert.spec.tsx
+@@ -10,6 +10,7 @@ import ProductTrialAlert from 'getsentry/components/productTrial/productTrialAle
+ import {getProductForPath} from 'getsentry/components/productTrial/productTrialPaths';
+ import SubscriptionStore from 'getsentry/stores/subscriptionStore';
+ import type {ProductTrial} from 'getsentry/types';
++import {PlanName} from 'getsentry/types';
+ 
+ describe('ProductTrialAlert', () => {
+   const api = new MockApiClient();
+@@ -133,7 +134,7 @@ describe('ProductTrialAlert', () => {
+     ).toBeInTheDocument();
+   });
+ 
+-  it('loads trial ended', () => {
++  it('loads trial ended for free plan users', () => {
+     const trial: ProductTrial = {
+       category: DataCategory.PROFILES,
+       isStarted: true,
+@@ -159,6 +160,82 @@ describe('ProductTrialAlert', () => {
+       )
+     ).toBeInTheDocument();
+   });
++
++  it('loads trial ended for Business plan users without upgrade prompt', () => {
++    const businessSubscription = SubscriptionFixture({
++      organization,
++      planDetails: {
++        ...SubscriptionFixture({organization}).planDetails,
++        price: 99,
++        name: PlanName.BUSINESS,
++      },
++    });
++
++    const trial: ProductTrial = {
++      category: DataCategory.TRANSACTIONS,
++      isStarted: true,
++      reasonCode: 2001,
++      startDate: moment().utc().subtract(16, 'days').format(),
++      endDate: moment().utc().subtract(2, 'days').format(),
++      lengthDays: 14,
++    };
++
++    render(
++      <ProductTrialAlert
++        api={api}
++        organization={organization}
++        subscription={businessSubscription}
++        trial={trial}
++        product={DataCategory.TRANSACTIONS}
++      />
++    );
++    expect(screen.getByText('Performance Monitoring Trial')).toBeInTheDocument();
++    // For Business plan users, should NOT include "Keep using more by upgrading your plan."
++    expect(
++      screen.getByText('Your unlimited Performance Monitoring trial ended.')
++    ).toBeInTheDocument();
++    // Should NOT show the upgrade prompt text
++    expect(
++      screen.queryByText(/Keep using more by upgrading your plan/)
++    ).not.toBeInTheDocument();
++  });
++
++  it('loads trial ended for Team plan users with upgrade prompt', () => {
++    const teamSubscription = SubscriptionFixture({
++      organization,
++      planDetails: {
++        ...SubscriptionFixture({organization}).planDetails,
++        price: 29,
++        name: PlanName.TEAM,
++      },
++    });
++
++    const trial: ProductTrial = {
++      category: DataCategory.REPLAYS,
++      isStarted: true,
++      reasonCode: 2001,
++      startDate: moment().utc().subtract(16, 'days').format(),
++      endDate: moment().utc().subtract(2, 'days').format(),
++      lengthDays: 14,
++    };
++
++    render(
++      <ProductTrialAlert
++        api={api}
++        organization={organization}
++        subscription={teamSubscription}
++        trial={trial}
++        product={DataCategory.REPLAYS}
++      />
++    );
++    expect(screen.getByText('Session Replay Trial')).toBeInTheDocument();
++    // For Team plan users, SHOULD show the upgrade prompt
++    expect(
++      screen.getByText(
++        'Your unlimited Session Replay trial ended. Keep using more by upgrading your plan.'
++      )
++    ).toBeInTheDocument();
++  });
+ });
+ 
+ describe('getProductForPath', () => {
+diff --git a/static/gsApp/components/productTrial/productTrialAlert.tsx b/static/gsApp/components/productTrial/productTrialAlert.tsx
+index 70dca34d61e7cc..d8dd273e36f82f 100644
+--- a/static/gsApp/components/productTrial/productTrialAlert.tsx
++++ b/static/gsApp/components/productTrial/productTrialAlert.tsx
+@@ -20,7 +20,7 @@ import AddEventsCTA, {type EventType} from 'getsentry/components/addEventsCTA';
+ import ProductTrialTag from 'getsentry/components/productTrial/productTrialTag';
+ import StartTrialButton from 'getsentry/components/startTrialButton';
+ import type {ProductTrial, Subscription} from 'getsentry/types';
+-import {UsageAction} from 'getsentry/utils/billing';
++import {isBizPlanFamily, UsageAction} from 'getsentry/utils/billing';
+ import {getCategoryInfoFromPlural} from 'getsentry/utils/dataCategory';
+ import titleCase from 'getsentry/utils/titleCase';
+ import trackGetsentryAnalytics from 'getsentry/utils/trackGetsentryAnalytics';
+@@ -178,10 +178,20 @@ function ProductTrialAlert(props: ProductTrialAlertProps) {
+     }
+   } else if (daysLeft < 0 && daysLeft >= -7 && trial.isStarted) {
+     alertHeader = t('%s Trial', titleCase(getProductName(trial.category)));
+-    alertText = t(
+-      'Your unlimited %s trial ended. Keep using more by upgrading your plan.',
+-      getProductName(product ?? trial.category)
+-    );
++
++    if (isPaid && isBizPlanFamily(subscription.planDetails)) {
++      // For Business plan users, just say the trial ended without upgrade prompt
++      alertText = t(
++        'Your unlimited %s trial ended.',
++        getProductName(product ?? trial.category)
++      );
++    } else {
++      // For free and Team plan users, show the upgrade prompt
++      alertText = t(
++        'Your unlimited %s trial ended. Keep using more by upgrading your plan.',
++        getProductName(product ?? trial.category)
++      );
++    }
+ 
+     alertButton =
+       isPaid && !hasBillingRole ? (

@@ -1,0 +1,18 @@
+diff --git a/helix-cli/src/commands/update.rs b/helix-cli/src/commands/update.rs
+index 22269ae2a..137b73850 100644
+--- a/helix-cli/src/commands/update.rs
++++ b/helix-cli/src/commands/update.rs
+@@ -4,6 +4,13 @@ use self_update::cargo_crate_version;
+ use crate::utils::{print_error_with_hint, print_status, print_success};
+ 
+ pub async fn run(force: bool) -> Result<()> {
++    // We're using the self_update crate which is very handy but doesn't support async.
++    // Still, this is good enough, but because it panics in an async context we must
++    // do a spawn_blocking
++    tokio::task::spawn_blocking(move || run_sync(force)).await?
++}
++
++fn run_sync(force: bool) -> Result<()> {
+     print_status("UPDATE", "Checking for updates...");
+ 
+     let status = self_update::backends::github::Update::configure()

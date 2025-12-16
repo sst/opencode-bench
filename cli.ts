@@ -41,10 +41,6 @@ const cli = yargs(hideBin(process.argv))
       "$0 opencode --model opencode/claude-sonnet-4-5 --eval DataDog/datadog-lambda-python@93d4a07..d776378 --output results.json",
     ],
   ])
-  .fail((msg) => {
-    console.error(msg);
-    process.exit(1);
-  })
   .strict();
 
 cli.command(
@@ -52,10 +48,8 @@ cli.command(
   "Generate dataset for all evaluations",
   async (yargs) =>
     yargs.example([["orvl generate", "Generate dataset for all evaluations"]]),
-  async ({ eval: evalId }) => {
-    const logger = Logger.create();
-    logger.log(`Generating dataset...`);
-
+  async () => {
+    const logger = Logger.create("[generate]");
     await Eval.generate({ logger });
   },
 );
@@ -107,7 +101,7 @@ cli.command(
     const evals = await Eval.load();
     const agent = getAgent(agentName);
     const model = getModel(agent, modelFilter);
-    const evalDef = getEval(evals, evalId);
+    const ev = getEval(evals, evalId);
     const logger = Logger.create(`[model ${model}]`);
 
     // Run episodes
@@ -116,14 +110,11 @@ cli.command(
         const index = offset + 1;
         const childLogger = logger.child(`[episode ${index}/${episodes}]`);
         childLogger.log(`Starting episode with ${timeoutMins}min timeout...`);
-        return withRetries(
-          () => runEpisode(evalDef, agent, model, childLogger),
-          {
-            retries: 3,
-            timeoutMs: timeoutMins * 60 * 1000,
-            logger: childLogger,
-          },
-        ).then((result) => ({ index, ...result }));
+        return withRetries(() => runEpisode(ev, agent, model, childLogger), {
+          retries: 3,
+          timeoutMs: timeoutMins * 60 * 1000,
+          logger: childLogger,
+        }).then((result) => ({ index, ...result }));
       }),
     );
 
@@ -174,15 +165,11 @@ cli.command(
     });
 
     // Generate summary from all episodes' actions
-    const summary = await generateActionsSummary(
-      evalDef,
-      model,
-      episodesActions,
-    );
+    const summary = await generateActionsSummary(ev, model, episodesActions);
 
     const evaluationResult = summarizeAggregation(
       agent.name,
-      evalDef,
+      ev,
       model,
       aggregatedInputs,
       episodeExports,
@@ -229,13 +216,13 @@ function getModel(agent: Agent.Registration, modelFilter: string) {
 }
 
 function getEval(evals: Eval.Instance[], evalId: string) {
-  const evalDef = evals.find((ev) => ev.id === evalId);
-  if (!evalDef) throw new Error(`Eval ${evalId} was not found.`);
-  if (!evalDef.scores.length)
+  const ev = evals.find((ev) => ev.id === evalId);
+  if (!ev) throw new Error(`Eval ${evalId} was not found.`);
+  if (!ev.scores.length)
     throw new Error(
-      `Evaluation ${evalDef.repo} has no score assignments configured.`,
+      `Evaluation ${ev.repo} has no score assignments configured.`,
     );
-  return evalDef;
+  return ev;
 }
 
 async function runEpisode(

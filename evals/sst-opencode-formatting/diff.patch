@@ -1,0 +1,12 @@
+diff --git a/packages/opencode/src/format/index.ts b/packages/opencode/src/format/index.ts
+index ebcc7909a8..e307496c4a 100644
+--- a/packages/opencode/src/format/index.ts
++++ b/packages/opencode/src/format/index.ts
+@@ -91,7 +91,6 @@ export namespace Format {
+ 
+   export function init() {
+     log.info("init")
+-    return
+     Bus.subscribe(File.Event.Edited, async (payload) => {
+       const file = payload.properties.file
+       log.info("formatting", { file })

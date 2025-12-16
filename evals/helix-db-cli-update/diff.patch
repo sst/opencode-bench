@@ -1,0 +1,146 @@
+diff --git a/.github/workflows/cli.yml b/.github/workflows/cli.yml
+index 06fbbbf4c..de144b286 100644
+--- a/.github/workflows/cli.yml
++++ b/.github/workflows/cli.yml
+@@ -40,19 +40,19 @@ jobs:
+         include:
+           - os: ubuntu-latest
+             target: x86_64-unknown-linux-gnu
+-            binary_name: helix-cli-linux-amd64
++            binary_name: helix-x86_64-unknown-linux-gnu
+           - os: ubuntu-24.04-arm
+             target: aarch64-unknown-linux-gnu
+-            binary_name: helix-cli-linux-arm64
++            binary_name: helix-aarch64-unknown-linux-gnu
+           - os: macos-13
+             target: x86_64-apple-darwin
+-            binary_name: helix-cli-macos-amd64
++            binary_name: helix-x86_64-apple-darwin
+           - os: macos-latest
+             target: aarch64-apple-darwin
+-            binary_name: helix-cli-macos-arm64
++            binary_name: helix-aarch64-apple-darwin
+           - os: windows-latest
+             target: x86_64-pc-windows-msvc
+-            binary_name: helix-cli-windows-amd64.exe
++            binary_name: helix-x86_64-pc-windows-msvc.exe
+ 
+     steps:
+       - uses: actions/checkout@v3
+diff --git a/.github/workflows/cliv2.yml b/.github/workflows/cliv2.yml
+index eda9eb9cb..f9a4a3ad7 100644
+--- a/.github/workflows/cliv2.yml
++++ b/.github/workflows/cliv2.yml
+@@ -40,19 +40,19 @@ jobs:
+         include:
+           - os: ubuntu-latest
+             target: x86_64-unknown-linux-gnu
+-            binary_name: helix-cli-linux-amd64
++            binary_name: helix-x86_64-unknown-linux-gnu
+           - os: ubuntu-24.04-arm
+             target: aarch64-unknown-linux-gnu
+-            binary_name: helix-cli-linux-arm64
++            binary_name: helix-aarch64-unknown-linux-gnu
+           - os: macos-13
+             target: x86_64-apple-darwin
+-            binary_name: helix-cli-macos-amd64
++            binary_name: helix-x86_64-apple-darwin
+           - os: macos-latest
+             target: aarch64-apple-darwin
+-            binary_name: helix-cli-macos-arm64
++            binary_name: helix-aarch64-apple-darwin
+           - os: windows-latest
+             target: x86_64-pc-windows-msvc
+-            binary_name: helix-cli-windows-amd64.exe
++            binary_name: helix-x86_64-pc-windows-msvc.exe
+ 
+     steps:
+       - uses: actions/checkout@v3
+diff --git a/helix-cli/install.sh b/helix-cli/install.sh
+index 029e55913..ad968c8d1 100755
+--- a/helix-cli/install.sh
++++ b/helix-cli/install.sh
+@@ -106,18 +106,48 @@ set_install_dir() {
+ 
+ # Detect platform and architecture
+ detect_platform() {
+-    local os arch
++    local target
+ 
+-    # Detect OS
++    # Detect OS and architecture combination to match Rust targets
+     case "$OSTYPE" in
+         linux*)
+-            os="linux"
++            case "$(uname -m)" in
++                x86_64|amd64)
++                    target="x86_64-unknown-linux-gnu"
++                    ;;
++                aarch64|arm64)
++                    target="aarch64-unknown-linux-gnu"
++                    ;;
++                *)
++                    log_error "Unsupported architecture: $(uname -m)"
++                    exit 1
++                    ;;
++            esac
+             ;;
+         darwin*)
+-            os="macos"
++            case "$(uname -m)" in
++                x86_64|amd64)
++                    target="x86_64-apple-darwin"
++                    ;;
++                aarch64|arm64)
++                    target="aarch64-apple-darwin"
++                    ;;
++                *)
++                    log_error "Unsupported architecture: $(uname -m)"
++                    exit 1
++                    ;;
++            esac
+             ;;
+         msys*|cygwin*)
+-            os="windows"
++            case "$(uname -m)" in
++                x86_64|amd64)
++                    target="x86_64-pc-windows-msvc"
++                    ;;
++                *)
++                    log_error "Unsupported architecture: $(uname -m)"
++                    exit 1
++                    ;;
++            esac
+             ;;
+         *)
+             log_error "Unsupported OS: $OSTYPE"
+@@ -125,27 +155,13 @@ detect_platform() {
+             ;;
+     esac
+ 
+-    # Detect architecture
+-    case "$(uname -m)" in
+-        x86_64|amd64)
+-            arch="amd64"
+-            ;;
+-        aarch64|arm64)
+-            arch="arm64"
+-            ;;
+-        *)
+-            log_error "Unsupported architecture: $(uname -m)"
+-            exit 1
+-            ;;
+-    esac
+-
+     # Set binary name with extension for Windows
+     local binary_ext=""
+-    if [[ "$os" == "windows" ]]; then
++    if [[ "$OSTYPE" == "msys" || "$OSTYPE" == "cygwin" ]]; then
+         binary_ext=".exe"
+     fi
+ 
+-    echo "${BINARY_NAME}-cli-${os}-${arch}${binary_ext}"
++    echo "${BINARY_NAME}-${target}${binary_ext}"
+ }
+ 
+ # Get latest release version from GitHub

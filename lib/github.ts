@@ -3,8 +3,6 @@ import { strict as assert } from "node:assert";
 import { request as octokitRequest } from "@octokit/request";
 import type { RequestInterface } from "@octokit/types";
 
-import type { Eval } from "~/evals/index.js";
-
 const DIFF_ACCEPT_HEADER = "application/vnd.github.v3.diff";
 
 function resolveGitHubToken(): string | undefined {

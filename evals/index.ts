@@ -13,9 +13,9 @@ import { generateObject } from "ai";
 import { getZenLanguageModel } from "../lib/zenModels.js";
 
 export namespace Eval {
-  const DATASET_PATH = join(__dirname, "dataset");
+  const EVAL_PATH = __dirname;
   const SAMPLE_DATASET_NAME = "_sample";
-  const SAMPLE_DATASET_PATH = join(DATASET_PATH, SAMPLE_DATASET_NAME);
+  const SAMPLE_DATASET_PATH = join(EVAL_PATH, SAMPLE_DATASET_NAME);
   const MODEL_ID = "opencode/claude-sonnet-4-5";
   const definitionSchema = z.object({
     repo: z
@@ -23,7 +23,6 @@ export namespace Eval {
       .regex(/^[^/]+\/[^/]+$/, "repo must follow the format <owner>/<name>."),
     from: z.string().min(1, "from commit SHA is required."),
     to: z.string().min(1, "to commit SHA is required."),
-    prompts: z.string().min(1, "prompts file path is required."),
     issues: z.array(z.number().int()),
     context: z.string().min(1).optional(),
     scores: z.array(
@@ -49,9 +48,9 @@ export namespace Eval {
     return await Promise.all(
       folders.map(async (folderName) => {
         const [defYml, promptYml, diff] = await Promise.all([
-          readFile(join(DATASET_PATH, folderName, "definition.yml"), "utf-8"),
-          readFile(join(DATASET_PATH, folderName, "prompt.yml"), "utf-8"),
-          readFile(join(DATASET_PATH, folderName, "diff.patch"), "utf-8"),
+          readFile(join(EVAL_PATH, folderName, "definition.yml"), "utf-8"),
+          readFile(join(EVAL_PATH, folderName, "prompt.yml"), "utf-8"),
+          readFile(join(EVAL_PATH, folderName, "diff.patch"), "utf-8"),
         ]);
         return {
           ...definitionSchema.parse(parseYaml(defYml)),
@@ -65,72 +64,67 @@ export namespace Eval {
   }
 
   export async function generate(opts: { logger: Logger.Instance }) {
+    opts.logger.log(`Starting dataset generation...`);
     const folders = await listNames();
-    return await Promise.all(
-      folders.map(async (folderName) => {
-        const logger = opts.logger.child(`[${folderName}]`);
+    opts.logger.log(`Found ${folders.length} evaluations`);
 
-        try {
-          logger.log(`Fetching commits from GitHub...`);
-          const defYml = await readFile(
-            join(DATASET_PATH, folderName, "definition.yml"),
+    for (const folderName of folders) {
+      const logger = opts.logger.child(`[${folderName}]`);
+
+      try {
+        logger.log(`Parsing eval definition...`);
+        const defYml = await readFile(
+          join(EVAL_PATH, folderName, "definition.yml"),
+          "utf-8",
+        );
+        const def = definitionSchema.parse(parseYaml(defYml));
+        const [owner, repo] = def.repo.split("/", 2);
+
+        // generate diff
+        const diffPath = join(EVAL_PATH, folderName, "diff.patch");
+        if (!(await fileExists(diffPath))) {
+          logger.log(`Fetching eval commits from GitHub...`);
+          const diff = await fetchComparisonDiff(owner, repo, def.from, def.to);
+          if (diff.trim().length === 0)
+            throw new Error(logger.format(`Diff is empty for ${def.repo}`));
+          await writeFile(diffPath, diff, "utf-8");
+        }
+
+        // generate prompts
+        const promptPath = join(EVAL_PATH, folderName, "prompt.yml");
+        if (!(await fileExists(promptPath))) {
+          logger.log(`Generating eval prompts...`);
+          const commits = await fetchCommits(owner, repo, def.from, def.to);
+          if (commits.length === 0)
+            throw new Error(logger.format("No commits found"));
+
+          const prompts = await Promise.all(
+            commits.map((diff) =>
+              generatePrompt(def, diff, {
+                logger: logger.child(`[commit ${diff.sha.slice(0, 7)}]`),
+              }),
+            ),
+          );
+
+          await writeFile(
+            promptPath,
+            stringifyYaml(
+              { generated_at: new Date().toISOString(), prompts },
+              { lineWidth: 0 },
+            ),
             "utf-8",
           );
-          const def = definitionSchema.parse(parseYaml(defYml));
-          const [owner, repo] = def.repo.split("/", 2);
-
-          // generate diff
-          const diffPath = join(DATASET_PATH, folderName, "diff.patch");
-          if (!(await fileExists(diffPath))) {
-            logger.log(`Generating diff...`);
-            const diff = await fetchComparisonDiff(
-              owner,
-              repo,
-              def.from,
-              def.to,
-            );
-            if (diff.trim().length === 0)
-              throw new Error(logger.format(`Diff is empty for ${def.repo}`));
-            await writeFile(diffPath, diff, "utf-8");
-          }
-
-          // generate prompts
-          const promptPath = join(DATASET_PATH, folderName, "prompt.yml");
-          if (!(await fileExists(promptPath))) {
-            logger.log(`Generating prompts...`);
-            const commits = await fetchCommits(owner, repo, def.from, def.to);
-            if (commits.length === 0)
-              throw new Error(logger.format("No commits found"));
-
-            const prompts = await Promise.all(
-              commits.map((diff) =>
-                generatePrompt(def, diff, {
-                  logger: logger.child(`[commit ${diff.sha.slice(0, 7)}]`),
-                }),
-              ),
-            );
-
-            await writeFile(
-              promptPath,
-              stringifyYaml(
-                { generated_at: new Date().toISOString(), prompts },
-                { lineWidth: 0 },
-              ),
-              "utf-8",
-            );
-          }
-        } catch (error) {
-          const message =
-            error instanceof Error ? error.message : String(error);
-          logger.error(`Failed to generate dataset: ${message}`);
-          throw error;
         }
-      }),
-    );
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        logger.error(`Failed to generate dataset: ${message}`);
+        throw error;
+      }
+    }
   }
 
   export async function listNames() {
-    const folders = await readdir(DATASET_PATH, { withFileTypes: true });
+    const folders = await readdir(EVAL_PATH, { withFileTypes: true });
     return await Promise.all(
       folders
         .filter((folder) => folder.isDirectory())
