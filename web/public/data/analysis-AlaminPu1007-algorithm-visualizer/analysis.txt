@@ -1,0 +1,119 @@
+# Cross-Agent Benchmark Analysis
+
+## Overall Performance Pattern
+
+The benchmark reveals remarkably **consistent performance** across the top three agents, with scores clustering tightly between 0.804-0.827 (final) and 0.813-0.870 (base). This narrow range suggests the task has well-defined success criteria that multiple approaches can satisfy effectively.
+
+### Performance Ranking
+1. **claude-code (claude-sonnet-4-5)**: 0.827 final — Highest base score (0.870), lowest penalty
+2. **opencode (big-pickle)**: 0.827 final — Tied for first, slightly higher penalty (0.043)
+3. **opencode (claude-sonnet-4-5)**: 0.804 final — Higher penalty (0.054) dragged down final score
+4. **codex (gpt-5-codex)**: 0.770 final — Technical failure prevented summary generation
+
+## Key Insights
+
+### 1. **Model Consistency vs. Scope Management**
+
+**Claude-code's advantage**: Achieved the highest base score (0.870) with minimal penalty (0.043) by maintaining **strict consistency** across episodes. The agent followed an identical approach in all three runs, with only Episode 1 showing minor exploratory variation (schema file search).
+
+**OpenCode's trade-off**: Both OpenCode variants achieved identical base scores to claude-code (0.870 for big-pickle, 0.858 for claude-sonnet-4-5) but incurred higher penalties. The big-pickle variant matched claude-code's penalty, while the claude-sonnet-4-5 variant showed **25% higher penalty** (0.054 vs 0.043), suggesting:
+- Episode 2 was "more focused" (documentation only)
+- Episodes 1 & 3 included "comprehensive UI refinements"
+- **Inconsistent scope across episodes** likely triggered the penalty increase
+
+### 2. **Systematic Approach Patterns**
+
+All successful agents followed a similar workflow:
+```
+Explore → Identify files → Update version → Document changes → Verify
+```
+
+**Differentiation emerged in execution details:**
+
+- **Claude-code**: Used `TodoWrite` for explicit task tracking, demonstrating structured project management
+- **OpenCode (big-pickle)**: Emphasized verification with "linting and build verification commands" after changes
+- **OpenCode (claude-sonnet-4-5)**: Focused on tool efficiency, using "Edit operations extensively" with occasional Read operations
+
+### 3. **The Episode Consistency Problem**
+
+The **most significant performance differentiator** was episode-to-episode consistency:
+
+- **Claude-code**: "All three episodes achieved identical outcomes"
+- **OpenCode (claude-sonnet-4-5)**: "Episode 2 was more focused... Episodes 1 and 3 included comprehensive UI refinements"
+
+This suggests the evaluation system **penalizes scope variation** across episodes, even when individual episodes are successful. The 0.054 penalty for opencode/claude-sonnet-4-5 (vs 0.043 for others) directly correlates with its documented inconsistency.
+
+### 4. **Technical Failure Analysis**
+
+**Codex (gpt-5-codex)** encountered a critical infrastructure issue: "Body has already been used. It can only be read once." This is a **stream consumption error**, not an agent logic failure. Despite this, it achieved:
+- Base score: 0.813 (only 7% below the leader)
+- Same penalty structure: 0.043
+
+This suggests the agent **completed the task successfully** but failed during post-processing/summary generation, indicating a **tooling issue** rather than capability gap.
+
+## Performance Gaps Analysis
+
+### Largest Delta: 0.057 (claude-code vs codex)
+- **Primary factor**: Codex's base score (0.813 vs 0.870) — a 6.5% gap
+- **Secondary factor**: Summary generation failure suggests incomplete observability
+- **Implication**: The gap may be smaller than it appears if the technical issue masked successful work
+
+### Smallest Delta: 0.000 (claude-code vs opencode/big-pickle)
+- Both achieved identical final scores through different paths
+- Big-pickle emphasized **verification** (linting, builds)
+- Claude-code emphasized **planning** (todo tracking)
+- **Implication**: Multiple valid strategies exist for this task type
+
+## Agent Behavioral Tendencies
+
+### Safety vs. Completeness Trade-offs
+
+1. **Claude-code**: Prioritizes **reproducibility** — identical outcomes across episodes suggest conservative, proven approach
+2. **OpenCode (big-pickle)**: Prioritizes **validation** — explicit mention of quality checks indicates defensive programming
+3. **OpenCode (claude-sonnet-4-5)**: Prioritizes **efficiency** — variable scope suggests optimization for individual episode requirements
+
+### Tool Usage Patterns
+
+- **TodoWrite** (claude-code only): Explicit task management overhead, but may improve consistency
+- **Verification commands** (big-pickle only): Quality assurance overhead, but catches errors early
+- **Read-then-Edit** (claude-sonnet-4-5): More cautious file modification approach
+
+## Recommendations
+
+### 1. **For Evaluation System Improvement**
+- **Clarify penalty criteria**: Document whether episode consistency is required or if adaptive scope is acceptable
+- **Fix infrastructure issues**: Resolve stream consumption errors affecting summary generation
+- **Add consistency metrics**: Explicitly measure and report episode-to-episode variance
+
+### 2. **For Agent Development**
+
+**To match claude-code's performance:**
+- Implement explicit task tracking (TodoWrite or equivalent)
+- Standardize episode workflows to minimize variation
+- Front-load exploration to avoid mid-episode scope changes
+
+**To improve on current leaders:**
+- Combine claude-code's consistency with big-pickle's verification
+- Add automated testing to catch regressions
+- Implement episode planning phase to determine optimal scope upfront
+
+### 3. **For Future Experiments**
+
+**Test hypothesis**: Does episode consistency matter?
+- Run controlled experiment with intentionally variable vs. fixed scope
+- Measure penalty impact independently
+
+**Investigate codex failure:**
+- Reproduce stream consumption error
+- Determine if it's model-specific or infrastructure-wide
+- Assess true capability gap once technical issues resolved
+
+**Benchmark verification strategies:**
+- Compare outcomes with/without explicit linting steps
+- Measure correlation between verification overhead and final scores
+
+## Conclusion
+
+This benchmark reveals a **mature evaluation environment** where multiple agents achieve near-identical results through different optimization strategies. The 2.3% spread between top performers suggests diminishing returns on further optimization without changing the task complexity.
+
+The most actionable insight: **Episode consistency appears more valuable than per-episode optimization**. Claude-code's success stems from reproducible execution, not superior individual episode performance. Future development should prioritize workflow standardization over adaptive intelligence for this task class.
