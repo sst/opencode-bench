@@ -1,0 +1,17 @@
+source:
+  repo: sst/opencode
+  from: 5f7e1e099b2b5786dd94a172c33d6997d54c215f
+  to: a96365fd81555a2967524930aeb949009008f9a2
+context: >
+  The command bar is missing a "Rename session" action. Add a concise entry that
+  opens the existing session rename dialog for the current session via the
+  command palette; keep the prompt short and avoid implementation details.
+metrics:
+  - name: api-signature
+    weight: 0.2
+  - name: logic-equivalence
+    weight: 0.3
+  - name: integration-points
+    weight: 0.2
+  - name: test-coverage
+    weight: 0.2

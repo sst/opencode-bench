@@ -18,14 +18,14 @@
   "include": [
     "*.ts",
     "agents/**/*.ts",
-    "scores/**/*.ts",
+    "metrics/**/*.ts",
     "lib/**/*.ts",
     "config/**/*.ts",
     "scripts/**/*.ts",
     "tests/**/*.ts",
     "types/**/*.ts",
     "types/**/*.d.ts",
-    "evals/**/*.ts"
+    "src/tasks/**/*.ts"
   ],
   "exclude": ["dist", "node_modules"]
 }

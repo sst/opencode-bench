@@ -2,12 +2,12 @@ import { describe, expect, it } from "bun:test";
 import { generateObject } from "ai";
 
 import { scoreResultSchema, type ScoreResult } from "~/lib/createScore.js";
-import { judges } from "~/judges.js";
+import { judges } from "~/lib/judges.js";
 import type { Judge } from "~/lib/judgeTypes.js";
 import {
   systemPrompt as logicEquivalencePrompt,
   createUserPrompt as createLogicEquivalencePrompt,
-} from "~/scores/logic-equivalence.js";
+} from "~/metrics/logic-equivalence.js";
 import type { DiffPair } from "./fixtures/judgeConsistencyFixtures.js";
 import {
   logicEquivalenceComplexFixtures,
@@ -106,7 +106,9 @@ describe("Judge Consistency Tests - High Complexity", () => {
       const scores = results.map((r) => r.score);
       expect(scores.every((s) => s === 0)).toBe(true);
 
-      console.log("\nComplex - Logic Wrong Implementation (Missing Logging) Rationales:");
+      console.log(
+        "\nComplex - Logic Wrong Implementation (Missing Logging) Rationales:",
+      );
       results.forEach((r, i) => {
         console.log(`  Run ${i + 1}: Score=${r.score}`);
       });
@@ -126,7 +128,9 @@ describe("Judge Consistency Tests - High Complexity", () => {
       expect(uniqueScores.size).toBe(1);
 
       const consistentScore = scores[0];
-      console.log(`\nComplex - Logic Ambiguous (Async Refactor): Consistent score = ${consistentScore}`);
+      console.log(
+        `\nComplex - Logic Ambiguous (Async Refactor): Consistent score = ${consistentScore}`,
+      );
       results.forEach((r, i) => {
         console.log(`  Run ${i + 1}: Score=${r.score}`);
       });

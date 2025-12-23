@@ -15,7 +15,7 @@ import { readFileSync } from "node:fs";
 import process from "node:process";
 import { generateText } from "ai";
 import type { EvaluationRunExport } from "~/types/export.js";
-import { getZenLanguageModel } from "~/lib/zenModels.js";
+import { getZenLanguageModel } from "~/src/zenModels.js";
 
 export const AGENT_ANALYSIS_PROMPT = `You are an expert analyst reviewing how different agents and models perform on the same benchmark evaluation.
 
@@ -47,7 +47,9 @@ function buildDynamicContext(runs: EvaluationRunExport[]): string {
   parts.push("# Run Scoreboard");
   runs.forEach((run, index) => {
     parts.push(
-      `${index + 1}. ${run.agent} (${run.model}) — final ${run.finalScore.toFixed(3)}, base ${run.baseScore.toFixed(
+      `${index + 1}. ${run.agent} (${
+        run.model
+      }) — final ${run.finalScore.toFixed(3)}, base ${run.baseScore.toFixed(
         3,
       )}, penalty ${run.variancePenalty.toFixed(3)}`,
     );
@@ -70,11 +72,11 @@ function formatFallbackSummary(runs: EvaluationRunExport[]): string {
 
   runs.forEach((run, index) => {
     lines.push(
-      `${index + 1}. ${run.agent} (${run.model}) – final ${run.finalScore.toFixed(
+      `${index + 1}. ${run.agent} (${
+        run.model
+      }) – final ${run.finalScore.toFixed(3)}, base ${run.baseScore.toFixed(
         3,
-      )}, base ${run.baseScore.toFixed(3)}, penalty ${run.variancePenalty.toFixed(
-        3,
-      )}`,
+      )}, penalty ${run.variancePenalty.toFixed(3)}`,
     );
 
     if (run.summary?.trim()) {

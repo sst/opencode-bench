@@ -7,7 +7,7 @@ import {
   weightedSum,
   type ScoreAggregationInput,
 } from "~/lib/utils/scoreAggregation.js";
-import type { Eval } from "~/evals/index.js";
+import type { Task } from "~/tasks/index.js";
 import type { Judge, JudgeName } from "~/lib/judgeTypes.js";
 
 /*

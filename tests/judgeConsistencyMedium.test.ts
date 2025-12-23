@@ -2,12 +2,12 @@ import { describe, expect, it } from "bun:test";
 import { generateObject } from "ai";
 
 import { scoreResultSchema, type ScoreResult } from "~/lib/createScore.js";
-import { judges } from "~/judges.js";
+import { judges } from "~/lib/judges.js";
 import type { Judge } from "~/lib/judgeTypes.js";
 import {
   systemPrompt as logicEquivalencePrompt,
   createUserPrompt as createLogicEquivalencePrompt,
-} from "~/scores/logic-equivalence.js";
+} from "~/metrics/logic-equivalence.js";
 import {
   systemPrompt as apiSignaturePrompt,
   createUserPrompt as createApiSignaturePrompt,
@@ -15,7 +15,7 @@ import {
 import {
   systemPrompt as integrationPointsPrompt,
   createUserPrompt as createIntegrationPointsPrompt,
-} from "~/scores/integration-points.js";
+} from "~/metrics/integration-points.js";
 import type { DiffPair } from "./fixtures/judgeConsistencyFixtures.js";
 import {
   logicEquivalenceMediumFixtures,
@@ -143,7 +143,9 @@ describe("Judge Consistency Tests - Medium Complexity", () => {
       expect(uniqueScores.size).toBe(1);
 
       const consistentScore = scores[0];
-      console.log(`\nMedium - Logic Ambiguous: Consistent score = ${consistentScore}`);
+      console.log(
+        `\nMedium - Logic Ambiguous: Consistent score = ${consistentScore}`,
+      );
       results.forEach((r, i) => {
         console.log(`  Run ${i + 1}: Score=${r.score}`);
       });
@@ -201,7 +203,9 @@ describe("Judge Consistency Tests - Medium Complexity", () => {
       expect(uniqueScores.size).toBe(1);
 
       const consistentScore = scores[0];
-      console.log(`\nMedium - API Ambiguous: Consistent score = ${consistentScore}`);
+      console.log(
+        `\nMedium - API Ambiguous: Consistent score = ${consistentScore}`,
+      );
       results.forEach((r, i) => {
         console.log(`  Run ${i + 1}: Score=${r.score}`);
       });
@@ -259,7 +263,9 @@ describe("Judge Consistency Tests - Medium Complexity", () => {
       expect(uniqueScores.size).toBe(1);
 
       const consistentScore = scores[0];
-      console.log(`\nMedium - Integration Ambiguous: Consistent score = ${consistentScore}`);
+      console.log(
+        `\nMedium - Integration Ambiguous: Consistent score = ${consistentScore}`,
+      );
       results.forEach((r, i) => {
         console.log(`  Run ${i + 1}: Score=${r.score}`);
       });

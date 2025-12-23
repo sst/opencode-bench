@@ -3,13 +3,13 @@
  */
 import { generateObject } from "ai";
 import { scoreResultSchema } from "~/lib/createScore.js";
-import { judges } from "~/judges.js";
-import { systemPrompt as logicEquivalencePrompt } from "~/scores/logic-equivalence.js";
+import { judges } from "~/lib/judges.js";
+import { systemPrompt as logicEquivalencePrompt } from "~/metrics/logic-equivalence.js";
 import { systemPrompt as apiSignaturePrompt } from "~/scores/api-signature.js";
 import {
   logicEquivalenceFixtures,
   apiSignatureFixtures,
-} from "~/tests/fixtures/judgeConsistencyFixtures.js";
+} from "~/types/tests/fixtures/judgeConsistencyFixtures.js";
 
 const judge = judges[0]; // claude-4.5
 

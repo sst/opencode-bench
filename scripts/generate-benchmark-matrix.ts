@@ -1,6 +1,6 @@
 #!/usr/bin/env bun
 import { Agent } from "~/agents/index.js";
-import { Eval } from "~/evals/index.js";
+import { Task } from "~/src/tasks/index.js";
 
 const agents = Agent.list();
 if (agents.length === 0) {
@@ -8,7 +8,7 @@ if (agents.length === 0) {
   process.exit(1);
 }
 
-const evals = await Eval.load();
+const evals = await Task.load();
 const include = evals.flatMap((ev) =>
   agents.flatMap((agent) =>
     agent.models.map((model) => ({

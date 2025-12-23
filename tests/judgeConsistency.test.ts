@@ -2,12 +2,12 @@ import { describe, expect, it } from "bun:test";
 import { generateObject } from "ai";
 
 import { scoreResultSchema, type ScoreResult } from "~/lib/createScore.js";
-import { judges } from "~/judges.js";
+import { judges } from "~/lib/judges.js";
 import type { Judge } from "~/lib/judgeTypes.js";
 import {
   systemPrompt as logicEquivalencePrompt,
   createUserPrompt as createLogicEquivalencePrompt,
-} from "~/scores/logic-equivalence.js";
+} from "~/metrics/logic-equivalence.js";
 import {
   systemPrompt as apiSignaturePrompt,
   createUserPrompt as createApiSignaturePrompt,
@@ -117,7 +117,12 @@ describe("Judge Consistency Tests", () => {
       // Log rationales for debugging
       console.log("\nPerfect Match Rationales:");
       results.forEach((r, i) => {
-        console.log(`  Run ${i + 1}: Score=${r.score}, Rationale: ${r.rationale.substring(0, 100)}...`);
+        console.log(
+          `  Run ${i + 1}: Score=${r.score}, Rationale: ${r.rationale.substring(
+            0,
+            100,
+          )}...`,
+        );
       });
     }, 120000); // 2 minute timeout for LLM calls
 
@@ -137,7 +142,12 @@ describe("Judge Consistency Tests", () => {
       // Log rationales for debugging
       console.log("\nWrong Implementation Rationales:");
       results.forEach((r, i) => {
-        console.log(`  Run ${i + 1}: Score=${r.score}, Rationale: ${r.rationale.substring(0, 100)}...`);
+        console.log(
+          `  Run ${i + 1}: Score=${r.score}, Rationale: ${r.rationale.substring(
+            0,
+            100,
+          )}...`,
+        );
       });
     }, 120000);
 
@@ -160,7 +170,12 @@ describe("Judge Consistency Tests", () => {
       console.log(`\nAmbiguous Case: Consistent score = ${consistentScore}`);
       console.log("Rationales:");
       results.forEach((r, i) => {
-        console.log(`  Run ${i + 1}: Score=${r.score}, Rationale: ${r.rationale.substring(0, 100)}...`);
+        console.log(
+          `  Run ${i + 1}: Score=${r.score}, Rationale: ${r.rationale.substring(
+            0,
+            100,
+          )}...`,
+        );
       });
     }, 120000);
   });
@@ -182,7 +197,12 @@ describe("Judge Consistency Tests", () => {
       // Log rationales for debugging
       console.log("\nAPI Signature Perfect Match Rationales:");
       results.forEach((r, i) => {
-        console.log(`  Run ${i + 1}: Score=${r.score}, Rationale: ${r.rationale.substring(0, 100)}...`);
+        console.log(
+          `  Run ${i + 1}: Score=${r.score}, Rationale: ${r.rationale.substring(
+            0,
+            100,
+          )}...`,
+        );
       });
     }, 120000);
 
@@ -202,7 +222,12 @@ describe("Judge Consistency Tests", () => {
       // Log rationales for debugging
       console.log("\nAPI Signature Wrong Implementation Rationales:");
       results.forEach((r, i) => {
-        console.log(`  Run ${i + 1}: Score=${r.score}, Rationale: ${r.rationale.substring(0, 100)}...`);
+        console.log(
+          `  Run ${i + 1}: Score=${r.score}, Rationale: ${r.rationale.substring(
+            0,
+            100,
+          )}...`,
+        );
       });
     }, 120000);
 
@@ -222,10 +247,17 @@ describe("Judge Consistency Tests", () => {
 
       // Log what the consistent score was
       const consistentScore = scores[0];
-      console.log(`\nAPI Signature Ambiguous Case: Consistent score = ${consistentScore}`);
+      console.log(
+        `\nAPI Signature Ambiguous Case: Consistent score = ${consistentScore}`,
+      );
       console.log("Rationales:");
       results.forEach((r, i) => {
-        console.log(`  Run ${i + 1}: Score=${r.score}, Rationale: ${r.rationale.substring(0, 100)}...`);
+        console.log(
+          `  Run ${i + 1}: Score=${r.score}, Rationale: ${r.rationale.substring(
+            0,
+            100,
+          )}...`,
+        );
       });
     }, 120000);
   });
