@@ -3,16 +3,11 @@ import { Agent } from "~/agents/index.js";
 import { Task } from "~/src/tasks/index.js";
 
 const agents = Agent.list();
-if (agents.length === 0) {
-  process.stderr.write("No agents registered.\n");
-  process.exit(1);
-}
-
-const evals = await Task.load();
-const include = evals.flatMap((ev) =>
+const tasks = await Task.listNames();
+const include = tasks.flatMap((task) =>
   agents.flatMap((agent) =>
     agent.models.map((model) => ({
-      eval: ev.id,
+      eval: task,
       model,
       agent: agent.name,
     })),

@@ -7,9 +7,10 @@ import { average } from "./util/math.js";
 export namespace Summarizer {
   const MODEL_ID = "opencode/claude-sonnet-4-5";
   export type RunsResult = Awaited<ReturnType<typeof summarizeRuns>>;
+  export type TasksResult = Awaited<ReturnType<typeof summarizeTasks>>;
 
   export async function summarizeRuns(results: Eval.Result[]) {
-    if (!results.length) throw new Error("No results to summarize");
+    if (!results.length) throw new Error("No runs to summarize");
     if (
       results.some(
         (result) =>
@@ -103,6 +104,17 @@ Provide a concise summary of what the agent did across these episodes.`.trim(),
       averageScore,
       summary,
       runs: results,
+    };
+  }
+
+  export async function summarizeTasks(results: RunsResult[]) {
+    if (!results.length) throw new Error("No tasks to summarize");
+
+    const averageScore = average(results.map((result) => result.averageScore));
+
+    return {
+      averageScore,
+      tasks: results,
     };
   }
 }
