@@ -61,5 +61,6 @@ jobs:
 
       - name: Run benchmark
         env:
+          OPENCODE_API_KEY: ${{ secrets.OPENCODE_API_KEY }}
           DEBUG: true
         run: bun dev opencode --task ${{ matrix.task }} --model ${{ inputs.model }}

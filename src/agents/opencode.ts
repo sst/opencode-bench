@@ -116,7 +116,7 @@ const opencodeAgent: Agent.Definition = {
       usage.cost = info?.cost ?? 0;
       options.logger.debug(`Usage: ${JSON.stringify(usage)}`);
 
-      if (!data.parts.length)
+      if (!data.parts?.length)
         throw new Error(
           options.logger.format("Response did not include assistant parts."),
         );
