@@ -147,6 +147,7 @@ export namespace Eval {
   async function finalizeChanges(baselineCommit: string) {
     try {
       await $`git config user.email "opencode-bench@example.com"`.quiet();
+      await $`git config user.name "opencode-bench"`.quiet();
     } catch (error) {
       console.error(
         "Failed to configure git user for agent diff:",
