@@ -4,22 +4,57 @@ on:
   workflow_dispatch:
     inputs:
       run:
-        description: 'Number of times to run the benchmark'
+        description: "Number of times to run the benchmark"
         required: true
         type: string
       model:
-        description: 'Model to use'
+        description: "Model to use"
+        required: true
+        type: string
+      tasks:
+        description: "Comma-separated list of tasks"
         required: true
         type: string
 
 jobs:
-  benchmark:
+  prepare:
     runs-on: ubuntu-latest
+    outputs:
+      tasks: ${{ steps.split.outputs.tasks }}
     steps:
+      - name: Split tasks into matrix
+        id: split
+        run: |
+          TASKS_JSON=$(echo "${{ inputs.tasks }}" | tr ',' '\n' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//' | jq -R -s -c 'split("\n") | map(select(length > 0))')
+          echo "tasks=$TASKS_JSON" >> $GITHUB_OUTPUT
+
+  benchmark:
+    needs: prepare
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        task: ${{ fromJson(needs.prepare.outputs.tasks) }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v1
+        with:
+          bun-version: 1.2.21
+
+      - name: Install dependencies
+        run: bun install
+
       - name: Print benchmark config
         env:
           RUN_COUNT: ${{ inputs.run }}
           MODEL: ${{ inputs.model }}
+          TASK: ${{ matrix.task }}
         run: |
           echo "Run count: ${RUN_COUNT}"
           echo "Model: ${MODEL}"
+          echo "Task: ${TASK}"
+
+      - name: Run benchmark
+        run: bun dev "${{ matrix.task }}"
