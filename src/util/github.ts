@@ -1,31 +1,18 @@
-import { strict as assert } from "node:assert";
-
 import { request as octokitRequest } from "@octokit/request";
-import type { RequestInterface } from "@octokit/types";
 
 const DIFF_ACCEPT_HEADER = "application/vnd.github.v3.diff";
 
-function resolveGitHubToken(): string | undefined {
-  return process.env.GITHUB_TOKEN?.trim();
-}
+let client: ReturnType<typeof octokitRequest.defaults>;
 
-const defaultHeaders: Record<string, string> = {
-  "user-agent": "opencode-bench",
-};
-
-const token = resolveGitHubToken();
-assert(
-  token,
-  "GITHUB_TOKEN is required to call the GitHub API. Set it before running the CLI.",
-);
-defaultHeaders.authorization = `Bearer ${token}`;
-
-const requestClient: RequestInterface = octokitRequest.defaults({
-  headers: defaultHeaders,
-});
-
-function getRequestClient(): RequestInterface {
-  return requestClient;
+function getRequestClient() {
+  if (client) return client;
+  client = octokitRequest.defaults({
+    headers: {
+      "user-agent": "opencode-bench",
+      authorization: `Bearer ${process.env.GITHUB_TOKEN?.trim()}`,
+    },
+  });
+  return client;
 }
 
 export async function fetchComparisonDiff(
@@ -33,7 +20,7 @@ export async function fetchComparisonDiff(
   repo: string,
   from: string,
   to: string,
-): Promise<string> {
+) {
   const client = getRequestClient();
 
   const response = await client(
@@ -51,10 +38,10 @@ export async function fetchComparisonDiff(
 
   const diff = String(response.data);
 
-  assert(
-    diff.trim().length > 0,
-    `GitHub comparison diff for ${owner}/${repo} between ${from} and ${to} was empty.`,
-  );
+  if (diff.trim().length === 0)
+    throw new Error(
+      `GitHub comparison diff for ${owner}/${repo} between ${from} and ${to} was empty.`,
+    );
 
   return diff;
 }
