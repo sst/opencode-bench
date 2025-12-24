@@ -1,0 +1,25 @@
+name: Run Benchmark
+
+on:
+  workflow_dispatch:
+    inputs:
+      run:
+        description: 'Number of times to run the benchmark'
+        required: true
+        type: string
+      model:
+        description: 'Model to use'
+        required: true
+        type: string
+
+jobs:
+  benchmark:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Print benchmark config
+        env:
+          RUN_COUNT: ${{ inputs.run }}
+          MODEL: ${{ inputs.model }}
+        run: |
+          echo "Run count: ${RUN_COUNT}"
+          echo "Model: ${MODEL}"
