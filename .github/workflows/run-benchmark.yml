@@ -60,4 +60,6 @@ jobs:
           echo "Task: ${TASK}"
 
       - name: Run benchmark
+        env:
+          DEBUG: true
         run: bun dev opencode --task ${{ matrix.task }} --model ${{ inputs.model }}
