@@ -60,4 +60,4 @@ jobs:
           echo "Task: ${TASK}"
 
       - name: Run benchmark
-        run: bun dev "${{ matrix.task }}"
+        run: bun dev opencode --task "${{ matrix.task }} --model ${MODEL}"
