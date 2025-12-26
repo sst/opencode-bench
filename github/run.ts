@@ -16,3 +16,5 @@ const result = await Eval.run(agent, model, task, {
 
 // Store result
 await writeFile(resultPath, JSON.stringify(result));
+
+process.exit();

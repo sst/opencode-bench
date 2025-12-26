@@ -16,3 +16,5 @@ const results = await Promise.all(
 const summary = await Summarizer.summarizeRuns(results);
 
 await writeFile(runsSummaryPath, JSON.stringify(summary));
+
+process.exit();

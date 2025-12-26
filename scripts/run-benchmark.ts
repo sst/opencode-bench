@@ -39,9 +39,9 @@ try {
   console.error("Warning: Failed to fetch previous run ID:", error);
 }
 
-const ret = await $`gh workflow run run-benchmark.yml --field agent=${
+await $`gh workflow run run-benchmark.yml --field agent=${
   values.agent
-} --field model=${values.model} --field tasks=${tasks.join(",")}`.text();
+} --field model=${values.model} --field tasks=${tasks.join(",")}`;
 
 console.log(`Workflow dispatched successfully`);
 console.log(`Agent: ${values.agent}`);
@@ -50,9 +50,6 @@ console.log(`Tasks:`);
 tasks.forEach((task) => {
   console.log(`  - ${task}`);
 });
-
-console.log(ret);
-process.exit();
 
 // Wait for the new workflow run to be created and get its URL
 console.log("\nWaiting for workflow run to be created...");
