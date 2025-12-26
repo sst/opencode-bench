@@ -14,7 +14,7 @@ import { Task } from "~/src/tasks/index.js";
 const { values } = parseArgs({
   args: process.argv.slice(2),
   options: {
-    run: { type: "string", default: "1" },
+    agent: { type: "string" },
     model: { type: "string" },
   },
 });
@@ -26,15 +26,64 @@ if (!values.model) {
 
 const tasks = await Task.listNames();
 
-await $`gh workflow run run-benchmark.yml --field run=${
-  values.run
-} --field model=${values.model} --field tasks=${tasks.join(",")}`;
+// Get the current latest run ID before dispatching
+let previousRunId: number | null = null;
+try {
+  const result =
+    await $`gh run list --workflow=run-benchmark.yml --limit=1 --json databaseId`.text();
+  const runs = JSON.parse(result);
+  if (runs.length > 0) {
+    previousRunId = runs[0].databaseId;
+  }
+} catch (error) {
+  console.error("Warning: Failed to fetch previous run ID:", error);
+}
+
+const ret = await $`gh workflow run run-benchmark.yml --field agent=${
+  values.agent
+} --field model=${values.model} --field tasks=${tasks.join(",")}`.text();
 
 console.log(`Workflow dispatched successfully`);
-console.log(`Run count: ${values.run}`);
+console.log(`Agent: ${values.agent}`);
 console.log(`Model: ${values.model}`);
 console.log(`Tasks:`);
 tasks.forEach((task) => {
   console.log(`  - ${task}`);
 });
+
+console.log(ret);
+process.exit();
+
+// Wait for the new workflow run to be created and get its URL
+console.log("\nWaiting for workflow run to be created...");
+let workflowUrl: string | null = null;
+for (let i = 0; i < 10; i++) {
+  await new Promise((resolve) => setTimeout(resolve, 1000));
+  try {
+    const result =
+      await $`gh run list --workflow=run-benchmark.yml --limit=5 --json databaseId,url,status`.text();
+    const runs = JSON.parse(result);
+    // Find the new run (one that wasn't there before)
+    const newRun = runs.find(
+      (run: { databaseId: number; status: string }) =>
+        run.databaseId !== previousRunId &&
+        (run.status === "queued" || run.status === "in_progress"),
+    );
+    if (newRun) {
+      workflowUrl = newRun.url;
+      break;
+    }
+  } catch (error) {
+    // Continue waiting
+  }
+}
+
+if (workflowUrl) {
+  console.log(`Workflow URL: ${workflowUrl}`);
+} else {
+  console.log(
+    "Could not retrieve workflow URL. Check: gh run list --workflow=run-benchmark.yml",
+  );
+}
+
 process.exit();
