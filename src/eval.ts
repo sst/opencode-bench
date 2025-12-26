@@ -12,12 +12,33 @@ import { Metric } from "./metrics/index.js";
 import { average, variance, weightedSum } from "./util/math.js";
 import { Judge } from "./judges.js";
 import { getZenLanguageModel } from "./zenModels.js";
+import { withRetries } from "./util/retry.js";
 
 export namespace Eval {
   export const DISAGREEMENT_PENALTY = 0.5;
   export type Result = Awaited<ReturnType<typeof run>>;
 
   export async function run(
+    agentName: string,
+    modelId: string,
+    taskId: string,
+    opts: {
+      logger: Logger.Instance;
+    },
+  ) {
+    const timeoutMins = 40;
+    opts.logger.log(`Starting episode with ${timeoutMins}min timeout...`);
+    return await withRetries(
+      () => runOnce(agentName, modelId, taskId, { logger: opts.logger }),
+      {
+        retries: 3,
+        timeoutMs: timeoutMins * 60 * 1000,
+        logger: opts.logger,
+      },
+    );
+  }
+
+  async function runOnce(
     agentName: string,
     modelId: string,
     taskId: string,

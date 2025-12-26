@@ -6,8 +6,6 @@ import { hideBin } from "yargs/helpers";
 import { Agent } from "~/src/agents/index.js";
 import { Task } from "~/src/tasks/index.js";
 import { Summarizer } from "~/src/summarizer.js";
-import { withRetries } from "~/src/util/retry.js";
-import { buildRadarChartUrl } from "~/src/util/charts.js";
 import { Logger } from "~/src/util/logger.js";
 import { Eval } from "./src/eval.js";
 
@@ -20,9 +18,6 @@ const cli = yargs(hideBin(process.argv))
   .example([
     [
       "$0 opencode --model opencode/gpt-5-codex --task DataDog/datadog-lambda-python@93d4a07..d776378",
-    ],
-    [
-      "$0 opencode --model opencode/claude-sonnet-4-5 --task DataDog/datadog-lambda-python@93d4a07..d776378 --output results.json",
     ],
   ])
   .strict();
@@ -58,37 +53,14 @@ cli.command(
         type: "string",
         description: "task to use in the format of repo@from..to",
         required: true,
-      })
-      .option("timeout", {
-        type: "number",
-        description: "timeout in minutes for each episode",
-        default: 40,
-      })
-      .option("output", {
-        type: "string",
-        description: "output file to save the results to",
       }),
-  async ({
-    agent: agentName,
-    model: modelId,
-    task: taskId,
-    timeout: timeoutMins,
-    output: outputPath,
-  }) => {
+  async ({ agent: agentName, model: modelId, task: taskId }) => {
     if (!agentName) throw new Error("Agent name is required");
 
     const logger = Logger.create(`[model ${modelId}]`);
 
-    // Run episodes
-    logger.log(`Starting episode with ${timeoutMins}min timeout...`);
-    const result = await withRetries(
-      () => Eval.run(agentName, modelId, taskId, { logger }),
-      {
-        retries: 3,
-        timeoutMs: timeoutMins * 60 * 1000,
-        logger,
-      },
-    );
+    // Run eval
+    const result = await Eval.run(agentName, modelId, taskId, { logger });
 
     // Summary episodes
     const summary = await Summarizer.summarizeRuns([result]);
@@ -129,11 +101,6 @@ cli.command(
     //  datasetLabel: modelId,
     //});
     //logger.log(`Radar Chart: ${chartUrl}\n`);
-
-    // Store result
-    if (outputPath) {
-      await writeFile(outputPath, JSON.stringify(result));
-    }
   },
 );
 
