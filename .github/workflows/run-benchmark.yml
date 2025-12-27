@@ -78,7 +78,7 @@ jobs:
           path: result-${{ matrix.task }}-${{ inputs.model }}-${{ inputs.agent }}-run${{ matrix.run }}.json
 
   summarize-runs:
-    needs: benchmark
+    needs: [prepare, benchmark]
     runs-on: ubuntu-latest
     strategy:
       matrix:
