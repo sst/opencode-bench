@@ -12,6 +12,7 @@ const opencodeConfig = {
     edit: "allow",
     bash: "allow",
     webfetch: "allow",
+    external_directory: "allow",
   },
   share: "auto",
   provider: {
