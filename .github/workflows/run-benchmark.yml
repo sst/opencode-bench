@@ -21,12 +21,19 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       tasks: ${{ steps.split.outputs.tasks }}
+      model_safe: ${{ steps.sanitize.outputs.model_safe }}
     steps:
       - name: Split tasks into matrix
         id: split
         run: |
           TASKS_JSON=$(echo "${{ inputs.tasks }}" | tr ',' '\n' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//' | jq -R -s -c 'split("\n") | map(select(length > 0))')
           echo "tasks=$TASKS_JSON" >> $GITHUB_OUTPUT
+
+      - name: Sanitize model name for artifacts
+        id: sanitize
+        run: |
+          MODEL_SAFE=$(echo "${{ inputs.model }}" | sed 's/\//-/g')
+          echo "model_safe=${MODEL_SAFE}" >> $GITHUB_OUTPUT
 
   benchmark:
     needs: prepare
@@ -51,16 +58,6 @@ jobs:
       - name: Install OpenCode CLI
         run: bun add -g opencode-ai
 
-      - name: Print benchmark config
-        env:
-          MODEL: ${{ inputs.model }}
-          TASK: ${{ matrix.task }}
-          RUN: ${{ matrix.run }}
-        run: |
-          echo "Model: ${MODEL}"
-          echo "Task: ${TASK}"
-          echo "Run: ${RUN}"
-
       - name: Run benchmark
         env:
           OPENCODE_API_KEY: ${{ secrets.OPENCODE_API_KEY }}
@@ -68,14 +65,14 @@ jobs:
           TASK: ${{ matrix.task }}
           MODEL: ${{ inputs.model }}
           AGENT: ${{ inputs.agent }}
-          RESULT_PATH: result-${{ matrix.task }}-${{ inputs.model }}-${{ inputs.agent }}-run${{ matrix.run }}.json
+          RESULT_PATH: result-${{ inputs.agent }}-${{ needs.prepare.outputs.model_safe }}-${{ matrix.task }}-run${{ matrix.run }}.json
         run: bun github/run.ts
 
       - name: Upload benchmark results
         uses: actions/upload-artifact@v4
         with:
-          name: result-${{ matrix.task }}-${{ inputs.model }}-${{ inputs.agent }}-run${{ matrix.run }}
-          path: result-${{ matrix.task }}-${{ inputs.model }}-${{ inputs.agent }}-run${{ matrix.run }}.json
+          name: result-${{ inputs.agent }}-${{ needs.prepare.outputs.model_safe }}-${{ matrix.task }}-run${{ matrix.run }}
+          path: result-${{ inputs.agent }}-${{ needs.prepare.outputs.model_safe }}-${{ matrix.task }}-run${{ matrix.run }}.json
 
   summarize-runs:
     needs: [prepare, benchmark]
@@ -95,35 +92,24 @@ jobs:
       - name: Install dependencies
         run: bun install
 
-      - name: Download run 1 results
+      - name: Download all run results
         uses: actions/download-artifact@v4
         with:
-          name: result-${{ matrix.task }}-${{ inputs.model }}-${{ inputs.agent }}-run1
-          path: results
-
-      - name: Download run 2 results
-        uses: actions/download-artifact@v4
-        with:
-          name: result-${{ matrix.task }}-${{ inputs.model }}-${{ inputs.agent }}-run2
-          path: results
-
-      - name: Download run 3 results
-        uses: actions/download-artifact@v4
-        with:
-          name: result-${{ matrix.task }}-${{ inputs.model }}-${{ inputs.agent }}-run3
+          pattern: result-${{ inputs.agent }}-${{ needs.prepare.outputs.model_safe }}-${{ matrix.task }}-run*
           path: results
 
       - name: Summarize runs
-        env:
-          RESULT_PATHS: results/result-${{ matrix.task }}-${{ inputs.model }}-${{ inputs.agent }}-run1.json,results/result-${{ matrix.task }}-${{ inputs.model }}-${{ inputs.agent }}-run2.json,results/result-${{ matrix.task }}-${{ inputs.model }}-${{ inputs.agent }}-run3.json
-          RUNS_SUMMARY_PATH: runs-summary-${{ matrix.task }}-${{ inputs.model }}-${{ inputs.agent }}.json
-        run: bun github/summarize-runs.ts
+        run: |
+          RESULT_PATHS=$(find results -name 'result-*.json' | sort | tr '\n' ',' | sed 's/,$//')
+          export RESULT_PATHS
+          export RUNS_SUMMARY_PATH=runs-summary-${{ inputs.agent }}-${{ needs.prepare.outputs.model_safe }}-${{ matrix.task }}.json
+          bun github/summarize-runs.ts
 
       - name: Upload runs summary
         uses: actions/upload-artifact@v4
         with:
-          name: runs-summary-${{ matrix.task }}-${{ inputs.model }}-${{ inputs.agent }}
-          path: runs-summary-${{ matrix.task }}-${{ inputs.model }}-${{ inputs.agent }}.json
+          name: runs-summary-${{ inputs.agent }}-${{ needs.prepare.outputs.model_safe }}-${{ matrix.task }}
+          path: runs-summary-${{ inputs.agent }}-${{ needs.prepare.outputs.model_safe }}-${{ matrix.task }}.json
 
   summarize-tasks:
     needs: summarize-runs

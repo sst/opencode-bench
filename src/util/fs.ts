@@ -9,7 +9,3 @@ export async function fileExists(path: string) {
     return false;
   }
 }
-
-export function sanitizeFilename(filename: string) {
-  return filename.replace(/[/]/g, "-");
-}
