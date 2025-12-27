@@ -26,7 +26,7 @@ export namespace Eval {
       logger: Logger.Instance;
     },
   ) {
-    const timeoutMins = 40;
+    const timeoutMins = 20;
     opts.logger.log(`Starting episode with ${timeoutMins}min timeout...`);
     return await withRetries(
       () => runOnce(agentName, modelId, taskId, { logger: opts.logger }),

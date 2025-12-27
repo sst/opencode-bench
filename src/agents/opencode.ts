@@ -41,6 +41,7 @@ export const models: string[] = [
   "opencode/claude-sonnet-4-5",
   "opencode/claude-opus-4-5",
   "opencode/glm-4.6",
+  "opencode/glm-4.7-free",
   "opencode/gemini-3-pro",
   "opencode/qwen3-coder",
   "opencode/kimi-k2",
