@@ -47,6 +47,7 @@ export const models: string[] = [
   "opencode/qwen3-coder",
   "opencode/kimi-k2",
   "opencode/grok-code",
+  "opencode/alpha-gd4",
 ];
 
 function sessionKey(model: string, cwd: string): string {
