@@ -66,6 +66,7 @@ jobs:
           MODEL: ${{ inputs.model }}
           AGENT: ${{ inputs.agent }}
           RESULT_PATH: result-${{ inputs.agent }}-${{ needs.prepare.outputs.model_safe }}-${{ matrix.task }}-run${{ matrix.run }}.json
+          OPENCODE_ENABLE_EXPERIMENTAL_MODELS: true
         run: bun github/run.ts
 
       - name: Upload benchmark results
@@ -133,8 +134,6 @@ jobs:
           path: runs-summaries
 
       - name: Summarize tasks
-        env:
-          RUNS_SUMMARY_PATHS: runs-summaries/*/runs-summary-*.json
         run: |
           RUNS_SUMMARY_PATHS_COMMA=$(find runs-summaries -name 'runs-summary-*.json' | tr '\n' ',' | sed 's/,$//')
           export RUNS_SUMMARY_PATHS="$RUNS_SUMMARY_PATHS_COMMA"
@@ -146,3 +145,10 @@ jobs:
         with:
           name: tasks-summary
           path: tasks-summary.json
+
+      - name: Submit results
+        env:
+          AGENT: ${{ inputs.agent }}
+          MODEL: ${{ inputs.model }}
+          TASKS_SUMMARY_PATH: tasks-summary.json
+        run: bun github/submit-results.ts
