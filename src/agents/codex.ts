@@ -16,14 +16,6 @@ const DEFAULT_SANDBOX: SandboxMode = "workspace-write";
 const codexClient = new Codex();
 const threadCache = new Map<string, Thread>();
 
-export const models = [
-  "gpt-5-codex",
-  "gpt-5.1-codex",
-  // "gpt-5",
-  // "o3",
-  // "o4-mini"
-] as const;
-
 function sessionKey(model: string, cwd: string): string {
   return `${cwd}::${model}`;
 }
@@ -67,7 +59,7 @@ function getOrCreateThread(model: string, cwd: string): Thread {
   return thread;
 }
 
-const codexAgent: Agent.Definition<(typeof models)[number]> = {
+const codexAgent: Agent.Definition = {
   async run(model, prompt, options) {
     options.logger.log(
       `codex-sdk --model ${model} --sandbox ${DEFAULT_SANDBOX} ${prompt}`,
@@ -82,6 +74,11 @@ const codexAgent: Agent.Definition<(typeof models)[number]> = {
     try {
       const pricingKey = model;
       const pricing = openai.models[pricingKey]?.cost;
+      if (!pricing) {
+        options.logger.error(
+          `No pricing info found for Codex model '${pricingKey}'; reporting $0 cost.`,
+        );
+      }
       const turn = await thread.run(prompt);
       assert(turn.usage, "The agent did not emit the usage information.");
       usage = turn.usage;
@@ -89,11 +86,12 @@ const codexAgent: Agent.Definition<(typeof models)[number]> = {
         (usage.input_tokens ?? 0) - (usage.cached_input_tokens ?? 0);
       const cachedInput = usage.cached_input_tokens ?? 0;
       const output = usage.output_tokens ?? 0;
-      cost =
-        (billableInput * pricing.input +
-          output * pricing.output +
-          cachedInput * pricing.cache_read) /
-        1_000_000;
+      cost = pricing
+        ? (billableInput * pricing.input +
+            output * pricing.output +
+            cachedInput * pricing.cache_read) /
+          1_000_000
+        : 0;
 
       actions.push(...turn.items.map((item) => JSON.stringify(item)));
       logTurnItems(turn.items, options);

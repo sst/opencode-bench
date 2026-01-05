@@ -46,7 +46,6 @@ export namespace Agent {
   export interface Registration<TModel extends string = string> {
     name: string;
     definition: Definition<TModel>;
-    models: ReadonlyArray<TModel>;
   }
 
   const agents: Record<string, Registration<any>> = {
@@ -60,29 +59,19 @@ export namespace Agent {
     name: string,
     module: {
       default?: Definition<TModel>;
-      models?: ReadonlyArray<TModel>;
     },
   ): Registration<TModel> {
     const definition = module.default;
-    const models = module.models;
 
     assert(definition, `Agent module ${name} is missing a default export.`);
-    assert(models, `Agent module ${name} is missing the exported models list.`);
 
-    return { name, definition, models };
+    return { name, definition };
   }
 
   export function get(name: string): Registration {
     const agent = agents[name];
     if (!agent) throw new Error(`Agent ${name} was not found.`);
     return agent;
-  }
-
-  export function validateModel(agent: Registration, model: string) {
-    if (!agent.models.find((entry) => entry === model))
-      throw new Error(
-        `Model ${model} is not registered for agent ${agent.name}.`,
-      );
   }
 
   export function list() {

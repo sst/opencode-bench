@@ -36,20 +36,6 @@ const opencode = await createOpencode({
 
 const sessionCache = new Map<string, string>();
 
-export const models: string[] = [
-  "opencode/gpt-5-codex",
-  "opencode/gpt-5.1-codex",
-  "opencode/claude-sonnet-4-5",
-  "opencode/claude-opus-4-5",
-  "opencode/glm-4.6",
-  "opencode/glm-4.7-free",
-  "opencode/gemini-3-pro",
-  "opencode/qwen3-coder",
-  "opencode/kimi-k2",
-  "opencode/grok-code",
-  "opencode/alpha-gd4",
-];
-
 function sessionKey(model: string, cwd: string): string {
   return `${cwd}::${model}`;
 }
@@ -90,6 +76,13 @@ const opencodeAgent: Agent.Definition = {
 
     options.logger.log(`Prompting session ${sessionID}...`);
     const [providerID, modelID] = model.split("/");
+    if (!providerID || !modelID) {
+      throw new Error(
+        options.logger.format(
+          `Invalid model '${model}'. Expected 'provider/model'.`,
+        ),
+      );
+    }
     const actions: string[] = [];
     const usage = {
       input: 0,
