@@ -2,6 +2,7 @@ import { strict as assert } from "node:assert";
 import * as opencodeAgent from "./opencode.js";
 import * as codexAgent from "./codex.js";
 import * as claudeCodeAgent from "./claude-code.js";
+import * as geminiCliAgent from "./gemini-cli.js";
 import { Logger } from "../util/logger.js";
 
 export namespace Agent {
@@ -50,10 +51,10 @@ export namespace Agent {
   }
 
   const agents: Record<string, Registration<any>> = {
-    // Only keep opencode active while debugging timeouts for specific models.
     opencode: createRegistration("opencode", opencodeAgent),
-    //codex: createRegistration("codex", codexAgent),
-    //"claude-code": createRegistration("claude-code", claudeCodeAgent),
+    codex: createRegistration("codex", codexAgent),
+    "claude-code": createRegistration("claude-code", claudeCodeAgent),
+    "gemini-cli": createRegistration("gemini-cli", geminiCliAgent),
   };
 
   function createRegistration<TModel extends string>(

@@ -81,7 +81,8 @@ const codexAgent: Agent.Definition<(typeof models)[number]> = {
     let cost = 0;
     try {
       const pricingKey = model;
-      const pricing = openai.models[pricingKey]?.cost;
+      const pricing = (await getOpenaiPricing()).models[pricingKey]?.cost;
+      assert(pricing, `Missing pricing for model ${pricingKey}.`);
       const turn = await thread.run(prompt);
       assert(turn.usage, "The agent did not emit the usage information.");
       usage = turn.usage;
@@ -115,12 +116,7 @@ const codexAgent: Agent.Definition<(typeof models)[number]> = {
 
 export default codexAgent;
 
-const response = await fetch("https://models.dev/api.json");
-if (!response.ok) {
-  throw new Error(`models.dev responded with ${response.status}`);
-}
-
-const openai = (await response.json())["openai"] as {
+type OpenAiPricing = {
   models: Record<
     string,
     {
@@ -132,3 +128,15 @@ const openai = (await response.json())["openai"] as {
     }
   >;
 };
+
+let openaiPricing: OpenAiPricing | null = null;
+
+async function getOpenaiPricing(): Promise<OpenAiPricing> {
+  if (openaiPricing) return openaiPricing;
+  const response = await fetch("https://models.dev/api.json");
+  if (!response.ok) {
+    throw new Error(`models.dev responded with ${response.status}`);
+  }
+  openaiPricing = (await response.json())["openai"] as OpenAiPricing;
+  return openaiPricing;
+}

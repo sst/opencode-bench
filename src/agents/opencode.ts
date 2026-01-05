@@ -28,11 +28,17 @@ const opencodeConfig = {
 // The SDK reads this when spawning the server process
 process.env.OPENCODE_CONFIG_CONTENT = JSON.stringify(opencodeConfig);
 
-const opencode = await createOpencode({
-  port: await detectPort(4096),
-  timeout: 1_500_000, // 25 minutes timeout for server startup
-  config: opencodeConfig,
-});
+let opencode: Awaited<ReturnType<typeof createOpencode>> | null = null;
+
+async function getOpencode() {
+  if (opencode) return opencode;
+  opencode = await createOpencode({
+    port: await detectPort(4096),
+    timeout: 1_500_000, // 25 minutes timeout for server startup
+    config: opencodeConfig,
+  });
+  return opencode;
+}
 
 const sessionCache = new Map<string, string>();
 
@@ -58,12 +64,13 @@ const opencodeAgent: Agent.Definition = {
   async run(model, prompt, options) {
     options.logger.log(`opencode --model ${model} ${prompt}`);
 
+    const client = (await getOpencode()).client;
     const cacheKey = sessionKey(model, options.cwd);
 
     options.logger.log(`Creating session...`);
     let sessionID = sessionCache.get(cacheKey);
     if (!sessionID) {
-      const { data: session } = await opencode.client.session.create({
+      const { data: session } = await client.session.create({
         query: { directory: options.cwd },
         throwOnError: true,
       });
@@ -73,7 +80,7 @@ const opencodeAgent: Agent.Definition = {
 
     options.logger.log(`Sharing session ${sessionID}...`);
     try {
-      const { data, error } = await opencode.client.session.share({
+      const { data, error } = await client.session.share({
         path: { id: sessionID! },
         query: { directory: options.cwd },
       });
@@ -97,7 +104,7 @@ const opencodeAgent: Agent.Definition = {
       cost: 0,
     };
     try {
-      const { data, error } = await opencode.client.session.prompt({
+      const { data, error } = await client.session.prompt({
         path: { id: sessionID! },
         query: { directory: options.cwd },
         body: {
@@ -133,8 +140,9 @@ const opencodeAgent: Agent.Definition = {
 
     return { actions, usage };
   },
-  cleanup() {
-    opencode.server.close();
+  async cleanup() {
+    opencode?.server.close();
+    opencode = null;
   },
 };
 
