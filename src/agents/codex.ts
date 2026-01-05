@@ -16,14 +16,6 @@ const DEFAULT_SANDBOX: SandboxMode = "workspace-write";
 const codexClient = new Codex();
 const threadCache = new Map<string, Thread>();
 
-export const models = [
-  "gpt-5-codex",
-  "gpt-5.1-codex",
-  // "gpt-5",
-  // "o3",
-  // "o4-mini"
-] as const;
-
 function sessionKey(model: string, cwd: string): string {
   return `${cwd}::${model}`;
 }
@@ -67,7 +59,7 @@ function getOrCreateThread(model: string, cwd: string): Thread {
   return thread;
 }
 
-const codexAgent: Agent.Definition<(typeof models)[number]> = {
+const codexAgent: Agent.Definition = {
   async run(model, prompt, options) {
     options.logger.log(
       `codex-sdk --model ${model} --sandbox ${DEFAULT_SANDBOX} ${prompt}`,

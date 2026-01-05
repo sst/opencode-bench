@@ -1,14 +1,12 @@
 #!/usr/bin/env bun
 /**
- * Syncs workflow_dispatch inputs in compare-models.yml with available agent:model combinations.
- * Run this after modifying agent model lists to keep the workflow in sync.
+ * Syncs workflow_dispatch inputs in compare-models.yml with provided agent:model combinations.
  *
  * Usage:
- *   bun run scripts/sync-workflow-inputs.ts
+ *   WORKFLOW_MODELS="opencode:opencode/gpt-5-codex,opencode:opencode/claude-sonnet-4-5" bun run scripts/sync-workflow-inputs.ts
  */
 
 import { readFileSync, writeFileSync } from "node:fs";
-import { Agent } from "~/agents/index.js";
 import YAML from "yaml";
 
 interface WorkflowInput {
@@ -34,24 +32,27 @@ function toDescription(agent: string, model: string): string {
 async function main(): Promise<void> {
   const workflowPath = ".github/workflows/compare-models.yml";
 
+  // Models are passed via WORKFLOW_MODELS environment variable (comma-separated agent:model pairs)
+  const modelsEnv = process.env.WORKFLOW_MODELS;
+  if (!modelsEnv) {
+    console.error(
+      "Error: WORKFLOW_MODELS environment variable is required (comma-separated agent:model pairs)",
+    );
+    process.exit(1);
+  }
+
+  const combinations = modelsEnv.split(",").map((pair) => {
+    const [agent, model] = pair.split(":");
+    if (!agent || !model) {
+      console.error(`Invalid agent:model pair: ${pair}`);
+      process.exit(1);
+    }
+    return { agent, model };
+  });
+
   // Load the workflow file
   const workflowContent = readFileSync(workflowPath, "utf8");
   const workflow = YAML.parse(workflowContent);
-
-  // Get all available agent:model combinations
-  const agents = Agent.list();
-  const combinations: Array<{ agent: string; model: string }> = [];
-
-  for (const agent of agents) {
-    for (const model of agent.models) {
-      combinations.push({ agent: agent.name, model });
-    }
-  }
-
-  if (combinations.length === 0) {
-    console.error("No agent:model combinations found");
-    process.exit(1);
-  }
 
   // Build new inputs
   const inputs: WorkflowInputs = {};
