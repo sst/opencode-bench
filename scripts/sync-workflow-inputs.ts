@@ -38,19 +38,14 @@ async function main(): Promise<void> {
   const workflowContent = readFileSync(workflowPath, "utf8");
   const workflow = YAML.parse(workflowContent);
 
-  // Get all available agent:model combinations
+  // Note: Models are no longer hardcoded per agent.
+  // This script now generates empty inputs since models should be specified externally.
   const agents = Agent.list();
   const combinations: Array<{ agent: string; model: string }> = [];
 
-  for (const agent of agents) {
-    for (const model of agent.models) {
-      combinations.push({ agent: agent.name, model });
-    }
-  }
-
+  // Models are no longer hardcoded, so combinations list will be empty
   if (combinations.length === 0) {
-    console.error("No agent:model combinations found");
-    process.exit(1);
+    console.log("No hardcoded agent:model combinations (models are now dynamic)");
   }
 
   // Build new inputs
