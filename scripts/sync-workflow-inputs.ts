@@ -9,6 +9,7 @@
 
 import { readFileSync, writeFileSync } from "node:fs";
 import { Agent } from "~/agents/index.js";
+import { BENCHMARK_MODELS } from "./benchmark-config.js";
 import YAML from "yaml";
 
 interface WorkflowInput {
@@ -43,7 +44,8 @@ async function main(): Promise<void> {
   const combinations: Array<{ agent: string; model: string }> = [];
 
   for (const agent of agents) {
-    for (const model of agent.models) {
+    const models = BENCHMARK_MODELS[agent.name] || [];
+    for (const model of models) {
       combinations.push({ agent: agent.name, model });
     }
   }

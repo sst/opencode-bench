@@ -20,9 +20,9 @@ export namespace Agent {
     prompt: Prompt,
   ) => CommandSpec | Promise<CommandSpec>;
 
-  export interface Definition<TModel extends string = string> {
+  export interface Definition {
     run: (
-      model: TModel,
+      model: string,
       prompt: Prompt,
       options: RunOptions,
     ) => Promise<RunResult>;
@@ -43,46 +43,35 @@ export namespace Agent {
     logger: Logger.Instance;
   }
 
-  export interface Registration<TModel extends string = string> {
+  export interface Registration {
     name: string;
-    definition: Definition<TModel>;
-    models: ReadonlyArray<TModel>;
+    definition: Definition;
   }
 
-  const agents: Record<string, Registration<any>> = {
+  const agents: Record<string, Registration> = {
     // Only keep opencode active while debugging timeouts for specific models.
     opencode: createRegistration("opencode", opencodeAgent),
     //codex: createRegistration("codex", codexAgent),
     //"claude-code": createRegistration("claude-code", claudeCodeAgent),
   };
 
-  function createRegistration<TModel extends string>(
+  function createRegistration(
     name: string,
     module: {
-      default?: Definition<TModel>;
-      models?: ReadonlyArray<TModel>;
+      default?: Definition;
     },
-  ): Registration<TModel> {
+  ): Registration {
     const definition = module.default;
-    const models = module.models;
 
     assert(definition, `Agent module ${name} is missing a default export.`);
-    assert(models, `Agent module ${name} is missing the exported models list.`);
 
-    return { name, definition, models };
+    return { name, definition };
   }
 
   export function get(name: string): Registration {
     const agent = agents[name];
     if (!agent) throw new Error(`Agent ${name} was not found.`);
     return agent;
-  }
-
-  export function validateModel(agent: Registration, model: string) {
-    if (!agent.models.find((entry) => entry === model))
-      throw new Error(
-        `Model ${model} is not registered for agent ${agent.name}.`,
-      );
   }
 
   export function list() {

@@ -47,7 +47,6 @@ export namespace Eval {
     },
   ) {
     const agent = Agent.get(agentName);
-    Agent.validateModel(agent, modelId);
     const task = await Task.get(taskId);
     const cwd = await mkdtemp(join(tmpdir(), "openreval-"));
     $.cwd(cwd);
