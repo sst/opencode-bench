@@ -1,0 +1,64 @@
+name: Evaluate PR Candidate
+
+on:
+  issues:
+    types: [opened]
+
+jobs:
+  evaluate:
+    runs-on: ubuntu-latest
+    # Only run if issue body contains a GitHub PR URL
+    if: contains(github.event.issue.body, 'github.com') && contains(github.event.issue.body, '/pull/')
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v1
+        with:
+          bun-version: 1.2.21
+
+      - name: Install dependencies
+        run: bun install
+
+      - name: Extract PR URL from issue
+        id: extract
+        run: |
+          # Extract first PR URL from issue body
+          PR_URL=$(echo '${{ github.event.issue.body }}' | grep -oE 'https://github\.com/[^/]+/[^/]+/pull/[0-9]+' | head -1)
+          echo "pr_url=${PR_URL}" >> $GITHUB_OUTPUT
+          if [ -z "$PR_URL" ]; then
+            echo "No valid PR URL found"
+            echo "found=false" >> $GITHUB_OUTPUT
+          else
+            echo "Found PR URL: $PR_URL"
+            echo "found=true" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Evaluate PR candidate
+        if: steps.extract.outputs.found == 'true'
+        env:
+          OPENCODE_API_KEY: ${{ secrets.OPENCODE_API_KEY }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_URL: ${{ steps.extract.outputs.pr_url }}
+          ISSUE_NUMBER: ${{ github.event.issue.number }}
+          REPO_OWNER: ${{ github.repository_owner }}
+          REPO_NAME: ${{ github.event.repository.name }}
+        run: bun github/evaluate-pr.ts
+
+      - name: Handle missing PR URL
+        if: steps.extract.outputs.found == 'false'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh issue comment ${{ github.event.issue.number }} --body "## Invalid Submission
+
+          No valid GitHub PR URL was found in the issue body.
+
+          Please provide a PR URL in the format:
+          \`\`\`
+          https://github.com/owner/repo/pull/123
+          \`\`\`
+
+          Then create a new issue with the correct URL."

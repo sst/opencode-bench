@@ -8,6 +8,8 @@ import { Task } from "~/src/tasks/index.js";
 import { Summarizer } from "~/src/summarizer.js";
 import { Logger } from "~/src/util/logger.js";
 import { Eval } from "./src/eval.js";
+import { PrEval } from "./src/pr-eval/index.js";
+import { Reporter } from "./src/pr-eval/reporter.js";
 
 const cli = yargs(hideBin(process.argv))
   .scriptName("orvl")
@@ -30,6 +32,60 @@ cli.command(
   async () => {
     const logger = Logger.create("[generate]");
     await Task.generate({ logger });
+  },
+);
+
+cli.command(
+  "evaluate-pr <url>",
+  "Evaluate a PR as a benchmark candidate",
+  async (yargs) =>
+    yargs
+      .positional("url", {
+        type: "string",
+        description: "GitHub PR URL (e.g., https://github.com/owner/repo/pull/123)",
+        required: true,
+      })
+      .option("output", {
+        type: "string",
+        description: "Output file path for JSON results",
+      })
+      .example([
+        ["orvl evaluate-pr https://github.com/owner/repo/pull/123"],
+        ["orvl evaluate-pr https://github.com/owner/repo/pull/123 --output result.json"],
+      ]),
+  async ({ url, output }) => {
+    if (!url) throw new Error("PR URL is required");
+
+    const logger = Logger.create("[pr-eval]");
+
+    const result = await PrEval.evaluate(url, { logger });
+
+    // Print summary
+    logger.log("");
+    logger.log("=".repeat(60));
+    logger.log(`Final Score: ${result.finalScore.toFixed(1)}/100`);
+    logger.log(`Recommendation: ${result.recommendation.toUpperCase()}`);
+    logger.log("=".repeat(60));
+    logger.log("");
+
+    result.criteria.forEach((c) => {
+      const consensus = PrEval.getConsensusLevel(c.variance);
+      logger.log(`${c.displayName}: ${c.average.toFixed(0)}/100 (${consensus} consensus)`);
+      c.judges.forEach((j) => {
+        logger.log(`  - ${j.judge}: ${j.score}/100`);
+      });
+    });
+
+    if (output) {
+      await writeFile(output, JSON.stringify(result, null, 2));
+      logger.log(`\nResults saved to ${output}`);
+    }
+
+    // Also print the formatted comment
+    logger.log("\n" + "=".repeat(60));
+    logger.log("FORMATTED COMMENT PREVIEW:");
+    logger.log("=".repeat(60) + "\n");
+    logger.log(Reporter.formatComment(result));
   },
 );
 
